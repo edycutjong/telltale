@@ -6,19 +6,20 @@ from comma2k19. Nothing is synthesized or interpolated; the bench trace is sampl
 ## comma2k19 (MIT)
 
 - Dataset: https://huggingface.co/datasets/commaai/comma2k19 at revision `4bff77c7254c654c28d4c2726186b4e825adccee`, members
-  `processed_log/CAN/speed/{t,value}` only, fetched with `tools/fetch_comma_speed.py` (HTTP range reads; CRC-32
-  of each member is checked by `zipfile` and listed in the fetch manifest).
+  `processed_log/CAN/speed/{t,value}` only, fetched with `tools/fetch_comma_speed.py` (HTTP range reads; the
+  CRC-32 of each member is checked by `zipfile` on extraction).
 - Licence: MIT, Copyright (c) 2018 comma.ai (https://github.com/commaai/comma2k19/blob/master/LICENSE).
 
 ## Traces
 
-- `trace-hero.csv`: Chunk_8/99c94dc769b5d96e|2018-09-19--16-09-16/7-37, onset in segment ~9; ladder rung `a`; 49.01 km/h -> 0 in 4.848 s, then 106.405 s stationary (held tail: 0.000 s). Details in `trace-hero.meta`.
-- `trace-bench.csv`: Chunk_8/99c94dc769b5d96e|2018-09-19--16-09-16/7-37, 31.00 min continuous. 7 stops, 4 of them with >= 27 s at 0; `trace-bench-stops.csv` lists each stop and the held tail B2 would need (labelled when used).
+- `trace-hero.csv`: Chunk_8/99c94dc769b5d96e|2018-09-19--16-09-16, segments 9-9; ladder rung `a`; 49.01 km/h -> 0 in 4.848 s. 106.405 s stationary measured, the first 27.000 s kept in the CSV (held tail: 0.000 s). In the 10 s before onset the speed ranged 43.19-49.73 km/h. Details in `trace-hero.meta`.
+- Hero search: brake onset = the last sample at >= 49 km/h in the descent that ends at the first displayed 0; the 10 s before onset stay within +-10 km/h of it. Scanned: Chunk_1: 188 segments in 21 route(s); Chunk_8: 31 segments in 1 route(s); first match in (chunk, route, segment) order, rung (a) tried everywhere before rung (b). Chunk_1 has a rung-(a) match: no.
+- `trace-bench.csv`: Chunk_8/99c94dc769b5d96e|2018-09-19--16-09-16/7-37, 31.00 min continuous. **Short of the target of >= 10 stops followed by >= 27 s at 0:** it has 7 stops after motion, 3 of them with >= 27 s measured. `trace-bench-stops.csv` lists each stop and the held tail at 0 the stationary-phase bench would need; any use of a held tail is labelled as held.
 
 ## Speed-changing windows (STALE placement)
 
 `window-census.csv`: windows where |speed(t + 100 ms) - speed(t)| >= threshold. trace-bench has K = 21 distinct windows at 1.0 km/h per 100 ms and 53 at 0.5.
-Pre-registered rule (fixed before any fault run): keep 1.0 while K >= 20, else 0.5. **Selected: 1.0 km/h per 100 ms.** Reports say "N injections over K distinct windows".
+Threshold rule, committed with K before any fault run: keep 1.0 while trace-bench has >= 20 windows at it (at most 2.5 injections per window for 50 STALE injections), else 0.5. **Selected: 1.0 km/h per 100 ms.** 50 injections over K = 21 windows means windows are reused (2.4 per window); reports say "N injections over K distinct windows".
 
 ## Reproduce
 
@@ -33,7 +34,7 @@ python3 tools/trace_from_comma.py ~/.cache/telltale/comma2k19 --out data --bench
 | file | sha256 |
 |---|---|
 | `trace-hero.csv` | `561aa09b594f2c0e8b7472538546a727d18d55fcfbbd042fac9e1c63d1fef9b5` |
-| `trace-hero.meta` | `2de82e1820f38a4585fefb3139b9231a93d6936840a77e3ec53c5eb329dd1d3b` |
+| `trace-hero.meta` | `a938c0a317bfd49f0ec9e10ddf1722ed3bc2a929c3c11939f24d61f9e92e230e` |
 | `trace-bench.csv` | `1dced9d3efa1bf6979a62baed2d0c30fca7c97a9b883ffef45dcf871772828d2` |
 | `trace-bench-stops.csv` | `c5d5b45c6ab133fb95ae800e1760ded61e6665c570eb751339725a51fa438a87` |
 | `window-census.csv` | `0483b9c2fcf60b71f6e90cf91a3988cec8957b1e9d7c7defbabc75fa8c96a722` |

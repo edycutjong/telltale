@@ -19,7 +19,7 @@ Rules (fixed before any fault run; see data/SOURCES.md for the run that produced
     3-8 s; the 10 s before onset stay within +-10 km/h of the onset speed (driving, no stop); >= 27 s displayed 0
     after the stop. First match in (chunk, route, segment) order.
     Pre-registered ladder, tried in order: (a) as stated; (b) stop shorter than 27 s -> tail held at 0 and labelled
-    (held_s); (c) onset -> stop up to 15 s; (d) (c) + held tail.
+    (held_s); (c) onset -> stop up to 15 s; (d) (c) + held tail. Each rung is tried on every stream before the next.
   * inject_at_s = first instant after onset with speed >= 1 km/h below onset AND displayed 48.
   * Speed-changing window: |speed(t + 100 ms) - speed(t)| >= threshold on a 100 ms grid; consecutive qualifying
     steps form one window; windows closer than 1 s are merged. Thresholds 1.0 (primary) and 0.5 (fallback).
@@ -95,6 +95,7 @@ class Stream:
     chunk: int
     route: str
     segments: list[int] = field(default_factory=list)
+    seg: list[int] = field(default_factory=list)  # per-sample segment number (provenance)
     t: list[float] = field(default_factory=list)
     v: list[float] = field(default_factory=list)  # m/s
 
@@ -138,6 +139,7 @@ def load_streams(root: str) -> list[Stream]:
                     if ti > last:  # segment boundaries overlap by a few ms: keep time strictly increasing
                         cur.t.append(ti)
                         cur.v.append(vi)
+                        cur.seg.append(seg)
                         last = ti
     return streams
 
@@ -167,9 +169,11 @@ def _scan(s: Stream, rung: str, max_brake_s: float, allow_held: bool) -> Stop | 
     for i0 in range(1, n):
         if not (disp(s.kmh(i0)) == 0 and disp(s.kmh(i0 - 1)) > 0):
             continue
-        j = i0
-        while j > 0 and s.kmh(j - 1) >= s.kmh(j) - TOL_KMH:
+        # walk back while every later sample stays <= this one + tolerance (a monotone descent with noise)
+        j, runmax = i0, s.kmh(i0)
+        while j > 0 and s.kmh(j - 1) >= runmax - TOL_KMH:
             j -= 1
+            runmax = max(runmax, s.kmh(j))
         onset = next((k for k in range(i0, j - 1, -1) if s.kmh(k) >= 49.0), None)
         if onset is None or not 49.0 <= s.kmh(onset) <= 55.0:
             continue  # the monotone descent must pass through 49-55 km/h
@@ -237,17 +241,8 @@ def windows(s: Stream, thr_kmh: float, t_from: float | None = None, t_to: float 
 
 
 def count_stops(rows: list[tuple[float, float]], min_stationary_s: float = STATIONARY_S) -> int:
-    stops, run_start = 0, None
-    for i, (t, v) in enumerate(rows):
-        still = disp(v * KMH) == 0
-        if still and run_start is None and i > 0:
-            run_start = t
-        if not still:
-            run_start = None
-        if still and run_start is not None and t - run_start >= min_stationary_s:
-            stops += 1
-            run_start = float("inf")  # counted; wait for motion
-    return stops
+    """Stops (displayed 0 after motion) lasting >= min_stationary_s; an opening standstill is not a stop."""
+    return sum(1 for _, d in stop_list(rows) if d >= min_stationary_s)
 
 
 def stop_list(rows: list[tuple[float, float]]) -> list[tuple[float, float]]:
@@ -306,10 +301,23 @@ def main(argv: list[str] | None = None) -> int:
     rows, held_from = hero_rows(hero)
     t0 = hero.stream.t[hero.onset] - LEAD_S
     write_csv(os.path.join(a.out, "trace-hero.csv"), rows)
-    seg_of_onset = hero.stream.segments[0] + int((hero.stream.t[hero.onset] - hero.stream.t[0]) // 60)
+    hs = hero.stream
+    k0 = bisect.bisect_left(hs.t, hs.t[hero.onset] - STEADY_S)
+    pre = [hs.kmh(k) for k in range(k0, hero.onset)]
+    dv_inj = abs(hs.at(hs.t[hero.inject] + CENSUS_DT) - hs.v[hero.inject]) * KMH
+    chunk1 = [x for x in streams if x.chunk == a.census_chunk]
+    rung_a_c1 = any(_scan(x, "a", LADDER[0][1], False) for x in chunk1)
+    scope = "; ".join(
+        f"Chunk_{c}: {sum(len(x.segments) for x in streams if x.chunk == c)} segments in "
+        f"{len({x.route for x in streams if x.chunk == c})} route(s)"
+        for c in sorted({x.chunk for x in streams})
+    )
     meta = {
-        "source": hero.stream.label,
-        "onset_segment_approx": seg_of_onset,
+        "source": f"Chunk_{hs.chunk}/{hs.route}",
+        "onset_segment": hs.seg[hero.onset],
+        "stop_segment": hs.seg[hero.stop],
+        "scan_scope": scope,
+        "rung_a_match_in_census_chunk": "yes" if rung_a_c1 else "no",
         "ladder_rung": hero.rung,
         "onset_kmh": f"{hero.stream.kmh(hero.onset):.2f}",
         "brake_onset_s": f"{hero.stream.t[hero.onset] - t0:.3f}",
@@ -317,7 +325,11 @@ def main(argv: list[str] | None = None) -> int:
         "inject_kmh": f"{hero.stream.kmh(hero.inject):.2f}",
         "stop_s": f"{hero.stream.t[hero.stop] - t0:.3f}",
         "brake_duration_s": f"{hero.stream.t[hero.stop] - hero.stream.t[hero.onset]:.3f}",
+        "pre_onset_10s_min_kmh": f"{min(pre):.2f}",
+        "pre_onset_10s_max_kmh": f"{max(pre):.2f}",
+        "speed_change_at_inject_kmh_per_100ms": f"{dv_inj:.2f}",
         "stationary_measured_s": f"{hero.stationary_s:.3f}",
+        "stationary_kept_s": f"{min(hero.stationary_s, STATIONARY_S):.3f}",
         "held_s": f"{hero.held_s:.3f}",
         "held_from_s": f"{held_from:.3f}" if hero.held_s > 0 else "none",
         "rows": len(rows),
@@ -384,24 +396,34 @@ def write_sources(a, src, hero, meta, bench, minutes, n_stops, n_long, kb, selec
         "## comma2k19 (MIT)",
         "",
         f"- Dataset: https://huggingface.co/datasets/commaai/comma2k19 at revision `{REVISION_NOTE}`, members",
-        "  `processed_log/CAN/speed/{t,value}` only, fetched with `tools/fetch_comma_speed.py` (HTTP range reads; CRC-32",
-        "  of each member is checked by `zipfile` and listed in the fetch manifest).",
+        "  `processed_log/CAN/speed/{t,value}` only, fetched with `tools/fetch_comma_speed.py` (HTTP range reads; the",
+        "  CRC-32 of each member is checked by `zipfile` on extraction).",
         "- Licence: MIT, Copyright (c) 2018 comma.ai (https://github.com/commaai/comma2k19/blob/master/LICENSE).",
         "",
         "## Traces",
         "",
-        f"- `trace-hero.csv`: {meta['source']}, onset in segment ~{meta['onset_segment_approx']}; ladder rung "
-        f"`{meta['ladder_rung']}`; {meta['onset_kmh']} km/h -> 0 in {meta['brake_duration_s']} s, then "
-        f"{meta['stationary_measured_s']} s stationary (held tail: {meta['held_s']} s). Details in `trace-hero.meta`.",
-        f"- `trace-bench.csv`: {bench.label}, {minutes:.2f} min continuous. {n_stops} stops, {n_long} of them with "
-        f">= 27 s at 0; `trace-bench-stops.csv` lists each stop and the held tail B2 would need (labelled when used).",
+        f"- `trace-hero.csv`: {meta['source']}, segments {meta['onset_segment']}-{meta['stop_segment']}; ladder rung "
+        f"`{meta['ladder_rung']}`; {meta['onset_kmh']} km/h -> 0 in {meta['brake_duration_s']} s. "
+        f"{meta['stationary_measured_s']} s stationary measured, the first {meta['stationary_kept_s']} s kept in the "
+        f"CSV (held tail: {meta['held_s']} s). In the 10 s before onset the speed ranged "
+        f"{meta['pre_onset_10s_min_kmh']}-{meta['pre_onset_10s_max_kmh']} km/h. Details in `trace-hero.meta`.",
+        f"- Hero search: brake onset = the last sample at >= 49 km/h in the descent that ends at the first displayed 0; "
+        f"the 10 s before onset stay within +-10 km/h of it. Scanned: {meta['scan_scope']}; first match in "
+        f"(chunk, route, segment) order, rung (a) tried everywhere before rung (b). "
+        f"Chunk_{a.census_chunk} has a rung-(a) match: {meta['rung_a_match_in_census_chunk']}.",
+        f"- `trace-bench.csv`: {bench.label}, {minutes:.2f} min continuous. **Short of the target of >= 10 stops "
+        f"followed by >= 27 s at 0:** it has {n_stops} stops after motion, {n_long} of them with >= 27 s measured. "
+        f"`trace-bench-stops.csv` lists each stop and the held tail at 0 the stationary-phase bench would need; any "
+        f"use of a held tail is labelled as held.",
         "",
         "## Speed-changing windows (STALE placement)",
         "",
         f"`window-census.csv`: windows where |speed(t + 100 ms) - speed(t)| >= threshold. trace-bench has "
         f"K = {kb[1.0]} distinct windows at 1.0 km/h per 100 ms and {kb[0.5]} at 0.5.",
-        f"Pre-registered rule (fixed before any fault run): keep 1.0 while K >= {MIN_K}, else 0.5. "
-        f"**Selected: {selected} km/h per 100 ms.** Reports say \"N injections over K distinct windows\".",
+        f"Threshold rule, committed with K before any fault run: keep 1.0 while trace-bench has >= {MIN_K} windows "
+        f"at it (at most 2.5 injections per window for 50 STALE injections), else 0.5. "
+        f"**Selected: {selected} km/h per 100 ms.** 50 injections over K = {kb[selected]} windows means windows are "
+        f"reused ({50 / kb[selected]:.1f} per window); reports say \"N injections over K distinct windows\".",
         "",
         "## Reproduce",
         "",

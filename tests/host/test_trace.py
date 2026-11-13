@@ -120,6 +120,26 @@ class TestTrace(unittest.TestCase):
             make_dataset(d, {(1, "r|a", 1): (t, v)})
             self.assertEqual(T.find_stop(T.load_streams(d)).rung, "c")
 
+    def test_non_monotone_descent_is_rejected(self):
+        # 52 -> 49.5 -> 20, back up to 45, then 0: the 45 -> 0 part never passed 49, the 49.5 part is not monotone to 0
+        t, v = profile([(0, 52), (15, 52), (16, 49.5), (17, 20), (18, 45), (21, 0), (60, 0)])
+        with tempfile.TemporaryDirectory() as d:
+            make_dataset(d, {(1, "r|a", 1): (t, v)})
+            self.assertIsNone(T.find_stop(T.load_streams(d)))
+
+    def test_opening_standstill_is_not_a_stop(self):
+        rows = [(i * 0.05, sp / T.KMH) for i, sp in enumerate([0] * 800 + [30] * 20 + [0] * 600)]
+        self.assertEqual(len(T.stop_list(rows)), 1)
+        self.assertEqual(T.count_stops(rows), 1)
+
+    def test_segment_provenance_per_sample(self):
+        t1, v1 = profile([(0, 50), (10, 50)])
+        t2 = [t1[-1] + DT + i * DT for i in range(10)]
+        with tempfile.TemporaryDirectory() as d:
+            make_dataset(d, {(1, "r|a", 4): (t1, v1), (1, "r|a", 5): (t2, [0.0] * 10)})
+            s = T.load_streams(d)[0]
+        self.assertEqual((s.seg[0], s.seg[-1], len(s.seg)), (4, 5, len(s.t)))
+
     def test_no_stop_returns_none(self):
         t, v = profile([(0, 50), (60, 60)])
         with tempfile.TemporaryDirectory() as d:
@@ -129,7 +149,7 @@ class TestTrace(unittest.TestCase):
     def test_windows_counts_and_merges(self):
         # two brakings at 20 km/h per s (2 km/h per 100 ms), 20 s apart
         t, v = profile([(0, 60), (5, 60), (6, 40), (26, 40), (27, 20), (40, 20)])
-        s = T.Stream(1, "r|a", [1], t, v)
+        s = T.Stream(1, "r|a", segments=[1], t=t, v=v)
         self.assertEqual(len(T.windows(s, 1.0)), 2)
         self.assertEqual(len(T.windows(s, 3.0)), 0)
 
