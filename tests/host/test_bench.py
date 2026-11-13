@@ -73,7 +73,7 @@ class Faults(unittest.TestCase):
     def test_render_has_banner(self):
         text = bench.render_faults(self.res, True)
         self.assertTrue(text.startswith("**SYNTHETIC"))
-        self.assertIn("| FREEZE | 2 | 0 | 0 | 0 | 60.0 / 80.0 / 80.0 |", text)
+        self.assertIn("| FREEZE | 2 | 0 | 0 | 0 | 2 · 60.0 / 80.0 / 80.0 | 2 · 20.0 / 20.0 |", text)
 
 
 def _row(**kw):
@@ -102,6 +102,22 @@ class FaultRules(unittest.TestCase):
             bench.analyze_faults(rows)
         self.assertEqual(len(bench.analyze_faults(rows, allow_mixed=True)["configs"]), 2)
 
+    def test_time_running_backwards_is_inconsistent(self):
+        rows = [_row(t_inject_ns="100", t_detect_ns="50", missed="0"),
+                _row(t_inject_ns="0", t_detect_ns="100", t_safe_visible_ns="90", missed="0")]
+        c = bench.analyze_faults(rows)["classes"]["FREEZE"]
+        self.assertEqual((c["inconsistent"], c["detect_ms"]["n"]), (2, 0))
+
+    def test_missing_recovery_stamps_counted(self):
+        rows = [_row(t_inject_ns="0", t_detect_ns="1000000", missed="0"),
+                _row(**{"class": "STARVE"}, t_inject_ns="0", t_detect_ns="1000000",
+                     t_safe_visible_ns="2000000", missed="0")]
+        res = bench.analyze_faults(rows)
+        f, st = res["classes"]["FREEZE"], res["classes"]["STARVE"]
+        self.assertEqual((f["missing_safe_stamp"], f["missing_true_stamp"]), (1, 1))
+        self.assertEqual((st["missing_safe_stamp"], st["missing_true_stamp"]), (0, 0))  # STARVE never restarts
+        self.assertEqual(res["problem_rows"], 2)
+
     def test_hardware_accel_not_labelled_qemu(self):
         r = _row(accel="pi5", t_inject_ns="0", t_detect_ns="1", missed="0")
         self.assertEqual(bench.analyze_faults([r])["timing"], "accel=pi5")
@@ -118,13 +134,15 @@ class Schema(unittest.TestCase):
 
 
 class Clean(unittest.TestCase):
-    def test_false_positive_counts_armed_non_pass_only(self):
+    def test_false_positive_is_any_non_pass_verdict(self):
         t = bench.load([str(FIX / "synthetic-bench-clean.csv")], bench.CHECK_COLUMNS)
         res = bench.analyze_clean(t.rows)
         self.assertEqual(res["checks"], 4)
         self.assertEqual(res["armed_checks"], 3)
-        self.assertEqual(res["false_positives"], 1)
+        self.assertEqual(res["false_positives"], 2)        # armed VALUE_MISMATCH + unarmed UNKNOWN
+        self.assertEqual(res["false_positives_armed"], 1)
         self.assertAlmostEqual(res["duration_s"], 0.06)
+        self.assertAlmostEqual(res["false_positives_per_30min"], 60000.0)
         self.assertEqual(res["readback_check_us"]["p95"], 6000.0)
 
 
@@ -139,6 +157,11 @@ class Cli(unittest.TestCase):
         data = json.loads(p.stdout)
         self.assertTrue(data["synthetic"])
         self.assertEqual(data["classes"]["STALE"]["misses"], 1)
+
+    def test_strict_fails_on_problem_rows(self):
+        p = self.run_cli("faults", "--strict", str(FIX / "synthetic-bench-faults.csv"))
+        self.assertEqual(p.returncode, 3)  # the fixture's BLANK row has no t_inject
+        self.assertIn("problem rows", p.stderr)
 
     def test_bad_schema_exit_2(self):
         p = self.run_cli("faults", str(FIX / "synthetic-bench-clean.csv"))

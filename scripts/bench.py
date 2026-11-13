@@ -13,6 +13,11 @@ Rules this script enforces (so a table cannot hide a bad row):
     and must agree with the row's own `missed` column (else it is INCONSISTENT);
   * all rows of one report must share one configuration
     (accel, tier, smp, runmask, period_ms) unless --allow-mixed is given;
+  * a detected row must be time-ordered (t_detect >= t_inject, recovery stamps >= t_detect);
+  * a detected row with no t_safe_visible (or no t_true, except STARVE, whose renderer is
+    never restarted) is counted per class as a missing recovery stamp, and every recovery
+    column shows its own n, so a smaller n can never hide behind the row count;
+  * --strict exits 3 when any row is failed, inconsistent or missing a recovery stamp;
   * percentiles are nearest-rank (p95 of N values = the ceil(0.95*N)-th smallest);
   * QEMU accelerators (tcg, hvf) are labelled "QEMU timing, not hardware timing".
 Lines starting with '#' are comments; a file whose comments contain
@@ -138,6 +143,8 @@ class ClassStats:
     failed: int = 0
     inconsistent: int = 0
     misses: int = 0
+    missing_safe: int = 0
+    missing_true: int = 0
     detect_ms: list[float] = field(default_factory=list)
     detect_from_diverge_ms: list[float] = field(default_factory=list)
     safe_ms: list[float] = field(default_factory=list)
@@ -164,15 +171,23 @@ def analyze_faults(rows: list[dict], allow_mixed: bool = False) -> dict:
         if missed:
             s.misses += 1
             continue
+        t_safe = _ns(r, "t_safe_visible_ns")
+        t_true = _ns(r, "t_true_ns")
+        if t_detect < t_inject or any(t is not None and t < t_detect for t in (t_safe, t_true)):
+            s.inconsistent += 1  # time runs backwards: a logging bug, not a measurement
+            continue
         s.detect_ms.append((t_detect - t_inject) / 1e6)
         t_div = _ns(r, "t_diverge_ns")
         if t_div is not None:
             s.detect_from_diverge_ms.append((t_detect - t_div) / 1e6)
-        t_safe = _ns(r, "t_safe_visible_ns")
-        if t_safe is not None:
+        if t_safe is None:
+            s.missing_safe += 1
+        else:
             s.safe_ms.append((t_safe - t_detect) / 1e6)
-        t_true = _ns(r, "t_true_ns")
-        if t_true is not None:
+        if t_true is None:
+            if cls != "STARVE":
+                s.missing_true += 1
+        else:
             s.full_ms.append((t_true - t_detect) / 1e6)
     classes = {
         cls: {
@@ -180,6 +195,8 @@ def analyze_faults(rows: list[dict], allow_mixed: bool = False) -> dict:
             "failed": s.failed,
             "inconsistent": s.inconsistent,
             "misses": s.misses,
+            "missing_safe_stamp": s.missing_safe,
+            "missing_true_stamp": s.missing_true,
             "detect_ms": summarize(s.detect_ms),
             "detect_from_diverge_ms": summarize(s.detect_from_diverge_ms),
             "safe_layer_recovery_ms": summarize(s.safe_ms),
@@ -187,13 +204,18 @@ def analyze_faults(rows: list[dict], allow_mixed: bool = False) -> dict:
         }
         for cls, s in sorted(per.items())
     }
-    return {"kind": "faults", "configs": cfgs, "timing": timing_label(cfgs), "classes": classes}
+    problems = sum(c["failed"] + c["inconsistent"] + c["missing_safe_stamp"] + c["missing_true_stamp"]
+                   for c in classes.values())
+    return {"kind": "faults", "configs": cfgs, "timing": timing_label(cfgs), "classes": classes,
+            "problem_rows": problems}
 
 
 def analyze_clean(rows: list[dict]) -> dict:
-    """B3: any non-PASS verdict while armed is a false positive. B5: check_us."""
+    """B3: any non-PASS verdict in the clean run is a false positive (armed or not;
+    the armed-only count is reported beside it). B5: check_us."""
     armed = [r for r in rows if (r.get("armed") or "").strip() == "1"]
-    fps = [r for r in armed if (r.get("verdict") or "").strip() != "PASS"]
+    fps = [r for r in rows if (r.get("verdict") or "").strip() != "PASS"]
+    fps_armed = [r for r in fps if (r.get("armed") or "").strip() == "1"]
     check_us = [float(r["check_us"]) for r in rows if (r.get("check_us") or "").strip()]
     starts = [_ns(r, "t_cap_start_ns") for r in rows]
     starts = [s for s in starts if s is not None]
@@ -203,7 +225,9 @@ def analyze_clean(rows: list[dict]) -> dict:
         "checks": len(rows),
         "armed_checks": len(armed),
         "false_positives": len(fps),
+        "false_positives_armed": len(fps_armed),
         "duration_s": round(duration_s, 3),
+        "false_positives_per_30min": round(len(fps) / duration_s * 1800, 3) if duration_s > 0 else None,
         "readback_check_us": summarize(check_us),
     }
 
@@ -217,15 +241,17 @@ def render_faults(result: dict, synthetic: bool) -> str:
     if synthetic:
         out.append("**SYNTHETIC TEST FIXTURE — not a measurement**\n")
     out.append(f"Timing: {result['timing']}\n")
-    out.append("| class | rows | failed | inconsistent | misses | detect p50 / p95 / max (ms) | safe-layer p50 / p95 (ms) | full p50 / p95 (ms) |")
+    out.append("| class | rows | failed | inconsistent | misses | detect n · p50 / p95 / max (ms) "
+               "| safe-layer n · p50 / p95 (ms) | full n · p50 / p95 (ms) |")
     out.append("|---|---|---|---|---|---|---|---|")
     for cls, c in result["classes"].items():
         d, sf, fu = c["detect_ms"], c["safe_layer_recovery_ms"], c["full_recovery_ms"]
         out.append(
             f"| {cls} | {c['total']} | {c['failed']} | {c['inconsistent']} | {c['misses']} | "
-            f"{_fmt(d['p50'])} / {_fmt(d['p95'])} / {_fmt(d['max'])} | "
-            f"{_fmt(sf['p50'])} / {_fmt(sf['p95'])} | {_fmt(fu['p50'])} / {_fmt(fu['p95'])} |"
+            f"{d['n']} · {_fmt(d['p50'])} / {_fmt(d['p95'])} / {_fmt(d['max'])} | "
+            f"{sf['n']} · {_fmt(sf['p50'])} / {_fmt(sf['p95'])} | {fu['n']} · {_fmt(fu['p50'])} / {_fmt(fu['p95'])} |"
         )
+    out.append(f"\nproblem rows: {result['problem_rows']} (failed + inconsistent + missing recovery stamps)")
     return "\n".join(out) + "\n"
 
 
@@ -236,7 +262,8 @@ def render_clean(result: dict, synthetic: bool) -> str:
     rb = result["readback_check_us"]
     out.append(
         f"checks {result['checks']} (armed {result['armed_checks']}) over {result['duration_s']} s · "
-        f"false positives {result['false_positives']} · read-back µs p50/p95/max "
+        f"false positives {result['false_positives']} (armed {result['false_positives_armed']}, "
+        f"per 30 min {result['false_positives_per_30min']}) · read-back µs p50/p95/max "
         f"{_fmt(rb['p50'])} / {_fmt(rb['p95'])} / {_fmt(rb['max'])}"
     )
     return "\n".join(out) + "\n"
@@ -247,6 +274,8 @@ def main(argv: list[str] | None = None) -> int:
     ap.add_argument("kind", choices=["faults", "clean"])
     ap.add_argument("csv", nargs="+")
     ap.add_argument("--json", action="store_true", help="print the result as JSON")
+    ap.add_argument("--strict", action="store_true",
+                    help="faults: exit 3 if any row is failed, inconsistent or missing a recovery stamp")
     ap.add_argument("--allow-mixed", action="store_true", help="faults: allow rows from several configurations")
     a = ap.parse_args(argv)
     try:
@@ -263,6 +292,9 @@ def main(argv: list[str] | None = None) -> int:
         return 2
     res["synthetic"] = t.synthetic
     sys.stdout.write(json.dumps(res, indent=2) + "\n" if a.json else text)
+    if a.strict and res.get("problem_rows", 0) > 0:
+        print(f"bench.py: --strict: {res['problem_rows']} problem rows", file=sys.stderr)
+        return 3
     return 0
 
 
