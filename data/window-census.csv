@@ -1,0 +1,5 @@
+scope,threshold_kmh_per_100ms,hours,windows,windows_per_hour
+"Chunk_1 (all segments)",1.0,3.122,63,20.2
+"Chunk_1 (all segments)",0.5,3.122,524,167.8
+"trace-bench (Chunk_8/99c94dc769b5d96e|2018-09-19--16-09-16/7-37)",1.0,0.517,21,40.6
+"trace-bench (Chunk_8/99c94dc769b5d96e|2018-09-19--16-09-16/7-37)",0.5,0.517,53,102.6
