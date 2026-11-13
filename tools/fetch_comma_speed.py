@@ -23,6 +23,7 @@ import http.client
 import io
 import os
 import re
+import ssl
 import sys
 import time
 import urllib.error
@@ -60,7 +61,7 @@ class RangeFile(io.RawIOBase):
             except urllib.error.HTTPError as e:
                 if (e.code != 429 and e.code < 500) or attempt == RETRIES:
                     raise
-            except (urllib.error.URLError, ConnectionError, TimeoutError, http.client.IncompleteRead, ShortReadError):
+            except (urllib.error.URLError, ConnectionError, TimeoutError, http.client.IncompleteRead, ShortReadError, ssl.SSLError):
                 if attempt == RETRIES:
                     raise
             self.retries += 1
@@ -156,30 +157,44 @@ def survey(zf: zipfile.ZipFile, chunk: int) -> list[str]:
 SURVEY_HEADER = "chunk,route,segments_with_speed,longest_consecutive_run,run_first_segment"
 
 
+def write_survey(path: str, chunk: int, rows: list[str]) -> None:
+    """Merge one chunk's rows into the survey CSV: earlier rows for that chunk are replaced, so re-running is
+    idempotent; output sorted by (chunk, route)."""
+    keep: list[str] = []
+    if os.path.exists(path):
+        with open(path) as fh:
+            lines = fh.read().splitlines()
+        if lines and lines[0] != SURVEY_HEADER:
+            raise SystemExit(f"{path}: not a survey CSV (header {lines[0]!r})")
+        keep = [r for r in lines[1:] if r and int(r.split(",", 1)[0]) != chunk]
+    allrows = sorted(keep + rows, key=lambda r: (int(r.split(",", 1)[0]), r.split(",")[1]))
+    with open(path, "w") as fh:
+        fh.write(SURVEY_HEADER + "\n")
+        fh.writelines(r + "\n" for r in allrows)
+
+
 def main(argv: list[str] | None = None) -> int:
     ap = argparse.ArgumentParser(description=__doc__.splitlines()[0])
     ap.add_argument("--chunk", type=int, required=True, choices=range(1, 11))
-    ap.add_argument("--survey", metavar="CSV", help="append this chunk's per-route segment survey to CSV "
-                    "(zip directory only, nothing extracted) and exit")
+    ap.add_argument("--survey", metavar="CSV", help="write this chunk's per-route segment survey into CSV, replacing "
+                    "any earlier rows for the chunk (zip directory only, nothing extracted), and exit")
     ap.add_argument("--route", help="only this route id (e.g. 'dongle|YYYY-MM-DD--hh-mm-ss')")
     ap.add_argument("--out", help="output directory (keep it outside the repo); required unless --survey")
     ap.add_argument("--revision", default=REVISION)
     a = ap.parse_args(argv)
+    if a.survey and (a.out or a.route):
+        ap.error("--survey takes no --out or --route")
+    if not a.survey and not a.out:
+        ap.error("--out is required unless --survey is given")
 
     url = f"{REPO}/{a.revision}/raw_data/Chunk_{a.chunk}.zip"
     rf = RangeFile(url)
     zf = zipfile.ZipFile(io.BufferedReader(rf, buffer_size=1 << 16))
     if a.survey:
         rows = survey(zf, a.chunk)
-        new_file = not os.path.exists(a.survey)
-        with open(a.survey, "a") as fh:
-            if new_file:
-                fh.write(SURVEY_HEADER + "\n")
-            fh.writelines(r + "\n" for r in rows)
+        write_survey(a.survey, a.chunk, rows)
         print(f"Chunk_{a.chunk}: {len(rows)} routes surveyed, {rf.requests} range requests -> {a.survey}")
         return 0
-    if not a.out:
-        ap.error("--out is required unless --survey is given")
     members = []
     for info in zf.infolist():
         m = SPEED_RE.match(info.filename)

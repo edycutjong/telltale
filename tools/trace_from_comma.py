@@ -402,7 +402,7 @@ def survey_top(path: str) -> list[tuple[int, str, int]]:
         for line in fh:
             chunk, route, _, run, _ = line.rstrip("\n").split(",")
             rows.append((int(run), route, int(chunk)))
-    return sorted(rows, reverse=True)
+    return sorted(set(rows), reverse=True)
 
 
 def write_sources(a, src, hero, meta, bench, minutes, n_stops, n_long, kb, selected) -> None:
@@ -413,9 +413,10 @@ def write_sources(a, src, hero, meta, bench, minutes, n_stops, n_long, kb, selec
         outs.append("route-survey.csv")
         chunks = sorted({c for _, _, c in top})
         bench_why = (
-            f"the longest run of consecutive one-minute segments in `route-survey.csv`, which lists all "
-            f"{len(top)} routes with CAN speed in Chunk_{chunks[0]}-{chunks[-1]}: {top[0][0]} segments; the next "
-            f"longest has {top[1][0]}"
+            f"the longest run of consecutive one-minute segment numbers in `route-survey.csv`, which lists all "
+            f"{len(top)} routes whose zip directory has both speed members, in the {len(chunks)} chunks at the pinned "
+            f"revision: {top[0][0]} segments; the next longest has {top[1][0]}; time continuity is then checked by "
+            f"the join rule above"
         )
     else:
         bench_why = "route-survey.csv absent: no survey claim made"
@@ -428,7 +429,8 @@ def write_sources(a, src, hero, meta, bench, minutes, n_stops, n_long, kb, selec
         "are joined when the time gap is -0.1..1 s; boundary samples that overlap in time are dropped, and a gap of up to",
         "1 s is bridged on the bench grid by holding the last sample before it.",
         "",
-        "Terms: **STALE** is the fault class where the cluster keeps showing an old speed while the true speed changes",
+        "Terms: the **hero** trace is the single braking-to-a-stop clip used for the demo; the **bench** trace is the",
+        "long drive the fault-injection runs replay. **STALE** is the fault class where the cluster keeps showing an old speed while the true speed changes",
         "(the injector freezes the displayed frame). The **inject instant** (`inject_at_s`) is when the hero run freezes",
         "the display. A **ladder rung** is one pre-registered relaxation of the hero search, tried in order: (a) all rules",
         "below; (b) as (a), but a stationary phase shorter than 27 s is extended with a held tail at 0, labelled `held_s`;",

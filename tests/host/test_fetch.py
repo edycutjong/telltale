@@ -163,17 +163,36 @@ class TestFetch(unittest.TestCase):
         self.assertEqual(F.longest_run([9, 1, 2, 3, 7, 8, 10, 11, 3]), (5, 7))
         self.assertEqual(F.longest_run([1, 2, 4, 5]), (2, 1))  # ties keep the first run
 
-    def test_survey_counts_complete_segments_only(self):
-        with mock.patch.object(F.urllib.request, "urlopen", FakeServer(self.blob)), \
-                tempfile.TemporaryDirectory() as d:
+    def test_survey_counts_complete_segments_only_and_is_idempotent(self):
+        def speed(route, seg, kinds):
+            return {f"Chunk_2/{route}/{seg}/processed_log/CAN/speed/{k}": b"x" for k in kinds}
+        members = {}
+        for seg in (3, 4, 6, 7, 8):  # runs 3-4 and 6-8 -> longest 3 from 6
+            members.update(speed("r|c", seg, ("t", "value")))
+        members.update(speed("r|c", 5, ("t",)))  # incomplete: would bridge 3-8 into one run of 6 if counted
+        members.update(speed("r|d", 1, ("value",)))  # incomplete-only route: not listed at all
+        buf = io.BytesIO()
+        with zipfile.ZipFile(buf, "w") as z:
+            for name, body in members.items():
+                z.writestr(name, body)
+        with tempfile.TemporaryDirectory() as d:
             out = os.path.join(d, "s.csv")
-            self.assertEqual(F.main(["--chunk", "1", "--survey", out]), 0)
-            self.assertEqual(F.main(["--chunk", "1", "--survey", out]), 0)  # appends, header once
+            with open(out, "w") as fh:  # an earlier survey with a stale Chunk_2 row and a Chunk_1 row to keep
+                fh.write(F.SURVEY_HEADER + "\n1,r|a,1,1,3\n2,r|old,9,9,1\n")
+            with mock.patch.object(F.urllib.request, "urlopen", FakeServer(buf.getvalue())):
+                self.assertEqual(F.main(["--chunk", "2", "--survey", out]), 0)
+                self.assertEqual(F.main(["--chunk", "2", "--survey", out]), 0)  # re-run replaces, never duplicates
             with open(out) as fh:
                 lines = fh.read().splitlines()
-        self.assertEqual(lines[0], F.SURVEY_HEADER)
-        self.assertEqual(lines[1:3], ["1,r|a,1,1,3", "1,r|b,1,1,1"])
-        self.assertEqual(len(lines), 5)
+        self.assertEqual(lines, [F.SURVEY_HEADER, "1,r|a,1,1,3", "2,r|c,5,3,6"])
+
+    def test_argument_rules(self):
+        with mock.patch("sys.stderr", io.StringIO()):
+            for argv in (["--chunk", "1"], ["--chunk", "1", "--survey", "s.csv", "--out", "o"],
+                         ["--chunk", "1", "--survey", "s.csv", "--route", "r|a"]):
+                with self.assertRaises(SystemExit) as cm:
+                    F.main(argv)
+                self.assertEqual(cm.exception.code, 2, argv)
 
     def test_safe_name(self):
         self.assertEqual(F.safe_name("99c94dc769b5d96e|2018-09-19--16-09-16"), "99c94dc769b5d96e_2018-09-19--16-09-16")
