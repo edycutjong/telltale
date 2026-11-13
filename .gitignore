@@ -1,0 +1,29 @@
+# secrets / local env
+.env
+.env.*
+*.pem
+*.key
+
+# host tooling
+__pycache__/
+*.pyc
+.ruff_cache/
+.pytest_cache/
+.DS_Store
+
+# build outputs (host + qcc)
+out/
+*.o
+*.a
+*.so
+/tests/host/bin/
+
+# QNX images and QEMU disks (rebuilt from image/, never committed)
+*.img
+*.qcow2
+*.ifs
+image/output/
+
+# raw datasets stay outside the repo; only derived CSVs in data/ are committed
+comma2k19/
+*.zip
