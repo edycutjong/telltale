@@ -127,6 +127,31 @@ class TestTrace(unittest.TestCase):
             make_dataset(d, {(1, "r|a", 1): (t, v)})
             self.assertIsNone(T.find_stop(T.load_streams(d)))
 
+    def test_unsteady_approach_is_rejected(self):
+        # 70 km/h until 1 s before the 49.6 onset: the 10 s before onset leave the +/-10 km/h steady band
+        t, v = profile([(0, 70), (19, 70), (20, 49.6), (25, 0), (55, 0)])
+        with tempfile.TemporaryDirectory() as d:
+            make_dataset(d, {(1, "r|a", 1): (t, v)})
+            self.assertIsNone(T.find_stop(T.load_streams(d)))
+        # control: the same stop with a steady 55 km/h approach is found
+        t, v = profile([(0, 55), (19, 55), (20, 49.6), (25, 0), (55, 0)])
+        with tempfile.TemporaryDirectory() as d:
+            make_dataset(d, {(1, "r|a", 1): (t, v)})
+            self.assertIsNotNone(T.find_stop(T.load_streams(d)))
+
+    def test_no_sample_showing_48_means_no_inject_point(self):
+        # 49.6 -> 46.0 between two samples (DT = 12 ms): no sample displays 48, so the stop has no inject instant
+        t, v = profile([(0, 52), (18, 52), (20, 49.6), (20.001, 46.0), (25, 0), (55, 0)])
+        self.assertFalse(any(T.disp(x * T.KMH) == 48 for x in v))
+        with tempfile.TemporaryDirectory() as d:
+            make_dataset(d, {(1, "r|a", 1): (t, v)})
+            self.assertIsNone(T.find_stop(T.load_streams(d)))
+        # control: the same stop braking smoothly from 49.6 passes through 48 and is found
+        t, v = profile([(0, 52), (18, 52), (20, 49.6), (25, 0), (55, 0)])
+        with tempfile.TemporaryDirectory() as d:
+            make_dataset(d, {(1, "r|a", 1): (t, v)})
+            self.assertIsNotNone(T.find_stop(T.load_streams(d)))
+
     def test_opening_standstill_is_not_a_stop(self):
         rows = [(i * 0.05, sp / T.KMH) for i, sp in enumerate([0] * 800 + [30] * 20 + [0] * 600)]
         self.assertEqual(len(T.stop_list(rows)), 1)
