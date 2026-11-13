@@ -27,7 +27,7 @@ test-host-py:
 test-host: test-host-c test-host-py
 
 lint:
-	ruff check scripts tests
+	ruff check scripts tests tools
 
 target:
 	@command -v qcc >/dev/null 2>&1 || { echo "qcc not found: source the QNX SDP 8.0 qnxsdp-env.sh first"; exit 1; }
