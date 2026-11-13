@@ -1,6 +1,6 @@
 # Telltale
 
-An isolated QNX 8.0 monitor that reads back what the instrument cluster actually shows and checks it against the vehicle state.
+Telltale is being built as an isolated QNX 8.0 monitor that reads back what the instrument cluster actually shows and checks it against the vehicle state.
 
 **Status: early build.** This repository is being written during the QNX hackathon (Nov–Dec 2026). The QNX target code
 (resource manager, Screen renderer, monitor, fault injector) has not landed yet; this README will describe it once it runs

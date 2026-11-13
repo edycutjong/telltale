@@ -1,6 +1,6 @@
 # Developer-experience log
 
-Friction met while building Telltale on QNX SDP 8.0, written as it happens.
+Friction met while setting up and building Telltale for QNX SDP 8.0, written as it happens.
 
 ## 2026-11-14: host setup on an Apple-Silicon Mac
 - The build machine is an M1 Mac. The plan is QNX's documented macOS route: SDP host tools in a `linux/amd64` Docker

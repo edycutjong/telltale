@@ -1,4 +1,5 @@
 # SYNTHETIC TEST FIXTURE - hand-written rows for tests/host/test_bench.py. Not a measurement.
+# accel=tcg
 t_cap_start_ns,t_cap_end_ns,check_us,state,armed,verdict,decoded,truth_min,truth_max,tick,marker
 0,4000000,4000,OK,1,PASS,48,48,48,1,
 20000000,25000000,5000,OK,1,PASS,48,47,48,2,

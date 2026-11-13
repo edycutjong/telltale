@@ -17,6 +17,10 @@ Rules this script enforces (so a table cannot hide a bad row):
   * a detected row with no t_safe_visible (or no t_true, except STARVE, whose renderer is
     never restarted) is counted per class as a missing recovery stamp, and every recovery
     column shows its own n, so a smaller n can never hide behind the row count;
+  * classes passed with --detect-only (e.g. B7d, Screen SIGSTOP: no recovery claimed) are
+    exempt from the recovery-stamp rule;
+  * a clean report covers exactly one run (one file) and needs its accel, from --accel or a
+    "# accel=<tcg|hvf|pi5>" comment line, so B3/B5 numbers carry the same QEMU label;
   * --strict exits 3 when any row is failed, inconsistent or missing a recovery stamp;
   * percentiles are nearest-rank (p95 of N values = the ceil(0.95*N)-th smallest);
   * QEMU accelerators (tcg, hvf) are labelled "QEMU timing, not hardware timing".
@@ -79,6 +83,7 @@ class Table:
     rows: list[dict]
     synthetic: bool
     source: str
+    meta: dict = field(default_factory=dict)
 
 
 def read_table(text: str, columns: list[str], source: str = "<input>") -> Table:
@@ -93,8 +98,15 @@ def read_table(text: str, columns: list[str], source: str = "<input>") -> Table:
     if missing:
         raise BenchError(f"{source}: missing columns {missing}")
     rows = list(reader)
+    if not rows:
+        raise BenchError(f"{source}: header only, no data rows")
     synthetic = any(SYNTHETIC_MARK in c for c in comments)
-    return Table(rows=rows, synthetic=synthetic, source=source)
+    meta = {}
+    for c in comments:
+        k, sep, v = c.lstrip("# ").partition("=")
+        if sep and k.strip().isidentifier():
+            meta[k.strip()] = v.strip()
+    return Table(rows=rows, synthetic=synthetic, source=source, meta=meta)
 
 
 def load(paths: list[str], columns: list[str]) -> Table:
@@ -104,14 +116,27 @@ def load(paths: list[str], columns: list[str]) -> Table:
         t = read_table(Path(p).read_text(encoding="utf-8"), columns, source=p)
         rows.extend(t.rows)
         synthetic = synthetic or t.synthetic
-    return Table(rows=rows, synthetic=synthetic, source=",".join(paths))
+    return Table(rows=rows, synthetic=synthetic, source=",".join(paths), meta=t.meta if len(paths) == 1 else {})
 
 
 def _ns(row: dict, key: str) -> int | None:
     v = (row.get(key) or "").strip()
     if v == "":
         return None
-    return int(v)
+    try:
+        return int(v)
+    except ValueError:
+        raise BenchError(f"non-integer {key}={v!r}") from None
+
+
+def _float(row: dict, key: str) -> float | None:
+    v = (row.get(key) or "").strip()
+    if v == "":
+        return None
+    try:
+        return float(v)
+    except ValueError:
+        raise BenchError(f"non-numeric {key}={v!r}") from None
 
 
 def configs(rows: list[dict]) -> list[dict]:
@@ -151,7 +176,10 @@ class ClassStats:
     full_ms: list[float] = field(default_factory=list)
 
 
-def analyze_faults(rows: list[dict], allow_mixed: bool = False) -> dict:
+NO_RESTART_CLASSES = {"STARVE"}  # the renderer recovers when the hog ends; no t_restart / t_true expected
+
+
+def analyze_faults(rows: list[dict], allow_mixed: bool = False, detect_only: tuple[str, ...] = ()) -> dict:
     cfgs = check_single_config(rows, allow_mixed)
     per: dict[str, ClassStats] = {}
     for r in rows:
@@ -173,7 +201,8 @@ def analyze_faults(rows: list[dict], allow_mixed: bool = False) -> dict:
             continue
         t_safe = _ns(r, "t_safe_visible_ns")
         t_true = _ns(r, "t_true_ns")
-        if t_detect < t_inject or any(t is not None and t < t_detect for t in (t_safe, t_true)):
+        t_restart = _ns(r, "t_restart_ns")
+        if t_detect < t_inject or any(t is not None and t < t_detect for t in (t_safe, t_true, t_restart)):
             s.inconsistent += 1  # time runs backwards: a logging bug, not a measurement
             continue
         s.detect_ms.append((t_detect - t_inject) / 1e6)
@@ -181,11 +210,12 @@ def analyze_faults(rows: list[dict], allow_mixed: bool = False) -> dict:
         if t_div is not None:
             s.detect_from_diverge_ms.append((t_detect - t_div) / 1e6)
         if t_safe is None:
-            s.missing_safe += 1
+            if cls not in detect_only:
+                s.missing_safe += 1
         else:
             s.safe_ms.append((t_safe - t_detect) / 1e6)
         if t_true is None:
-            if cls != "STARVE":
+            if cls not in detect_only and cls not in NO_RESTART_CLASSES:
                 s.missing_true += 1
         else:
             s.full_ms.append((t_true - t_detect) / 1e6)
@@ -210,18 +240,19 @@ def analyze_faults(rows: list[dict], allow_mixed: bool = False) -> dict:
             "problem_rows": problems}
 
 
-def analyze_clean(rows: list[dict]) -> dict:
+def analyze_clean(rows: list[dict], accel: str) -> dict:
     """B3: any non-PASS verdict in the clean run is a false positive (armed or not;
     the armed-only count is reported beside it). B5: check_us."""
     armed = [r for r in rows if (r.get("armed") or "").strip() == "1"]
     fps = [r for r in rows if (r.get("verdict") or "").strip() != "PASS"]
     fps_armed = [r for r in fps if (r.get("armed") or "").strip() == "1"]
-    check_us = [float(r["check_us"]) for r in rows if (r.get("check_us") or "").strip()]
+    check_us = [v for v in (_float(r, "check_us") for r in rows) if v is not None]
     starts = [_ns(r, "t_cap_start_ns") for r in rows]
     starts = [s for s in starts if s is not None]
     duration_s = (max(starts) - min(starts)) / 1e9 if len(starts) > 1 else 0.0
     return {
         "kind": "clean",
+        "timing": timing_label([{"accel": accel}]),
         "checks": len(rows),
         "armed_checks": len(armed),
         "false_positives": len(fps),
@@ -260,10 +291,12 @@ def render_clean(result: dict, synthetic: bool) -> str:
     if synthetic:
         out.append("**SYNTHETIC TEST FIXTURE — not a measurement**\n")
     rb = result["readback_check_us"]
+    rate = result["false_positives_per_30min"]
+    out.append(f"Timing: {result['timing']}\n")
     out.append(
         f"checks {result['checks']} (armed {result['armed_checks']}) over {result['duration_s']} s · "
         f"false positives {result['false_positives']} (armed {result['false_positives_armed']}, "
-        f"per 30 min {result['false_positives_per_30min']}) · read-back µs p50/p95/max "
+        f"per 30 min {'n/a (run too short)' if rate is None else rate}) · read-back µs p50/p95/max "
         f"{_fmt(rb['p50'])} / {_fmt(rb['p95'])} / {_fmt(rb['max'])}"
     )
     return "\n".join(out) + "\n"
@@ -276,16 +309,24 @@ def main(argv: list[str] | None = None) -> int:
     ap.add_argument("--json", action="store_true", help="print the result as JSON")
     ap.add_argument("--strict", action="store_true",
                     help="faults: exit 3 if any row is failed, inconsistent or missing a recovery stamp")
+    ap.add_argument("--detect-only", action="append", default=[], metavar="CLASS",
+                    help="faults: class with no recovery claimed (repeatable), e.g. B7d")
+    ap.add_argument("--accel", choices=["tcg", "hvf", "pi5"], help="clean: accelerator of the run")
     ap.add_argument("--allow-mixed", action="store_true", help="faults: allow rows from several configurations")
     a = ap.parse_args(argv)
     try:
         if a.kind == "faults":
             t = load(a.csv, FAULT_COLUMNS)
-            res = analyze_faults(t.rows, allow_mixed=a.allow_mixed)
+            res = analyze_faults(t.rows, allow_mixed=a.allow_mixed, detect_only=tuple(a.detect_only))
             text = render_faults(res, t.synthetic)
         else:
+            if len(a.csv) != 1:
+                raise BenchError("clean: one run per report (exactly one CSV)")
             t = load(a.csv, CHECK_COLUMNS)
-            res = analyze_clean(t.rows)
+            accel = a.accel or t.meta.get("accel")
+            if accel not in ("tcg", "hvf", "pi5"):
+                raise BenchError("clean: accel unknown; pass --accel or add '# accel=<tcg|hvf|pi5>' to the CSV")
+            res = analyze_clean(t.rows, accel)
             text = render_clean(res, t.synthetic)
     except BenchError as e:
         print(f"bench.py: {e}", file=sys.stderr)

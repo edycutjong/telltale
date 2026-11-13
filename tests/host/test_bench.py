@@ -118,6 +118,19 @@ class FaultRules(unittest.TestCase):
         self.assertEqual((st["missing_safe_stamp"], st["missing_true_stamp"]), (0, 0))  # STARVE never restarts
         self.assertEqual(res["problem_rows"], 2)
 
+    def test_detect_only_class_exempt_from_recovery_stamps(self):
+        r = _row(**{"class": "B7d"}, t_inject_ns="0", t_detect_ns="1000000", missed="0")
+        self.assertEqual(bench.analyze_faults([r])["problem_rows"], 2)
+        self.assertEqual(bench.analyze_faults([r], detect_only=("B7d",))["problem_rows"], 0)
+
+    def test_restart_before_detect_is_inconsistent(self):
+        r = _row(t_inject_ns="0", t_detect_ns="100", t_restart_ns="50", missed="0")
+        self.assertEqual(bench.analyze_faults([r])["classes"]["FREEZE"]["inconsistent"], 1)
+
+    def test_non_numeric_stamp_is_bench_error(self):
+        with self.assertRaises(bench.BenchError):
+            bench.analyze_faults([_row(t_inject_ns="abc", missed="0")])
+
     def test_hardware_accel_not_labelled_qemu(self):
         r = _row(accel="pi5", t_inject_ns="0", t_detect_ns="1", missed="0")
         self.assertEqual(bench.analyze_faults([r])["timing"], "accel=pi5")
@@ -128,6 +141,10 @@ class Schema(unittest.TestCase):
         with self.assertRaises(bench.BenchError):
             bench.read_table("run_id,class\nr1,FREEZE\n", bench.FAULT_COLUMNS)
 
+    def test_header_only_rejected(self):
+        with self.assertRaises(bench.BenchError):
+            bench.read_table(",".join(bench.CHECK_COLUMNS) + "\n", bench.CHECK_COLUMNS)
+
     def test_empty_rejected(self):
         with self.assertRaises(bench.BenchError):
             bench.read_table("# only a comment\n", bench.CHECK_COLUMNS)
@@ -136,7 +153,9 @@ class Schema(unittest.TestCase):
 class Clean(unittest.TestCase):
     def test_false_positive_is_any_non_pass_verdict(self):
         t = bench.load([str(FIX / "synthetic-bench-clean.csv")], bench.CHECK_COLUMNS)
-        res = bench.analyze_clean(t.rows)
+        self.assertEqual(t.meta["accel"], "tcg")
+        res = bench.analyze_clean(t.rows, t.meta["accel"])
+        self.assertIn("QEMU timing (accel=tcg)", res["timing"])
         self.assertEqual(res["checks"], 4)
         self.assertEqual(res["armed_checks"], 3)
         self.assertEqual(res["false_positives"], 2)        # armed VALUE_MISMATCH + unarmed UNKNOWN
@@ -162,6 +181,18 @@ class Cli(unittest.TestCase):
         p = self.run_cli("faults", "--strict", str(FIX / "synthetic-bench-faults.csv"))
         self.assertEqual(p.returncode, 3)  # the fixture's BLANK row has no t_inject
         self.assertIn("problem rows", p.stderr)
+
+    def test_clean_needs_accel_and_one_file(self):
+        import tempfile
+        with tempfile.TemporaryDirectory() as d:
+            no_accel = Path(d) / "c.csv"
+            no_accel.write_text("\n".join(ln for ln in (FIX / "synthetic-bench-clean.csv").read_text().splitlines()
+                                          if "accel=" not in ln) + "\n")
+            self.assertEqual(self.run_cli("clean", str(no_accel)).returncode, 2)
+            self.assertEqual(self.run_cli("clean", "--accel", "tcg", str(no_accel)).returncode, 0)
+        two = self.run_cli("clean", str(FIX / "synthetic-bench-clean.csv"), str(FIX / "synthetic-bench-clean.csv"))
+        self.assertEqual(two.returncode, 2)
+        self.assertIn("one run per report", two.stderr)
 
     def test_bad_schema_exit_2(self):
         p = self.run_cli("faults", str(FIX / "synthetic-bench-clean.csv"))
