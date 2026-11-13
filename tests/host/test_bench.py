@@ -1,0 +1,150 @@
+"""Unit tests for scripts/bench.py over SYNTHETIC fixture rows (tests/fixtures/synthetic-*.csv).
+These rows are hand-written test inputs, not measurements."""
+import json
+import subprocess
+import sys
+import unittest
+from pathlib import Path
+
+ROOT = Path(__file__).resolve().parents[2]
+sys.path.insert(0, str(ROOT / "scripts"))
+import bench  # noqa: E402
+
+FIX = ROOT / "tests" / "fixtures"
+
+
+class Percentile(unittest.TestCase):
+    def test_nearest_rank(self):
+        vals = list(range(1, 101))  # 1..100
+        self.assertEqual(bench.percentile(vals, 50), 50)
+        self.assertEqual(bench.percentile(vals, 95), 95)
+        self.assertEqual(bench.percentile(vals, 100), 100)
+
+    def test_small_n_rounds_up(self):
+        self.assertEqual(bench.percentile([10, 20, 30], 95), 30)
+        self.assertEqual(bench.percentile([10, 20, 30], 50), 20)
+        self.assertEqual(bench.percentile([7], 95), 7)
+
+    def test_empty_and_bad_p(self):
+        self.assertIsNone(bench.percentile([], 95))
+        with self.assertRaises(ValueError):
+            bench.percentile([1], 0)
+
+
+class Faults(unittest.TestCase):
+    def setUp(self):
+        t = bench.load([str(FIX / "synthetic-bench-faults.csv")], bench.FAULT_COLUMNS)
+        self.synthetic = t.synthetic
+        self.res = bench.analyze_faults(t.rows)
+
+    def test_marked_synthetic(self):
+        self.assertTrue(self.synthetic)
+
+    def test_detect_is_from_effective_inject_time(self):
+        f = self.res["classes"]["FREEZE"]["detect_ms"]
+        self.assertEqual(f["n"], 2)
+        self.assertAlmostEqual(f["p50"], 60.0)
+        self.assertAlmostEqual(f["p95"], 80.0)
+        self.assertAlmostEqual(f["max"], 80.0)
+
+    def test_recovery_metrics(self):
+        c = self.res["classes"]["FREEZE"]
+        self.assertAlmostEqual(c["safe_layer_recovery_ms"]["p95"], 20.0)
+        self.assertAlmostEqual(c["full_recovery_ms"]["p50"], 419.0)  # nearest rank of [419, 439]
+        self.assertAlmostEqual(c["full_recovery_ms"]["max"], 439.0)
+
+    def test_stale_diverge_and_miss(self):
+        c = self.res["classes"]["STALE"]
+        self.assertEqual(c["misses"], 1)
+        self.assertAlmostEqual(c["detect_ms"]["p50"], 150.0)
+        self.assertAlmostEqual(c["detect_from_diverge_ms"]["p50"], 100.0)
+
+    def test_missing_inject_stamp_is_failed_not_estimated(self):
+        c = self.res["classes"]["BLANK"]
+        self.assertEqual(c["failed"], 1)
+        self.assertEqual(c["detect_ms"]["n"], 0)
+
+    def test_starve_has_no_restart_but_counts(self):
+        self.assertEqual(self.res["classes"]["STARVE"]["detect_ms"]["n"], 1)
+
+    def test_qemu_label(self):
+        self.assertIn("QEMU timing (accel=tcg), not hardware timing", self.res["timing"])
+
+    def test_render_has_banner(self):
+        text = bench.render_faults(self.res, True)
+        self.assertTrue(text.startswith("**SYNTHETIC"))
+        self.assertIn("| FREEZE | 2 | 0 | 0 | 0 | 60.0 / 80.0 / 80.0 |", text)
+
+
+def _row(**kw):
+    base = dict.fromkeys(bench.FAULT_COLUMNS, "")
+    base.update(accel="tcg", tier="G1-FULL", smp="8", runmask="0x1", period_ms="20", **{"class": "FREEZE"})
+    base.update(kw)
+    return base
+
+
+class FaultRules(unittest.TestCase):
+    def test_late_detection_is_a_miss(self):
+        r = _row(t_inject_ns="0", t_detect_ns="2500000000", missed="1")
+        c = bench.analyze_faults([r])["classes"]["FREEZE"]
+        self.assertEqual((c["misses"], c["inconsistent"]), (1, 0))
+
+    def test_missed_column_must_agree(self):
+        r = _row(t_inject_ns="0", t_detect_ns="50000000", missed="1")
+        c = bench.analyze_faults([r])["classes"]["FREEZE"]
+        self.assertEqual(c["inconsistent"], 1)
+        self.assertEqual(c["detect_ms"]["n"], 0)
+
+    def test_mixed_configuration_refused(self):
+        rows = [_row(t_inject_ns="0", t_detect_ns="1", missed="0"),
+                _row(t_inject_ns="0", t_detect_ns="1", missed="0", period_ms="10")]
+        with self.assertRaises(bench.BenchError):
+            bench.analyze_faults(rows)
+        self.assertEqual(len(bench.analyze_faults(rows, allow_mixed=True)["configs"]), 2)
+
+    def test_hardware_accel_not_labelled_qemu(self):
+        r = _row(accel="pi5", t_inject_ns="0", t_detect_ns="1", missed="0")
+        self.assertEqual(bench.analyze_faults([r])["timing"], "accel=pi5")
+
+
+class Schema(unittest.TestCase):
+    def test_missing_column_rejected(self):
+        with self.assertRaises(bench.BenchError):
+            bench.read_table("run_id,class\nr1,FREEZE\n", bench.FAULT_COLUMNS)
+
+    def test_empty_rejected(self):
+        with self.assertRaises(bench.BenchError):
+            bench.read_table("# only a comment\n", bench.CHECK_COLUMNS)
+
+
+class Clean(unittest.TestCase):
+    def test_false_positive_counts_armed_non_pass_only(self):
+        t = bench.load([str(FIX / "synthetic-bench-clean.csv")], bench.CHECK_COLUMNS)
+        res = bench.analyze_clean(t.rows)
+        self.assertEqual(res["checks"], 4)
+        self.assertEqual(res["armed_checks"], 3)
+        self.assertEqual(res["false_positives"], 1)
+        self.assertAlmostEqual(res["duration_s"], 0.06)
+        self.assertEqual(res["readback_check_us"]["p95"], 6000.0)
+
+
+class Cli(unittest.TestCase):
+    def run_cli(self, *args):
+        return subprocess.run([sys.executable, str(ROOT / "scripts" / "bench.py"), *args],
+                              capture_output=True, text=True)
+
+    def test_json_output(self):
+        p = self.run_cli("faults", "--json", str(FIX / "synthetic-bench-faults.csv"))
+        self.assertEqual(p.returncode, 0, p.stderr)
+        data = json.loads(p.stdout)
+        self.assertTrue(data["synthetic"])
+        self.assertEqual(data["classes"]["STALE"]["misses"], 1)
+
+    def test_bad_schema_exit_2(self):
+        p = self.run_cli("faults", str(FIX / "synthetic-bench-clean.csv"))
+        self.assertEqual(p.returncode, 2)
+        self.assertIn("missing columns", p.stderr)
+
+
+if __name__ == "__main__":
+    unittest.main()

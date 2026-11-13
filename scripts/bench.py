@@ -1,0 +1,270 @@
+#!/usr/bin/env python3
+"""Host-side analysis of Telltale bench CSVs (stdlib only).
+
+The measurement itself happens on the QNX target (`ttbench`); this script only
+reads the raw rows it committed to evidence/ and reports p50/p95/max.
+
+  bench.py faults evidence/bench-faults-<date>.csv   # B1 / B4 / B6 / B7 rows
+  bench.py clean  evidence/bench-clean-<date>.csv    # B3 false-positive run + B5 read-back cost
+
+Rules this script enforces (so a table cannot hide a bad row):
+  * a fault row with no t_inject is FAILED, never estimated;
+  * a fault row is a MISS when t_detect is empty or later than 2 s after t_inject,
+    and must agree with the row's own `missed` column (else it is INCONSISTENT);
+  * all rows of one report must share one configuration
+    (accel, tier, smp, runmask, period_ms) unless --allow-mixed is given;
+  * percentiles are nearest-rank (p95 of N values = the ceil(0.95*N)-th smallest);
+  * QEMU accelerators (tcg, hvf) are labelled "QEMU timing, not hardware timing".
+Lines starting with '#' are comments; a file whose comments contain
+"SYNTHETIC" is reported with a SYNTHETIC banner (test fixtures only).
+"""
+from __future__ import annotations
+
+import argparse
+import csv
+import io
+import json
+import math
+import sys
+from dataclasses import dataclass, field
+from pathlib import Path
+
+FAULT_COLUMNS = (
+    "run_id,git_sha,accel,tier,smp,runmask,period_ms,seed,class,t_command_ns,t_inject_ns,"
+    "t_diverge_ns,t_detect_ns,reason,cause,t_safe_visible_ns,t_restart_ns,t_true_ns,shown,"
+    "truth,missed,hog_prio,exposure_ms,tick_stall_ms"
+).split(",")
+
+CHECK_COLUMNS = (
+    "t_cap_start_ns,t_cap_end_ns,check_us,state,armed,verdict,decoded,truth_min,truth_max,tick,marker"
+).split(",")
+
+CONFIG_KEYS = ("accel", "tier", "smp", "runmask", "period_ms")
+QEMU_ACCELS = {"tcg", "hvf"}
+MISS_NS = 2_000_000_000  # "missed" = no detection within 2 s
+SYNTHETIC_MARK = "SYNTHETIC"
+
+
+class BenchError(ValueError):
+    """Input that must not be summarised (wrong schema, mixed configuration)."""
+
+
+def percentile(values: list[float], p: float) -> float | None:
+    """Nearest-rank percentile; None for an empty list."""
+    if not values:
+        return None
+    if not 0 < p <= 100:
+        raise ValueError("p must be in (0, 100]")
+    ordered = sorted(values)
+    rank = math.ceil(p / 100.0 * len(ordered))
+    return ordered[rank - 1]
+
+
+def summarize(values: list[float]) -> dict:
+    return {
+        "n": len(values),
+        "p50": percentile(values, 50),
+        "p95": percentile(values, 95),
+        "max": max(values) if values else None,
+    }
+
+
+@dataclass
+class Table:
+    rows: list[dict]
+    synthetic: bool
+    source: str
+
+
+def read_table(text: str, columns: list[str], source: str = "<input>") -> Table:
+    lines = text.splitlines()
+    comments = [ln for ln in lines if ln.lstrip().startswith("#")]
+    body = [ln for ln in lines if ln.strip() and not ln.lstrip().startswith("#")]
+    if not body:
+        raise BenchError(f"{source}: no header row")
+    reader = csv.DictReader(io.StringIO("\n".join(body)))
+    header = reader.fieldnames or []
+    missing = [c for c in columns if c not in header]
+    if missing:
+        raise BenchError(f"{source}: missing columns {missing}")
+    rows = list(reader)
+    synthetic = any(SYNTHETIC_MARK in c for c in comments)
+    return Table(rows=rows, synthetic=synthetic, source=source)
+
+
+def load(paths: list[str], columns: list[str]) -> Table:
+    rows: list[dict] = []
+    synthetic = False
+    for p in paths:
+        t = read_table(Path(p).read_text(encoding="utf-8"), columns, source=p)
+        rows.extend(t.rows)
+        synthetic = synthetic or t.synthetic
+    return Table(rows=rows, synthetic=synthetic, source=",".join(paths))
+
+
+def _ns(row: dict, key: str) -> int | None:
+    v = (row.get(key) or "").strip()
+    if v == "":
+        return None
+    return int(v)
+
+
+def configs(rows: list[dict]) -> list[dict]:
+    seen: list[dict] = []
+    for r in rows:
+        c = {k: (r.get(k) or "").strip() for k in CONFIG_KEYS}
+        if c not in seen:
+            seen.append(c)
+    return seen
+
+
+def check_single_config(rows: list[dict], allow_mixed: bool) -> list[dict]:
+    cfgs = configs(rows)
+    if len(cfgs) > 1 and not allow_mixed:
+        raise BenchError(f"rows span {len(cfgs)} configurations {cfgs}; one report = one configuration")
+    return cfgs
+
+
+def timing_label(cfgs: list[dict]) -> str:
+    accels = sorted({c["accel"] for c in cfgs})
+    if accels and all(a in QEMU_ACCELS for a in accels):
+        return f"QEMU timing (accel={'/'.join(accels)}), not hardware timing"
+    return f"accel={'/'.join(accels) or 'unknown'}"
+
+
+@dataclass
+class ClassStats:
+    total: int = 0
+    failed: int = 0
+    inconsistent: int = 0
+    misses: int = 0
+    detect_ms: list[float] = field(default_factory=list)
+    detect_from_diverge_ms: list[float] = field(default_factory=list)
+    safe_ms: list[float] = field(default_factory=list)
+    full_ms: list[float] = field(default_factory=list)
+
+
+def analyze_faults(rows: list[dict], allow_mixed: bool = False) -> dict:
+    cfgs = check_single_config(rows, allow_mixed)
+    per: dict[str, ClassStats] = {}
+    for r in rows:
+        cls = (r.get("class") or "").strip() or "?"
+        s = per.setdefault(cls, ClassStats())
+        s.total += 1
+        t_inject = _ns(r, "t_inject_ns")
+        if t_inject is None:
+            s.failed += 1  # missing effective-time stamp: the run failed, never estimated
+            continue
+        t_detect = _ns(r, "t_detect_ns")
+        missed = t_detect is None or t_detect - t_inject > MISS_NS
+        declared = (r.get("missed") or "").strip()
+        if declared not in ("0", "1") or (declared == "1") != missed:
+            s.inconsistent += 1
+            continue
+        if missed:
+            s.misses += 1
+            continue
+        s.detect_ms.append((t_detect - t_inject) / 1e6)
+        t_div = _ns(r, "t_diverge_ns")
+        if t_div is not None:
+            s.detect_from_diverge_ms.append((t_detect - t_div) / 1e6)
+        t_safe = _ns(r, "t_safe_visible_ns")
+        if t_safe is not None:
+            s.safe_ms.append((t_safe - t_detect) / 1e6)
+        t_true = _ns(r, "t_true_ns")
+        if t_true is not None:
+            s.full_ms.append((t_true - t_detect) / 1e6)
+    classes = {
+        cls: {
+            "total": s.total,
+            "failed": s.failed,
+            "inconsistent": s.inconsistent,
+            "misses": s.misses,
+            "detect_ms": summarize(s.detect_ms),
+            "detect_from_diverge_ms": summarize(s.detect_from_diverge_ms),
+            "safe_layer_recovery_ms": summarize(s.safe_ms),
+            "full_recovery_ms": summarize(s.full_ms),
+        }
+        for cls, s in sorted(per.items())
+    }
+    return {"kind": "faults", "configs": cfgs, "timing": timing_label(cfgs), "classes": classes}
+
+
+def analyze_clean(rows: list[dict]) -> dict:
+    """B3: any non-PASS verdict while armed is a false positive. B5: check_us."""
+    armed = [r for r in rows if (r.get("armed") or "").strip() == "1"]
+    fps = [r for r in armed if (r.get("verdict") or "").strip() != "PASS"]
+    check_us = [float(r["check_us"]) for r in rows if (r.get("check_us") or "").strip()]
+    starts = [_ns(r, "t_cap_start_ns") for r in rows]
+    starts = [s for s in starts if s is not None]
+    duration_s = (max(starts) - min(starts)) / 1e9 if len(starts) > 1 else 0.0
+    return {
+        "kind": "clean",
+        "checks": len(rows),
+        "armed_checks": len(armed),
+        "false_positives": len(fps),
+        "duration_s": round(duration_s, 3),
+        "readback_check_us": summarize(check_us),
+    }
+
+
+def _fmt(v: float | None) -> str:
+    return "–" if v is None else f"{v:.1f}"
+
+
+def render_faults(result: dict, synthetic: bool) -> str:
+    out = []
+    if synthetic:
+        out.append("**SYNTHETIC TEST FIXTURE — not a measurement**\n")
+    out.append(f"Timing: {result['timing']}\n")
+    out.append("| class | rows | failed | inconsistent | misses | detect p50 / p95 / max (ms) | safe-layer p50 / p95 (ms) | full p50 / p95 (ms) |")
+    out.append("|---|---|---|---|---|---|---|---|")
+    for cls, c in result["classes"].items():
+        d, sf, fu = c["detect_ms"], c["safe_layer_recovery_ms"], c["full_recovery_ms"]
+        out.append(
+            f"| {cls} | {c['total']} | {c['failed']} | {c['inconsistent']} | {c['misses']} | "
+            f"{_fmt(d['p50'])} / {_fmt(d['p95'])} / {_fmt(d['max'])} | "
+            f"{_fmt(sf['p50'])} / {_fmt(sf['p95'])} | {_fmt(fu['p50'])} / {_fmt(fu['p95'])} |"
+        )
+    return "\n".join(out) + "\n"
+
+
+def render_clean(result: dict, synthetic: bool) -> str:
+    out = []
+    if synthetic:
+        out.append("**SYNTHETIC TEST FIXTURE — not a measurement**\n")
+    rb = result["readback_check_us"]
+    out.append(
+        f"checks {result['checks']} (armed {result['armed_checks']}) over {result['duration_s']} s · "
+        f"false positives {result['false_positives']} · read-back µs p50/p95/max "
+        f"{_fmt(rb['p50'])} / {_fmt(rb['p95'])} / {_fmt(rb['max'])}"
+    )
+    return "\n".join(out) + "\n"
+
+
+def main(argv: list[str] | None = None) -> int:
+    ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
+    ap.add_argument("kind", choices=["faults", "clean"])
+    ap.add_argument("csv", nargs="+")
+    ap.add_argument("--json", action="store_true", help="print the result as JSON")
+    ap.add_argument("--allow-mixed", action="store_true", help="faults: allow rows from several configurations")
+    a = ap.parse_args(argv)
+    try:
+        if a.kind == "faults":
+            t = load(a.csv, FAULT_COLUMNS)
+            res = analyze_faults(t.rows, allow_mixed=a.allow_mixed)
+            text = render_faults(res, t.synthetic)
+        else:
+            t = load(a.csv, CHECK_COLUMNS)
+            res = analyze_clean(t.rows)
+            text = render_clean(res, t.synthetic)
+    except BenchError as e:
+        print(f"bench.py: {e}", file=sys.stderr)
+        return 2
+    res["synthetic"] = t.synthetic
+    sys.stdout.write(json.dumps(res, indent=2) + "\n" if a.json else text)
+    return 0
+
+
+if __name__ == "__main__":
+    sys.exit(main())
