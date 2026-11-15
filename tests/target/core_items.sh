@@ -73,8 +73,8 @@ chk "arm again -> armed=1 NORMAL" 'echo "$S" | grep -q "armed=1 state=NORMAL "' 
 # The renderer's truth connection died with vehicled, so it keeps drawing the held sample with a live tick: a STALE
 # renderer. The new feeder publishes a DIFFERENT speed, so the check fails unless that renderer is killed and respawned.
 RP2=$(field renderer_pid)
-V0=$(sed -n '2s/^[^,]*,\([0-9]*\).*/\1/p' trace-hero.csv)   # integer m/s of the held sample the stale renderer keeps
-if [ "${V0:-0}" -lt 5 ]; then MV=15.0; else MV=0.0; fi       # >= 18 km/h away from it
+V0=$(cat /dev/vehicle | sed -n 's/.*speed_kmh=\([0-9]*\).*/\1/p')   # integer km/h of the sample the stale renderer keeps
+if [ "${V0:-0}" -lt 18 ]; then MV=15.0; else MV=0.0; fi       # 54 km/h or 0 km/h: >= 18 km/h away from it
 { echo "t_s,speed_mps"; echo "0.0,$MV"; } > moved.csv
 slay -f -Q vehfeed vehicled > /dev/null 2>&1
 waitst TRUTH-LOST 50; S=$(st)
@@ -91,7 +91,9 @@ chk "the monitor reconnected to /dev/vehicle (truth window reset)" 'grep -q "rec
 touch stop; slay -f -Q cluster > /dev/null 2>&1
 waitst NO-DISPLAY 120; S=$(st)
 chk "renderer gone and not restarted -> state NO-DISPLAY (safe layer keeps the truth up)" 'echo "$S" | grep -q "state=NO-DISPLAY "' "$S"
-chk "renderer gone: the safe layer is read back true on glass with no renderer window" 'grep -q "SAFE verified on glass TT-BLK-" log/telltale.log' "$(grep 'SAFE verified' log/telltale.log | tail -1)"
+# (either path: the composed check usually stamps it before the window is found gone; the no-window read is the fallback
+#  when the post is not composed yet. Before 645e563 neither ran once the window was gone, so this check would have failed.)
+chk "renderer gone, no respawn: the safe layer is read back true on glass before any respawn" 'grep -q "SAFE verified on glass TT-BLK-" log/telltale.log' "$(grep 'SAFE verified' log/telltale.log | tail -1)"
 # the hidden incident card is INVISIBLE, not only under the cluster: disarmed (the safe layer is off) and no renderer
 # window, the glass at the card's rect must not be the card's fill (PAL_CARD 1a1916; debug is off, so the card was never shown)
 ./ttctl disarm > /dev/null 2>&1; sleep 0.5
@@ -150,11 +152,11 @@ n=0; while { [ "$(field faults)" -le "$F0" ] || ! st | grep -q "state=NORMAL "; 
 L=$(cat /dev/telltale | tail -1)
 chk "crash after earlier incidents -> a NEW incident, BLANK (no stale safe layer exposed), restarted, NORMAL" '[ "$(field faults)" -gt "$F0" ] && ! echo "$L" | grep -q "last=$L0 " && echo "$L" | grep -Eq "last=TT-BLK-[0-9]+ verdict=BLANK .*recovered=yes"' "$L"
 # a restarted monitor relearns the renderer (the cluster re-registers every second) and arms again; nothing else restarts
-slay -f -Q telltale > /dev/null 2>&1; sleep 0.5; T0=$(date +%s)
+slay -f -Q telltale > /dev/null 2>&1; sleep 0.5
 TT_CONF=/tmp/tt/telltale-run.conf TT_CHECKLOG=/tmp/tt/log/checks2.csv ./telltale > log/telltale2.log 2>&1 < /dev/null &
 waitfor /dev/telltale 5
-waitst NORMAL 300; S=$(st); T1=$(date +%s)
-chk "monitor restarted -> relearns the renderer, arms again (NORMAL after $((T1 - T0)) s)" 'echo "$S" | grep -q "armed=1 state=NORMAL "' "$S"
+waitst NORMAL 300; S=$(st)
+chk "monitor restarted -> relearns the renderer, arms again (NORMAL)" 'echo "$S" | grep -q "armed=1 state=NORMAL "' "$S"
 { grep -hE "TRUTH|NO_DISPLAY|NO-DISPLAY|restart timeout|DETECT|INCIDENT|->|reconnect|disarmed|GIVEUP|SIGKILL|not verified" log/core-telltale-a.txt log/core-telltale-a2.txt log/core-telltale-b.txt log/telltale.log log/telltale2.log; } > log/core-telltale.txt
 rm -f stop fault-on-start moved.csv
 echo "core: $P/$N passed"

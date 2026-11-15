@@ -55,6 +55,8 @@ for pr in vehicled:vehicle_t telltale:monitor_t cluster:renderer_t vehfeed:feede
   grep -q "$n: .*type=$t" log/$n.log 2>/dev/null && ok "$n runs as $t" || bad "$n not in $t"
 done
 # 5. under the policy the fault-on-start file hook is ignored: /dev/cluster-ctl (cluster:fault) stays the only fault door
+#    (control: core_items.sh runs without a policy and its restart-cap check shows the same root-owned 0644 file DOES blank
+#    the renderer, which reads it as uid 1000; so a pass here is the gate, not an unreadable file)
 R0=$(grep -c respawn log/super.log 2>/dev/null); C0=$(grep -c "fault-on-start blank" log/cluster.log 2>/dev/null)
 echo blank > fault-on-start; slay -f -Q cluster > /dev/null 2>&1; sleep 4
 R1=$(grep -c respawn log/super.log 2>/dev/null); C1=$(grep -c "fault-on-start blank" log/cluster.log 2>/dev/null)
