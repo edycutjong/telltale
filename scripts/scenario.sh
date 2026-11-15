@@ -1,16 +1,28 @@
 #!/usr/bin/env bash
 # One recorded fault run on the QNX target (QEMU): start the stack on the hero drive, fire one fault at a
 # trace time, let detection + recovery play out, collect the raw logs into evidence/runs/<run-id>-<class>/.
-#   scripts/scenario.sh <stale|freeze|blank|misdraw|crash|none> [at_trace_s] [settle_s]
-# Env: TT_POLICY=1 runs every process in its secpol type; TT_HOLD (default 8) steady seconds before the drive.
+#   scripts/scenario.sh <stale|freeze|blank|misdraw|crash|starve|none> [at_trace_s] [settle_s]
+# Env: TT_POLICY=1 runs every process in its secpol type; TT_HOLD (default 8) steady seconds before the drive;
+#      TT_CPU=N pins the stack to CPU N (Screen must already be pinned there: scripts/guest_screen.sh '' N);
+#      TT_SCOPE=renderer pins only the cluster (+ the hog) to TT_CPU: "STARVE (renderer CPU only)";
+#      starve: TT_HOG_MS (default 3000), TT_HOG_PRIO (default 40) -- hog on TT_CPU (default 3), no bug planted;
+#      pidin snapshots of Screen + monitor threads during the hog go to g5-pidin.txt (gate G5).
 set -euo pipefail
 cd "$(dirname "$0")/.."
 CLS=${1:?class}; AT=${2:-12.221}; SETTLE=${3:-12}
 RID="${TT_RUN_ID:-$(date -u +%Y%m%dT%H%M%SZ)}"
 EV="evidence/runs/$RID-$CLS"; mkdir -p "$EV"
 G=scripts/guest.sh
-$G sudo "sh /tmp/tt/tt_up.sh trace-hero.csv ${TT_HOLD:-8} ${TT_POLICY:-0}" > "$EV/up.txt" 2>&1
-if [ "$CLS" != none ]; then
+[ "$CLS" = starve ] && TT_CPU=${TT_CPU:-3}
+$G sudo "sh /tmp/tt/tt_up.sh trace-hero.csv ${TT_HOLD:-8} ${TT_POLICY:-0} ${TT_CPU:-} ${TT_SCOPE:-all}" > "$EV/up.txt" 2>&1
+HP=${TT_HOG_PRIO:-40}
+if [ "$CLS" = starve ]; then
+  HT=; [ "${TT_POLICY:-0}" = 1 ] && HT="env TT_TYPE=hog_t"
+  $G sudo "cd /tmp/tt; ($HT ./hog ${TT_HOG_MS:-3000} $HP $TT_CPU --at $AT > log/hog.log 2>&1 &)
+    while ! grep -q t_hog_start log/hog.log 2>/dev/null; do sleep 0.05; done; sleep 0.3
+    for i in 1 2 3; do echo \"--- snapshot \$i\"; pidin -F '%a %b %N %p %J %B' | grep -E 'screen|telltale|cluster|hog' | grep -v grep; sleep 0.4; done" > "$EV/g5-pidin.txt" 2>&1
+  $G get /tmp/tt/log/hog.log "$EV/" 2>/dev/null || true
+elif [ "$CLS" != none ]; then
   $G sudo "cd /tmp/tt; ./ttinject $CLS --at $AT --run $(date +%s)" > "$EV/inject.txt" 2>&1
 fi
 sleep "$SETTLE"
@@ -19,5 +31,5 @@ $G sudo 'pidin -F "%a %b %N %p %J %B" | grep -E "vehicled|vehfeed|telltale|clust
 for f in telltale cluster vehicled vehfeed super; do $G get "/tmp/tt/log/$f.log" "$EV/" 2>/dev/null || true; done
 $G get /tmp/tt/log/checks.csv "$EV/" 2>/dev/null || true
 $G get '/tmp/tt/ev/*.csv' "$EV/" 2>/dev/null || true
-echo "run $RID class=$CLS at=$AT accel=QEMU(TCG) policy=${TT_POLICY:-0}" > "$EV/RUN.txt"
-cat "$EV/inject.txt" 2>/dev/null; grep -E 'DETECT|cause|SIGKILL|INCIDENT|->|gone' "$EV/telltale.log" || true
+echo "run $RID class=$CLS at=$AT accel=QEMU(TCG) policy=${TT_POLICY:-0} cpu=${TT_CPU:-any} scope=${TT_SCOPE:-all}$([ "$CLS" = starve ] && echo " hog_prio=$HP hog_ms=${TT_HOG_MS:-3000}")" > "$EV/RUN.txt"
+cat "$EV/inject.txt" 2>/dev/null; grep -E 'DETECT|cause|SIGKILL|INCIDENT|->|gone|safe' "$EV/telltale.log" || true

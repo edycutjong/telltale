@@ -1,0 +1,19 @@
+telltale: conf period_ms=20
+telltale: conf W_ms=100
+telltale: conf tick_stall_ms=100
+telltale: conf truth_lost_ms=200
+telltale: conf restart_timeout_ms=4000
+telltale: conf mismatch_n=3
+telltale: conf truth_ok_n=5
+telltale: pid=5746719 uid=0 type=untyped prio=60
+telltale: period_ms=20 W_ms=100 tick_stall_ms=100 h_max=615 mismatch_n=3 unknown_kill_ms=500 restart_timeout_ms=4000 policy=none (uid/pid checks)
+telltale: display 1280x768, tier G1-FULL (screen_read_display, display-manager context)
+telltale: renderer registered pid=5771298 draw_tid=3 window=tt-cluster-5771298
+telltale: window tt-cluster-5771298 found at 0,24
+telltale: ARMED renderer pid=5771298 (window tt-cluster-5771298)
+telltale: WAIT -> NORMAL
+telltale: DETECT TT-FRZ-0001 TICK_STALL shown=48 truth=47 caught_ms=19.5
+telltale: NORMAL -> SAFE-HOLD
+telltale: cause starved (draw thread states 2,2,2)
+telltale: INCIDENT TT-FRZ-0001,TICK_STALL,starved,48,47,140877090964,140896554588,19.5,140952179526,0,0,143827912539,0,0.0,5771298,0
+telltale: SAFE-HOLD -> NORMAL

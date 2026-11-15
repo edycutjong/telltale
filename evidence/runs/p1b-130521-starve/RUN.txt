@@ -1,0 +1,1 @@
+run p1b-130521 class=starve at=12.221 accel=QEMU(TCG) policy=0 cpu=3 hog_prio=40 hog_ms=3000
