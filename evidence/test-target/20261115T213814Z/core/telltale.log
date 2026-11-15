@@ -1,0 +1,69 @@
+telltale: conf period_ms=20
+telltale: conf W_ms=100
+telltale: conf tick_stall_ms=151
+telltale: conf truth_lost_ms=200
+telltale: conf restart_timeout_ms=4000
+telltale: conf mismatch_n=3
+telltale: conf truth_ok_n=5
+telltale: pid=84881432 uid=0 type=untyped prio=60
+telltale: period_ms=20 W_ms=100 tick_stall_ms=151 h_max=615 mismatch_n=3 unknown_kill_ms=755 restart_timeout_ms=4000 policy=none (uid/pid checks) slog2=telltale/incidents
+telltale: display 1280x768, tier G1-FULL (screen_read_display, display-manager context)
+telltale: BANNER x=371 w=538 mode=driver text="DISPLAY FAULT · SHOWING TRUE SPEED"
+telltale: renderer registered pid=84906020 draw_tid=3 window=tt-cluster-84906020
+telltale: window tt-cluster-84906020 found at 0,24
+telltale: BANNER x=400 w=479 mode=driver text="DISPLAY FAULT · SPEED DATA LOST"
+telltale: NO_TRUTH (no fresh vehicle sample after arm_grace_ms)
+telltale: WAIT -> TRUTH-LOST
+telltale: TRUTH-LOST -> NO-DISPLAY
+telltale: ARMED renderer pid=84906020 (window tt-cluster-84906020)
+telltale: NO-DISPLAY -> NORMAL
+telltale: DETECT TT-BLK-0001 BLANK shown=-1 truth=52 lamps_shown=0x00 lamps_truth=0x10 caught_ms=20.3
+telltale: BANNER x=371 w=538 mode=driver text="DISPLAY FAULT · SHOWING TRUE SPEED"
+telltale: NORMAL -> SAFE-HOLD
+telltale: screen_read_window: Invalid argument
+telltale: renderer pid 84906020 is gone (crash)
+telltale: renderer registered pid=85221412 draw_tid=3 window=tt-cluster-85221412
+telltale: window tt-cluster-85221412 found at 0,24
+telltale: SAFE verified on glass TT-BLK-0001 (203.2 ms after detect)
+telltale: restarted renderer pid 85221412 not verified in 4000 ms -> SAFE-HOLD
+telltale: RESTARTING -> SAFE-HOLD
+telltale: cause screen-blocked (draw thread states 6,6,6)
+telltale: SIGKILL renderer pid 85221412 (screen-blocked)
+telltale: SAFE-HOLD -> RESTARTING
+telltale: renderer registered pid=86282269 draw_tid=3 window=tt-cluster-86282269
+telltale: window tt-cluster-86282269 found at 0,24
+telltale: restarted renderer pid 86282269 not verified in 4000 ms -> SAFE-HOLD
+telltale: RESTARTING -> SAFE-HOLD
+telltale: cause screen-blocked (draw thread states 6,6,6)
+telltale: SIGKILL renderer pid 86282269 (screen-blocked)
+telltale: SAFE-HOLD -> RESTARTING
+telltale: renderer registered pid=87207965 draw_tid=3 window=tt-cluster-87207965
+telltale: window tt-cluster-87207965 found at 0,24
+telltale: restarted renderer pid 87207965 not verified in 4000 ms -> SAFE-HOLD
+telltale: RESTARTING -> SAFE-HOLD
+telltale: cause screen-blocked (draw thread states 6,6,6)
+telltale: SIGKILL renderer pid 87207965 (screen-blocked)
+telltale: SAFE-HOLD -> RESTARTING
+telltale: renderer registered pid=88178717 draw_tid=3 window=tt-cluster-88178717
+telltale: window tt-cluster-88178717 found at 0,24
+telltale: restarted renderer pid 88178717 not verified in 4000 ms -> SAFE-HOLD
+telltale: RESTARTING -> SAFE-HOLD
+telltale: cause screen-blocked (draw thread states 6,6,6)
+telltale: INCIDENT TT-BLK-0001,BLANK,TT-GIVEUP,-1,52,1956546942025,1956567264444,20.3,1956770484630,1969365258836,1956763830980,0,3,0.0,84906020,85221412,0x00,0x10,1956770484630
+telltale: TT-GIVEUP
+telltale: SAFE-HOLD -> GIVEUP
+telltale: SIGKILL renderer pid 88178717 (TT-GIVEUP)
+telltale: SAFE-HOLD -> RESTARTING
+telltale: renderer registered pid=89403421 draw_tid=3 window=tt-cluster-89403421
+telltale: window tt-cluster-89403421 found at 0,24
+telltale: INCIDENT TT-BLK-0001,BLANK,TT-GIVEUP,-1,52,1956546942025,1956567264444,20.3,1956770484630,1974165533193,1956763830980,1974381963553,4,223.5,84906020,85221412,0x00,0x10,1956770484630
+telltale: RESTARTING -> NORMAL
+telltale: DETECT TT-BLK-0002 BLANK shown=-1 truth=52 lamps_shown=0x00 lamps_truth=0x10 caught_ms=21.5
+telltale: NORMAL -> SAFE-HOLD
+telltale: screen_read_window: Invalid argument
+telltale: renderer pid 89403421 is gone (crash)
+telltale: renderer registered pid=89694244 draw_tid=3 window=tt-cluster-89694244
+telltale: window tt-cluster-89694244 found at 0,24
+telltale: SAFE verified on glass TT-BLK-0002 (202.2 ms after detect)
+telltale: INCIDENT TT-BLK-0002,BLANK,crash,-1,52,1974778234705,1974799769701,21.5,1975001995594,0,1974996576550,1975021219585,0,223.8,89403421,89694244,0x00,0x10,1975001995594
+telltale: RESTARTING -> NORMAL

@@ -1,0 +1,14 @@
+   16386   1 slm                 30r RECEIVE        2                           
+   16386   2 slm                 10r DEAD                                       
+   16386   3 slm                 30r CONDVAR        (0x30c6daef90)              
+81199121   1 vehicled            10f RECEIVE        1                           
+81215512   1 telltale            60f RECEIVE        2                           
+81215512   2 telltale            15f RECEIVE        1                           
+81215512   3 telltale            61f NANOSLEEP                                  
+81240091   1 slm                 30r RECEIVE        1                           
+81240091   2 slm                 30r CONDVAR        (0x1170079f90)              
+81256476   1 vehfeed             45f NANOSLEEP                                  
+81387549   1 cluster             15r RECEIVE        1                           
+81387549   2 cluster             10r RECEIVE        2                           
+81387549   3 cluster             20r RUNNING                                    
+81387549   4 cluster             15r NANOSLEEP                                  

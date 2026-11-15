@@ -1,0 +1,27 @@
+telltale: conf period_ms=20
+telltale: conf W_ms=100
+telltale: conf tick_stall_ms=151
+telltale: conf truth_lost_ms=200
+telltale: conf restart_timeout_ms=4000
+telltale: conf mismatch_n=3
+telltale: conf truth_ok_n=5
+telltale: pid=90472472 uid=0 type=monitor_t prio=60
+telltale: period_ms=20 W_ms=100 tick_stall_ms=151 h_max=615 mismatch_n=3 unknown_kill_ms=755 restart_timeout_ms=4000 policy=secpol slog2=telltale/incidents
+telltale: display 1280x768, tier G1-FULL (screen_read_display, display-manager context)
+telltale: BANNER x=371 w=538 mode=driver text="DISPLAY FAULT · SHOWING TRUE SPEED"
+telltale: renderer registered pid=90497059 draw_tid=3 window=tt-cluster-90497059
+telltale: window tt-cluster-90497059 found at 0,24
+telltale: ARMED renderer pid=90497059 (window tt-cluster-90497059)
+telltale: WAIT -> NORMAL
+telltale: DETECT TT-VAL-0001 VALUE_MISMATCH shown=48 truth=47 lamps_shown=0x01 lamps_truth=0x00 caught_ms=20.5
+telltale: NORMAL -> SAFE-HOLD
+telltale: SAFE verified on glass TT-VAL-0001 (27.5 ms after detect)
+telltale: cause hung (draw thread states 13,13,13)
+telltale: SIGKILL renderer pid 90497059 (hung)
+telltale: SAFE-HOLD -> RESTARTING
+telltale: window tt-cluster-90497059 found at 0,24
+telltale: screen_read_window: No such file or directory
+telltale: renderer registered pid=90660893 draw_tid=3 window=tt-cluster-90660893
+telltale: window tt-cluster-90660893 found at 0,24
+telltale: INCIDENT TT-VAL-0001,VALUE_MISMATCH,hung,48,47,2002857934315,2002878445980,20.5,2002905979774,2002922168819,2003175326925,2003201955542,1,48.0,90497059,90660893,0x01,0x00,2002905979774
+telltale: RESTARTING -> NORMAL

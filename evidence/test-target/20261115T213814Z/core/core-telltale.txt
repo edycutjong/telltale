@@ -1,0 +1,32 @@
+telltale: NO_TRUTH (no fresh vehicle sample after arm_grace_ms)
+telltale: WAIT -> TRUTH-LOST
+telltale: TRUTH-LOST -> NO-DISPLAY
+telltale: NO-DISPLAY -> NORMAL
+telltale: DETECT TT-BLK-0001 BLANK shown=-1 truth=52 lamps_shown=0x00 lamps_truth=0x10 caught_ms=20.3
+telltale: NORMAL -> SAFE-HOLD
+telltale: restarted renderer pid 85221412 not verified in 4000 ms -> SAFE-HOLD
+telltale: RESTARTING -> SAFE-HOLD
+telltale: SIGKILL renderer pid 85221412 (screen-blocked)
+telltale: SAFE-HOLD -> RESTARTING
+telltale: restarted renderer pid 86282269 not verified in 4000 ms -> SAFE-HOLD
+telltale: RESTARTING -> SAFE-HOLD
+telltale: SIGKILL renderer pid 86282269 (screen-blocked)
+telltale: SAFE-HOLD -> RESTARTING
+telltale: restarted renderer pid 87207965 not verified in 4000 ms -> SAFE-HOLD
+telltale: RESTARTING -> SAFE-HOLD
+telltale: SIGKILL renderer pid 87207965 (screen-blocked)
+telltale: SAFE-HOLD -> RESTARTING
+telltale: restarted renderer pid 88178717 not verified in 4000 ms -> SAFE-HOLD
+telltale: RESTARTING -> SAFE-HOLD
+telltale: INCIDENT TT-BLK-0001,BLANK,TT-GIVEUP,-1,52,1956546942025,1956567264444,20.3,1956770484630,1969365258836,1956763830980,0,3,0.0,84906020,85221412,0x00,0x10,1956770484630
+telltale: TT-GIVEUP
+telltale: SAFE-HOLD -> GIVEUP
+telltale: SIGKILL renderer pid 88178717 (TT-GIVEUP)
+telltale: SAFE-HOLD -> RESTARTING
+telltale: INCIDENT TT-BLK-0001,BLANK,TT-GIVEUP,-1,52,1956546942025,1956567264444,20.3,1956770484630,1974165533193,1956763830980,1974381963553,4,223.5,84906020,85221412,0x00,0x10,1956770484630
+telltale: RESTARTING -> NORMAL
+telltale: DETECT TT-BLK-0002 BLANK shown=-1 truth=52 lamps_shown=0x00 lamps_truth=0x10 caught_ms=21.5
+telltale: NORMAL -> SAFE-HOLD
+telltale: INCIDENT TT-BLK-0002,BLANK,crash,-1,52,1974778234705,1974799769701,21.5,1975001995594,0,1974996576550,1975021219585,0,223.8,89403421,89694244,0x00,0x10,1975001995594
+telltale: RESTARTING -> NORMAL
+telltale: WAIT -> NORMAL
