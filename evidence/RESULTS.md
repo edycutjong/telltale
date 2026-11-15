@@ -2,6 +2,17 @@
 
 All timing is **QEMU (TCG) timing on an x86_64 QNX 8.0 guest, not hardware timing**. Each row names the git SHA of the code that ran.
 
+## Measured p95 detection vs the targets fixed before the runs
+
+Formula bound (b) = tick_stall_ms 151 + period 20 + read-back p95 6.28 + 20 = 197.3 ms; STALE target (a) = W + 100 = 200 ms.
+
+| class | n | misses | p95 detect (ms) | stretch < 100 ms | formula bound 197 ms |
+|---|---|---|---|---|---|
+| BLANK | 50 | 0 | 24.8 | met | met |
+| FREEZE | 50 | 0 | 129.8 | MISSED | met |
+| STARVE | 50 | 0 | 175.8 | MISSED | met |
+| STALE | 50 | 0 | 271.2 | n/a (W + 100 = 200: MISSED) | n/a (value-detected) |
+
 ## B1 — evidence/bench-faults.csv
 
 Timing: QEMU timing (accel=tcg), not hardware timing
@@ -35,7 +46,7 @@ Timing: QEMU timing (accel=tcg), not hardware timing
 
 problem rows: 0 (failed + inconsistent + missing recovery stamps)
 
-## B4 period sweep (FREEZE x 50 per period) — evidence/bench-period.csv
+## B4 period sweep (FREEZE x 50 per period) — evidence/bench-period.csv (10 and 50 ms); the 20 ms point is the B1 FREEZE rows, same 50 injections, not a second run
 
 ### period_ms=10
 

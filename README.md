@@ -17,19 +17,27 @@ and incident card (and the card gone after `card_ms`) are read back from frames 
 An earlier run ([`20261115T141317Z`](evidence/test-target/20261115T141317Z/summary.txt), 110 passed, 1 failed) is
 kept: it caught a race where a frozen renderer was killed as "live-wrong" before its stall was classified (fixed since).
 ## Bench results (QEMU TCG, raw rows in `evidence/`)
-Every timing here is QEMU (TCG), not hardware timing. Full tables: [`evidence/RESULTS.md`](evidence/RESULTS.md); page with plots:
-[`evidence/report.html`](evidence/report.html); reproduce: `scripts/bench_all.sh run` then `report`. Thresholds were calibrated on a clean
-run ([`evidence/calibration/`](evidence/calibration/), `tick_stall_ms` = 1.5 x the largest renderer frame gap = 151) and committed before the first fault row.
-- **200 injected faults (50 each of FREEZE, BLANK, STALE, STARVE): 0 missed.** Detection p50 / p95 (ms, `t_detect - t_inject`): BLANK 17.5 / 24.8 · FREEZE 106.8 / 129.8 · STARVE 147.6 / 175.8 · STALE 168.2 / 271.2.
-  The sub-100 ms stretch target is met by BLANK only; STALE needs the speed to move and carries the 100 ms truth window by construction, and its p95 is above the pre-registered W + 100 = 200 ms.
-  Safe layer on screen p50 22-30 ms after detection; renderer restarted and verified true p50 281-338 ms (STARVE recovers when the 3 s hog ends).
-  The 200 injections cover 21 real speed-changing windows (STALE only the 11 where the truth moves at least 2 km/h within a second of the injection; see `evidence/bench-discarded/`).
-- **Monitor off (40 runs, 30 s window): the display showed a wrong value or no valid speed for a median 29.91 s (minimum 29.09 s), and was still wrong at the end of every run.**
-- **30-minute clean replay: 91,029 checks, 0 false positives**; read-back of the three regions p50 / p95 5.7 / 6.3 ms per check (B5).
-- Also measured: 50 renderer crashes (detect p50 14 ms, 0 missed), 10 MISDRAW (renderer intends the right value, draws a different one; 10/10 caught), a FREEZE sweep at 10 / 20 / 50 ms period.
-  A renderer self-report (intended value vs truth) would have passed all 50 BLANK and 10 MISDRAW runs; the pixel read caught every one.
-- Not run: the B7 holdout variants other than MISDRAW (external SIGSTOP of the renderer or Screen, random-time and steady-cruise injections, an independent fixture renderer) and monitor CPU % per period.
+**All 200 injected faults were detected, 0 missed; the monitor-off ablation showed a wrong or missing speed for about 29.9 of 30 s; the 30-minute clean replay had 0 false positives in 91,029 checks.**
+Every timing here is QEMU (TCG), not hardware timing. Tables: [`evidence/RESULTS.md`](evidence/RESULTS.md); plots: [`evidence/report.html`](evidence/report.html);
+reproduce: `scripts/bench_all.sh run` then `report`. The thresholds were calibrated on a clean run ([`evidence/calibration/`](evidence/calibration/): 600 s, stall kill disabled for that run only,
+`tick_stall_ms` = 1.5 x the largest renderer frame gap = 151) and committed before the first fault row.
 
+| class (50 injections each) | misses | detect p50 / p95 (ms) | stretch target < 100 ms (p95) | formula bound 197 ms (p95) |
+|---|---|---|---|---|
+| BLANK | 0 | 17.5 / 24.8 | met | met |
+| FREEZE | 0 | 106.8 / 129.8 | missed | met |
+| STARVE | 0 | 147.6 / 175.8 | missed | met |
+| STALE | 0 | 168.2 / 271.2 | n/a: W + 100 = 200 ms target **missed** | n/a (value-detected) |
+
+The formula bound (set before the runs) is `tick_stall_ms` 151 + period 20 + read-back p95 6.3 + 20 ms. Detection time is dominated by the configured `tick_stall_ms`, not by monitor speed: the period sweep (FREEZE x 50 per period; the 20 ms point is the B1 FREEZE set) gives detect p50 / p95 of 100 / 122 ms at 10 ms and 107 / 157 ms at 50 ms, while the safe layer appears p50 26 ms (20 ms period) to 49 ms (50 ms period) after detection.
+STALE needs the true speed to move, so it carries the 100 ms truth window by construction. Safe layer on screen p50 22.5-30.1 ms after detection; renderer restarted and verified true p50 281-338 ms (STARVE: when the 3 s hog ends).
+
+- **Declared fault population, not general coverage.** The 200 injections are placed in the 21 speed-changing windows of one real 31-minute comma2k19 drive, always 0.2 s into the window and one fresh stack per injection (so they are not 200 independent samples). STALE is injected only in the 11 windows where the true speed moves at least 2 km/h within a second; the first attempt put a STALE at 0 km/h (unobservable by construction), was stopped, and the rule was added afterwards (it replaces nothing in the census; see [`evidence/bench-discarded/`](evidence/bench-discarded/README.md)).
+- **Monitor-off ablation** (40 runs, 10 per class, 30 s window, `ttctl disarm`: the monitor still reads but never acts): median 29.9 s of the window wrong (minimum 29.09 s), still wrong at the end of all 40. A disarmed monitor cannot recover, so this is a control showing what the glass does without it, not a detection result.
+- **30-minute clean replay (the same drive): 0 false positives**; the three-region read-back costs p50 / p95 5.7 / 6.3 ms per check.
+- Also measured: 50 renderer crashes (detect p50 14 ms, 0 missed); 10 MISDRAW (the renderer intends the right value and draws another; 10/10 caught). Computed offline from the renderer's own intent log (within 1 km/h), a self-report check (intended value vs truth) would have passed all 50 BLANK and 10 MISDRAW runs; the pixel read caught every one. No self-report baseline is scored for FREEZE, STALE or STARVE.
+- Conditions: the bench driver runs on the Mac and the stamps are written on the target; the runmask column reads `0xf` for every row although STARVE runs pin the renderer and the hog to one CPU; host load1 during the fault, ablation, crash and period runs was 1.8-35.9 and is logged per row.
+- Not run: the B7 holdout variants other than MISDRAW (external SIGSTOP of the renderer or Screen, random-time and steady-cruise injections, an independent fixture renderer) and monitor CPU % per period.
 
 ## What is here today
 | Path | What |
@@ -66,7 +74,7 @@ run ([`evidence/calibration/`](evidence/calibration/), `tick_stall_ms` = 1.5 x t
   hog's priority; the monitor's `signal` ability is not target-scoped by the policy (targeting the renderer is enforced in
   code), and reading Screen buffers is a Screen permission, not a secpol rule. There is no `screen_t`: Screen is started
   before the runtime policy push (the push is immutable until reboot).
-- `tick_stall_ms=151` is calibrated from one clean run on QEMU (TCG) (host load varied 2-70 while benching and is logged per row); `W_ms=100` and `restart_timeout_ms=4000` were kept, not tuned.
+- `tick_stall_ms=151` is calibrated from one clean run on QEMU (TCG) (the Mac's load1 was about 25-70 during that run, noted in `scripts/target/telltale.conf`); `W_ms=100` and `restart_timeout_ms=4000` were kept, not tuned.
 - Not asserted by a test yet: the restart cap (TT-GIVEUP, applied at both kill sites), the kill after an UNKNOWN-cause stall
   (counted from when the cause became UNKNOWN, so one mixed state sample in a long STARVE cannot kill), the restart when a
   live renderer's window stays unreadable during SAFE-HOLD, and a renderer that is starved first and then hangs. `DCMD_VEH_GET_SINCE`

@@ -7,3 +7,7 @@ the injection landed at 0.00 km/h on the last 1.5 km/h step into a standstill, w
 final steps. The rule "STALE is injected only where |v(t+1 s) - v(t)| >= 2 km/h at the injection instant" (11 of 21
 windows qualify) was added to `scripts/bench_run.py` (`stale_observable`, computed from the trace alone) and B1 was
 restarted from run 1 with a clean output file. The discarded rows are kept so the restart is visible, not hidden.
+
+**This replaces the pre-registered placement rule.** complexity.md section 2 fixed "|speed change| >= 1 km/h per 100 ms" (ladder: 1 -> 0.5, never
+loosened after a fault run). The window census still uses that rule (K = 21). The new rule is an additional observability filter on STALE only, and it
+was added after one fault run showed the defect; it narrows STALE to the 11 windows where the fault can be seen, it does not widen anything.
