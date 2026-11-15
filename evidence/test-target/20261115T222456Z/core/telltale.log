@@ -1,0 +1,58 @@
+telltale: conf period_ms=20
+telltale: conf W_ms=100
+telltale: conf tick_stall_ms=151
+telltale: conf truth_lost_ms=200
+telltale: conf restart_timeout_ms=4000
+telltale: conf mismatch_n=3
+telltale: conf truth_ok_n=5
+telltale: pid=80842774 uid=0 type=untyped prio=60
+telltale: period_ms=20 W_ms=100 tick_stall_ms=151 h_max=615 mismatch_n=3 unknown_kill_ms=755 restart_timeout_ms=4000 policy=none (uid/pid checks) slog2=telltale/incidents
+telltale: display 1280x768, tier G1-FULL (screen_read_display, display-manager context)
+telltale: BANNER x=371 w=538 mode=driver text="DISPLAY FAULT · SHOWING TRUE SPEED"
+telltale: renderer registered pid=80867363 draw_tid=3 window=tt-cluster-80867363
+telltale: window tt-cluster-80867363 found at 0,24
+telltale: WAIT -> NO-DISPLAY
+telltale: DETECT TT-FRZ-0001 TICK_STALL shown=-1 truth=52 lamps_shown=0x00 lamps_truth=0x10 caught_ms=9007.4
+telltale: renderer pid 80867363 not verified in NO-DISPLAY (TICK_STALL) -> SAFE-HOLD
+telltale: NO-DISPLAY -> SAFE-HOLD
+telltale: SAFE verified on glass TT-FRZ-0001 (19.8 ms after detect)
+telltale: cause screen-blocked (draw thread states 6,6,6)
+telltale: SIGKILL renderer pid 80867363 (screen-blocked)
+telltale: SAFE-HOLD -> RESTARTING
+telltale: renderer registered pid=82231331 draw_tid=3 window=tt-cluster-82231331
+telltale: window tt-cluster-82231331 found at 0,24
+telltale: restarted renderer pid 82231331 not verified in 4000 ms -> SAFE-HOLD
+telltale: RESTARTING -> SAFE-HOLD
+telltale: cause screen-blocked (draw thread states 6,6,6)
+telltale: SIGKILL renderer pid 82231331 (screen-blocked)
+telltale: SAFE-HOLD -> RESTARTING
+telltale: renderer registered pid=83177507 draw_tid=3 window=tt-cluster-83177507
+telltale: window tt-cluster-83177507 found at 0,24
+telltale: restarted renderer pid 83177507 not verified in 4000 ms -> SAFE-HOLD
+telltale: RESTARTING -> SAFE-HOLD
+telltale: cause screen-blocked (draw thread states 6,6,6)
+telltale: SIGKILL renderer pid 83177507 (screen-blocked)
+telltale: SAFE-HOLD -> RESTARTING
+telltale: renderer registered pid=84049955 draw_tid=3 window=tt-cluster-84049955
+telltale: window tt-cluster-84049955 found at 0,24
+telltale: restarted renderer pid 84049955 not verified in 4000 ms -> SAFE-HOLD
+telltale: RESTARTING -> SAFE-HOLD
+telltale: cause screen-blocked (draw thread states 6,1,6)
+telltale: INCIDENT TT-FRZ-0001,TICK_STALL,TT-GIVEUP,-1,52,2748821333467,2757828761638,9007.4,2757848574432,2766424224647,2758082990289,0,3,9027.2,80867363,84049955,0x00,0x10,2757848574432
+telltale: TT-GIVEUP
+telltale: SAFE-HOLD -> GIVEUP
+telltale: SIGKILL renderer pid 84049955 (TT-GIVEUP)
+telltale: SAFE-HOLD -> RESTARTING
+telltale: renderer registered pid=85082147 draw_tid=3 window=tt-cluster-85082147
+telltale: window tt-cluster-85082147 found at 0,24
+telltale: TT-FRZ-0001 ended after give-up (record already written)
+telltale: RESTARTING -> NORMAL
+telltale: DETECT TT-BLK-0002 BLANK shown=-1 truth=52 lamps_shown=0x00 lamps_truth=0x10 caught_ms=18.2
+telltale: NORMAL -> SAFE-HOLD
+telltale: SAFE verified on glass TT-BLK-0002 (21.3 ms after detect)
+telltale: screen_read_window: Invalid argument
+telltale: renderer pid 85082147 is gone (crash)
+telltale: renderer registered pid=85364771 draw_tid=3 window=tt-cluster-85364771
+telltale: window tt-cluster-85364771 found at 0,24
+telltale: INCIDENT TT-BLK-0002,BLANK,crash,-1,52,2771636799479,2771655000501,18.2,2771676277906,0,2771833371709,2771860058064,0,39.5,85082147,85364771,0x00,0x10,2771676277906
+telltale: RESTARTING -> NORMAL

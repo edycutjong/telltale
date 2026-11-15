@@ -1,0 +1,3 @@
+ttinject: pid=51089442 uid=0 type=untyped prio=0
+trace_s=12.235 speed_kmh=47.55
+t_command_ns=2270183184503 class=blank arg=0 run=1794781544
