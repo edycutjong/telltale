@@ -15,6 +15,9 @@ QOUT     := out/$(QNX_ARCH)
 QCC      := qcc -Vgcc_nto$(QNX_ARCH)
 QCFLAGS  := -std=gnu11 -O2 -Wall -Wextra -Werror
 SPIKES   := $(QOUT)/g1_readback $(QOUT)/g2_hello $(QOUT)/g3_secpol $(QOUT)/g4_timer $(QOUT)/g3_spike.bin
+TT_BINS  := $(QOUT)/vehicled $(QOUT)/vehfeed $(QOUT)/cluster $(QOUT)/telltale $(QOUT)/ttinject $(QOUT)/ttctl $(QOUT)/hog $(QOUT)/ttshot $(QOUT)/telltale.bin
+QCOMMON  := src/common/ttsec.c src/common/disp.c
+QHDRS    := $(wildcard src/common/*.h)
 
 .PHONY: all test-host test-host-c test-host-py lint target target-sdp spike clean
 
@@ -47,7 +50,7 @@ target:
 	@if command -v qcc >/dev/null 2>&1; then $(MAKE) target-sdp; \
 	else scripts/qcc.sh 'make target-sdp QNX_ARCH=$(QNX_ARCH)'; fi
 
-target-sdp: $(SPIKES)
+target-sdp: $(SPIKES) $(TT_BINS)
 
 $(QOUT):
 	mkdir -p $@
@@ -65,6 +68,27 @@ $(QOUT)/g4_timer: spike/g4_timer.c | $(QOUT)
 	$(QCC) $(QCFLAGS) -o $@ $<
 
 $(QOUT)/g3_spike.bin: spike/g3_spike.pol | $(QOUT)
+	secpolcompile -o $@ $<
+
+$(QOUT)/vehicled: src/vehicled/vehicled.c $(QCOMMON) $(QHDRS) | $(QOUT)
+	$(QCC) $(QCFLAGS) -o $@ src/vehicled/vehicled.c $(QCOMMON) -lsecpol
+
+$(QOUT)/vehfeed: src/vehfeed/vehfeed.c $(QCOMMON) $(QHDRS) | $(QOUT)
+	$(QCC) $(QCFLAGS) -o $@ src/vehfeed/vehfeed.c $(QCOMMON) -lsecpol -lm
+
+$(QOUT)/cluster: src/cluster/cluster.c src/common/decode.c $(QCOMMON) $(QHDRS) | $(QOUT)
+	$(QCC) $(QCFLAGS) -o $@ src/cluster/cluster.c src/common/decode.c $(QCOMMON) -lscreen -lsecpol -lm
+
+$(QOUT)/telltale: src/telltale/telltale.c src/common/decode.c src/common/truth.c $(QCOMMON) $(QHDRS) | $(QOUT)
+	$(QCC) $(QCFLAGS) -o $@ src/telltale/telltale.c src/common/decode.c src/common/truth.c $(QCOMMON) -lscreen -lsecpol -lm
+
+$(QOUT)/ttinject $(QOUT)/ttctl $(QOUT)/hog: $(QOUT)/%: src/tools/%.c $(QCOMMON) $(QHDRS) | $(QOUT)
+	$(QCC) $(QCFLAGS) -o $@ $< $(QCOMMON) -lsecpol
+
+$(QOUT)/ttshot: src/tools/ttshot.c $(QCOMMON) $(QHDRS) | $(QOUT)
+	$(QCC) $(QCFLAGS) -o $@ $< $(QCOMMON) -lscreen -lsecpol
+
+$(QOUT)/telltale.bin: secpol/telltale.pol | $(QOUT)
 	secpolcompile -o $@ $<
 
 spike: target

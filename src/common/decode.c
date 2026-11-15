@@ -1,4 +1,5 @@
 /* SPDX-License-Identifier: Apache-2.0 */
+#include <string.h>
 #include "decode.h"
 #include "glyphs.h"
 #include "palette.h"
@@ -25,11 +26,19 @@ int tt_decode_cell(const uint32_t *base, int stride_px, int h_max, int *dist)
             o[b] = v;
         }
     }
+    /* same row-padded layout as the atlas, so the distance is XOR + popcount over whole 64-bit words */
+    enum { NB = GLYPH_H * GLYPH_ROW_BYTES, NW = NB / 8 };
+    _Static_assert(NB % 8 == 0, "atlas size must be a multiple of 8 bytes");
+    uint64_t w[NW];
+    memcpy(w, bits, NB);
     int best = DEC_UNREADABLE, bestd = 1 << 30;
     for (int g = 0; g < GLYPH_N; g++) {
         int d = 0;
-        for (int i = 0; i < GLYPH_H * GLYPH_ROW_BYTES; i++)
-            d += __builtin_popcount((unsigned)(bits[i] ^ glyph_bits[g][i]));
+        const uint8_t *gb = glyph_bits[g];
+        for (int i = 0; i < NW && d < bestd; i++) {
+            uint64_t a; memcpy(&a, gb + i * 8, 8);
+            d += __builtin_popcountll(w[i] ^ a);
+        }
         if (d < bestd) { bestd = d; best = g; }
     }
     if (dist) *dist = bestd;
