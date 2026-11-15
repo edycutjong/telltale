@@ -304,7 +304,7 @@ def seconds_wrong(checks: Path, t_inj: int, window_s: float) -> tuple[float, int
         for r in csv.DictReader(fh):
             try:
                 rows.append((int(r["t_cap_start_ns"]), int(r["decoded"]), int(r["truth_min"]), int(r["truth_max"]), r["state"]))
-            except (ValueError, KeyError):
+            except (ValueError, KeyError, TypeError):
                 continue
     t_end = t_inj + int(window_s * 1e9)
     wrong_ns, n, last_wrong = 0, 0, 0
