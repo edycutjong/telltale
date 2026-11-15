@@ -1,0 +1,5 @@
+armed=0 state=NORMAL period_ms=20 W_ms=100 tick_stall_ms=151 checks=2106 faults=0 restarts=0 late=0 screen_stalls=0 renderer_pid=244080668
+
+id,verdict,cause,shown,truth,t_last_verified_ns,t_detect_ns,caught_ms,t_safe_visible_ns,t_kill_ns,t_register_ns,t_true_ns,restarts,exposure_ms,renderer_pid,new_pid,lamps_shown,lamps_truth
+
+seq=803 t_ns=7718561475328 trace_s=37.100 speed_kmh=0.00 gear=D lamps=0x00

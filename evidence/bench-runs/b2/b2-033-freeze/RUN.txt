@@ -1,0 +1,1 @@
+run b2-033 class=freeze inject=freeze heal_at=- conf_extra=tick_stall_ms=151 at=3.2 accel=QEMU(TCG) policy=0 debug=0 cpu=any scope=all sup=script

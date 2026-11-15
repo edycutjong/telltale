@@ -1,0 +1,2 @@
+ttctl: pid=238891042 uid=0 type=untyped prio=0
+ttctl disarm: ok
