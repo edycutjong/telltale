@@ -56,16 +56,20 @@ def main(d: Path) -> int:
     verdicts = {}
 
     g2 = (d / "g2.txt").read_text() if (d / "g2.txt").exists() else ""
-    verdicts["G2"] = "PASS" if "TT-G2 hello from QNX 8.0.0" in g2 else "FAIL"
+    verdicts["G2 (qcc binary runs; headless)"] = "PASS" if "TT-G2 hello from QNX 8.0.0" in g2 else "FAIL"
     out += ["## G2 — qcc-built binary runs on the target", "", "```", g2.strip(), "```", ""]
 
     res = parse_results((d / "g1.txt").read_text()) if (d / "g1.txt").exists() else []
     by = {(r.get("route"), r.get("tag")): r for r in res}
-    out += ["## G1 — Screen read-back", "", "| route | tag | uid | status | mismatching px | read ms |", "|---|---|---|---|---|---|"]
+    out += ["## G1 — Screen read-back", "",
+            "| route | tag | uid | status | mismatching px | refused with | read ms |", "|---|---|---|---|---|---|---|"]
+    errname = {"1": "EPERM", "13": "EACCES", "48": "ENOTSUP"}
     for r in res:
         ms = f"{int(r['read_ns']) / 1e6:.2f}" if "read_ns" in r else "—"
-        mm = r.get("mismatch_px", r.get("errno", r.get("reason", "")))
-        out.append(f"| {r.get('route')} | {r.get('tag')} | {r.get('uid')} | {r.get('status')} | {mm} | {ms} |")
+        mm = r.get("mismatch_px", "—")
+        ref = errname.get(r["errno"], "errno " + r["errno"]) if "errno" in r else r.get("reason", "—")
+        status = "refused" if "errno" in r else r.get("status")
+        out.append(f"| {r.get('route')} | {r.get('tag')} | {r.get('uid')} | {status} | {mm} | {ref} | {ms} |")
     plain_d = by.get(("display", "plain"), {}).get("status")
     plain_w = by.get(("window", "plain"), {}).get("status")
     cov_d = by.get(("display", "covered"), {})
@@ -103,6 +107,8 @@ def main(d: Path) -> int:
     pushed = re.search(r"policy id:(?!0\b)\w+", g3)
     ok = (pushed and re.search(r"type=monitor_t\(id \d+\) -> \S*v\.chan: ConnectAttach OK", g3)
           and re.search(r"type=monitor_t\(id \d+\) -> \S*r\.chan: ConnectAttach DENIED errno=1", g3))
+    drop_denied = re.search(r"drop to uid 1001[^\n]*\n(?:[^\n]*\n)??setuid: Operation not permitted", g3)
+    verdicts["G3 uid drop limited"] = "PASS" if drop_denied else "FAIL"
     verdicts["G3 (minimal)"] = "PASS" if ok else "FAIL"
     out += ["## G3 — secpol least privilege (minimal: types + channel connect + uid drop)", "", "```", g3.strip(), "```", ""]
 

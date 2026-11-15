@@ -21,7 +21,7 @@ log "G2: qcc-built binary runs on the target"
 $G run '/tmp/tt/g2_hello' | tee "$EV/g2.txt" | tee -a "$EV/run.log"
 
 log "Screen: software virtual display (graphics-virtual-display.conf), no window manager, no demolauncher"
-$G sudo 'ls /dev/screen >/dev/null 2>&1 || { (screen -c /usr/share/screen/graphics-virtual-display.conf >/dev/null 2>&1 &); waitfor /dev/screen/ 15; }; echo screen-ready' | tee -a "$EV/run.log"
+scripts/guest_screen.sh | tee -a "$EV/run.log"
 $G sudo 'slay -f g1_readback 2>/dev/null; true'
 
 log "G1: renderer (uid 1000) + reader (root, WM|DM context): routes 1 (display) and 2 (window)"
@@ -33,7 +33,8 @@ $G sudo 'cd /tmp/tt; ./g1_readback read 100 80 covered' 2>&1 | tee -a "$EV/g1.tx
 $G run 'slay -f -Q g1_readback >/dev/null 2>&1; true'
 log "G1: S-UID - non-root reads with an application context (same uid 1000, other uid 1001)"
 $G run 'cd /tmp/tt; (nohup ./g1_readback render 100 80 > render.log 2>&1 &); sleep 3; TT_CTX_APP=1 ./g1_readback read 100 80 uid1000-app' 2>&1 | tee -a "$EV/g1.txt"
-$G sudo 'cd /tmp/tt; chmod 777 /tmp/tt; on -u user1 env TT_CTX_APP=1 ./g1_readback read 100 80 uid1001-app' 2>&1 | tee -a "$EV/g1.txt"
+OTHER="${TT_OTHER_USER:-user1}"   # a second non-root account on the image (QSTI: user1 = uid 1001)
+$G sudo "cd /tmp/tt; chmod 1777 /tmp/tt; on -u $OTHER env TT_CTX_APP=1 ./g1_readback read 100 80 uid\$(id -u $OTHER)-app" 2>&1 | tee -a "$EV/g1.txt"
 $G run 'cd /tmp/tt; ./g1_readback read 100 80 uid1000-wm' 2>&1 | tee -a "$EV/g1.txt" || true
 
 log "G4: 5000 x 20 ms timer pulses (SCHED_FIFO 60) + 500 checks x 3 screen_read_display rects"
@@ -51,6 +52,7 @@ $G sudo 'cd /tmp/tt; slay -f g3_secpol 2>/dev/null; rm -f *.chan
   sleep 2; cat v.log r.log d.log
   echo "-- monitor_t"; ./g3_secpol as monitor_t 1000 client /tmp/tt/v.chan /tmp/tt/r.chan /tmp/tt/d.chan
   echo "-- render_t";  ./g3_secpol as render_t 1000 client /tmp/tt/v.chan /tmp/tt/r.chan
+  echo "-- monitor_t asks to drop to uid 1001 (policy grants setuid:1000 only)"; ./g3_secpol as monitor_t 1001 client /tmp/tt/v.chan
   echo "-- untyped uid 1000"; on -u qnxuser ./g3_secpol client /tmp/tt/v.chan /tmp/tt/r.chan /tmp/tt/d.chan
   slay -f g3_secpol; true' 2>&1 | tee -a "$EV/g3.txt"
 

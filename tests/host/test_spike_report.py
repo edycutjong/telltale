@@ -19,6 +19,8 @@ G3_PASS = """policy id:0
 policy id:e61229a5 (immutable)
 client uid=1000 type=monitor_t(id 1) -> /tmp/tt/v.chan: ConnectAttach OK, MsgSend rc=0 reply='ok'
 client uid=1000 type=monitor_t(id 1) -> /tmp/tt/r.chan: ConnectAttach DENIED errno=1 (Operation not permitted)
+-- monitor_t asks to drop to uid 1001 (policy grants setuid:1000 only)
+setuid: Operation not permitted
 """
 
 
@@ -69,6 +71,20 @@ class TestSpikeReport(unittest.TestCase):
             d2.mkdir()
             write_run(d2, g3=G3_PASS.replace("policy id:e61229a5 (immutable)", ""))
             self.assertEqual(sr.main(d2), 3)
+
+    def test_g3_uid_drop_must_be_refused(self):
+        with tempfile.TemporaryDirectory() as t:
+            d = Path(t)
+            write_run(d, g3=G3_PASS.replace("setuid: Operation not permitted\n", ""))
+            self.assertEqual(sr.main(d), 3)
+            self.assertIn("| G3 uid drop limited | FAIL |", (d / "SUMMARY.md").read_text())
+
+    def test_refused_rows_show_errno_name_not_pixels(self):
+        with tempfile.TemporaryDirectory() as t:
+            d = Path(t)
+            write_run(d, g1=G1_PASS + "RESULT route=display tag=uid1001-app uid=1001 status=FAIL errno=13 (Permission denied)\n")
+            sr.main(d)
+            self.assertIn("| display | uid1001-app | 1001 | refused | — | EACCES | — |", (d / "SUMMARY.md").read_text())
 
     def test_percentile_is_nearest_rank(self):
         self.assertEqual(sr.pct([1, 2, 3, 4, 5, 6, 7, 8, 9, 10], 95), 10)

@@ -16,7 +16,10 @@ SSHO=(-i "$KEY" -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null -o L
 cmd="${1:-}"; shift || true
 case "$cmd" in
   run)  exec ssh "${SSHO[@]}" -p 2222 "$GU@127.0.0.1" "$*" ;;
-  sudo) exec ssh "${SSHO[@]}" -p 2222 "$GU@127.0.0.1" "echo '$GP' | sudo -S -p '' sh -c '$*'" ;;
+  sudo) # password, then the script, go over stdin: no quoting limits, no password on any command line.
+        # The remote side reads the password line first and hands it to sudo only if sudo asks for one.
+        printf '%s\n%s\n' "$GP" "$*" | exec ssh "${SSHO[@]}" -p 2222 "$GU@127.0.0.1" \
+          'IFS= read -r P; if sudo -n true 2>/dev/null; then exec sudo sh -s; else { printf "%s\n" "$P"; cat; } | sudo -S -p "" sh -s; fi' ;;
   put)  ssh "${SSHO[@]}" -p 2222 "$GU@127.0.0.1" 'mkdir -p /tmp/tt'
         exec scp -q "${SSHO[@]}" -P 2222 "$@" "$GU@127.0.0.1:/tmp/tt/" ;;
   get)  exec scp -q "${SSHO[@]}" -P 2222 "$GU@127.0.0.1:$1" "$2" ;;

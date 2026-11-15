@@ -4,14 +4,16 @@
 # Adapted from the image's documented launch (`mkqnximage --run`, which uses
 #   -smp 8 -vga none -device virtio-vga-gl -display sdl,gl=on  + a Linux bridge + KVM).
 # Changes for a macOS host, and why:
-#   - accelerator: TCG (no KVM on macOS; HVF cannot run an x86_64 guest on Apple Silicon). ALL timing
+#   - accelerator: TCG (no KVM on macOS; HVF only accelerates same-architecture guests, and this one is
+#     x86_64 on an arm64 host). ALL timing
 #     measured on this target is labelled "QEMU (TCG)" and is not hardware timing.
 #   - display: -display none. Homebrew QEMU on macOS has no virglrenderer (no virtio-vga-gl), so Screen
 #     cannot use the image's graphics-virtio-virgl.conf. Telltale starts Screen on the image's own
-#     software "virtual display" config instead (scripts/guest_screen.sh); composition happens in Screen.
+#     software "virtual display" config instead (graphics-virtual-display.conf, started by
+#     scripts/guest_screen.sh); composition happens in Screen.
 #   - network: user-mode with host forwards (no bridge, no root): ssh -> 127.0.0.1:2222, VNC -> :5901.
-#   - disk: the QSTI ships a 47 GB raw disk; we convert it once to sparse qcow2 (~5 GB, identical bytes,
-#     checked with `qemu-img compare`).
+#   - disk: the QSTI ships a 47 GiB raw disk; this script converts it once to qcow2 (about 5 GB on disk)
+#     and runs `qemu-img compare` on the pair before booting.
 #   - serial console on a unix socket (+ log file) so scripts can drive it headless.
 #
 # Usage: scripts/run_qemu.sh [extra qemu args]       (runs in the foreground; use & or nohup)

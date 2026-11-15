@@ -1,4 +1,0 @@
-QNX qnxqemu 8.0.0 2026/06/05-16:26:03EDT x86pc x86_64
-CPU:X86_64 Release:8.0.0  FreeMem:2843MB/3071MB BootTime:Nov 15 12:02:37 UTC 2026
-Processes: 4, Threads: 4
-Processor1: 686 AMD 686 F6M6S3 999MHz FPU 

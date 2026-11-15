@@ -1,0 +1,4 @@
+ClockPeriod set: Not supported
+clock period 1000000 ns
+sched FIFO 60: ok
+SUMMARY n=200 period_ms=20 prio=60 tick_ns=1000000 abs_err_p50_us=1445.7 p95_us=5114.6 max_us=19224.6
