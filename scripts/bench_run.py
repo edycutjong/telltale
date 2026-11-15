@@ -294,11 +294,12 @@ ABL_COLUMNS = ("run_id,git_sha,accel,class,seed,stop_t_s,inject_before_stop_s,t_
                "checks_in_window,wrong_at_end,monitor_acted,host_load1").split(",")
 
 
-def seconds_wrong(checks: Path, t_inj: int, window_s: float) -> tuple[float, int, int]:
+def seconds_wrong(checks: Path, t_inj: int, window_s: float, truth=None) -> tuple[float, int, int]:
     """Seconds of the window in which the glass showed a wrong value or no valid speed, from the per-check rows
     (monitor disarmed, observe-only): a check is 'wrong' when the decoded value is not a speed (blank, unreadable)
     or lies outside the truth window [truth_min, truth_max] the monitor derived from the real trace. Each check
-    owns the time until the next check starts."""
+    owns the time until the next check starts. `truth(t_ns) -> (lo, hi)` replaces the monitor's own truth window (which
+    is -1 on TICK_STALL rows): it is derived from the replayed trace, so a frozen display is judged against the real speed."""
     rows = []
     with open(checks, newline="") as fh:
         for r in csv.DictReader(fh):
@@ -309,6 +310,8 @@ def seconds_wrong(checks: Path, t_inj: int, window_s: float) -> tuple[float, int
     t_end = t_inj + int(window_s * 1e9)
     wrong_ns, n, last_wrong = 0, 0, 0
     for (t, dec, lo, hi, st), nxt in zip(rows, rows[1:]):
+        if truth is not None:
+            lo, hi = truth(t)
         if t < t_inj or t >= t_end or lo < 0:
             continue
         n += 1
@@ -363,7 +366,18 @@ def cmd_ablation(a) -> None:
                    window_s=a.window, host_load1=l1, **{"class": cls})
         checks = run / "checks.csv"
         if t_inj and checks.exists():
-            sw, n, last = seconds_wrong(checks, t_inj, a.window)
+            m = re.search(r"trace_s=([\d.]+)", (run / "inject.txt").read_text()) if (run / "inject.txt").exists() else None
+            t_cmd = first_int(run / "inject.txt", "t_command_ns") or first_int(run / "hog.log", "t_hog_start_ns")
+            tr0 = float(m.group(1)) if m else AT_S
+            sl_rows = [(t - t0, v * 3.6) for t, v in trace if t0 <= t <= t1]
+
+            def truth_fn(t_ns, sl_rows=sl_rows, tr0=tr0, t_cmd=t_cmd):
+                ts = tr0 + (t_ns - t_cmd) / 1e9           # trace second of this check (t_command = trace second tr0)
+                win = [round(v) for t, v in sl_rows if ts - 0.1 <= t <= ts] or [round(sl_rows[-1][1])]   # parked: last row held
+                if ts > sl_rows[-1][0]:
+                    win = [round(sl_rows[-1][1])]
+                return min(win), max(win)
+            sw, n, last = seconds_wrong(checks, t_inj, a.window, truth_fn if t_cmd else None)
             row.update(t_inject_ns=t_inj, seconds_wrong=f"{sw:.3f}", checks_in_window=n, wrong_at_end=last,
                        monitor_acted=len(read_incidents(run)))
         new = not out.exists()
