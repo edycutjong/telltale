@@ -9,11 +9,13 @@ the digits and lamps, and checks them against `/dev/vehicle`. On a lie it puts a
 top, decides hung vs starved from the renderer's thread states, kills and respawns a hung or wrong renderer, verifies
 the new one, and hands the display back. 20 ms is the configured check period (`period_ms`), not a measured figure.
 Recorded runs per fault class: [`evidence/runs/`](evidence/runs/). Tests: `make test-host` = C checks (test_disp 12, test_decode 91,
-test_text 17, test_rcap 28) + 97 Python tests (8 need Pillow). `make test-target`: 155 passed, 0 failed on the QEMU (TCG) guest at
-commit 1989412 ([`evidence/test-target/20261115T213814Z/summary.txt`](evidence/test-target/20261115T213814Z/summary.txt), host
-load logged at start and end), including `tests/target/core_items.sh` 37/37 (`/dev/vehicle`, `ttctl`, `/dev/telltale`,
-TRUTH_LOST + recovery, DISARM mid-incident, a vehicled restart, NO_DISPLAY, startup without truth, the restart cap, a crash
-after earlier incidents, a monitor restart, the incident in slog2), the secpol denials 21/21, and the engineering-mode case whose banner
+test_text 17, test_rcap 28) + 97 Python tests (8 need Pillow). `make test-target`: 163 passed, 0 failed on the QEMU (TCG) guest at
+commit 80a46a0 ([`evidence/test-target/20261115T222456Z/summary.txt`](evidence/test-target/20261115T222456Z/summary.txt), host
+load logged at start and end), including `tests/target/core_items.sh` 44/44 (`/dev/vehicle`, `ttctl`, `/dev/telltale`,
+TRUTH_LOST + recovery, DISARM mid-incident, a vehicled restart that leaves a stale renderer to be killed, NO_DISPLAY with the
+safe layer read back true and no renderer window, the hidden incident card not composed, startup without truth, the restart
+cap with one record per incident, a renderer blank from boot, a crash after earlier incidents, a monitor restart, the incident
+in slog2), the secpol denials 22/22 (including the fault-on-start test hook ignored under the policy), and the engineering-mode case whose banner
 and incident card (and the card gone after `card_ms`) are read back from frames a separate process captured.
 Two failing runs are kept: [`20261115T141317Z`](evidence/test-target/20261115T141317Z/summary.txt) (110 passed, 1 failed) caught a
 race where a frozen renderer was killed as "live-wrong" before its stall was classified, and
@@ -40,8 +42,8 @@ STALE needs the true speed to move, so it carries the 100 ms truth window by con
 - **Monitor-off ablation** (40 runs, 10 per class, 30 s window, `ttctl disarm`: the monitor still reads but never acts): median 29.9 s of the window wrong (minimum 29.09 s; target: median >= 25 s, 0 runs below), still wrong at the end of all 40. A disarmed monitor cannot recover, so this is a control showing what the glass does without it, not a detection result.
 - **30-minute clean replay (the first 1800 s of the same drive, 1820.8 s measured): 0 false positives** (target <= 1) in 91,029 armed checks (121 pre-arm warm-up rows are excluded and counted in the CSV header); the three-region read-back costs p50 / p95 5.7 / 6.3 ms per check.
 - Also measured: 50 renderer crashes (detect p50 14 ms, 0 missed); 10 MISDRAW (the renderer intends the right value and draws another; 10/10 caught). Computed offline from the renderer's own intent log (within 1 km/h), a self-report check (intended value vs truth) would have passed all 50 BLANK and 10 MISDRAW runs; the pixel read caught every one. No self-report baseline is scored for FREEZE, STALE or STARVE.
-- Conditions: the bench driver runs on the Mac and the stamps are written on the target; the runmask column reads `0xf` for every row although STARVE runs pin the renderer and the hog to one CPU; host load1 during the fault, ablation, crash and period runs was 1.8-35.9 and is logged per row. Every bench run had no security policy loaded (`TT_POLICY` unset: processes untyped, uid checks in code); the policy is exercised by `make test-target` (a FREEZE run with every process in its secpol type, plus the denial checks). The rows' `exposure_ms` column reads 0.0 because the monitor version that produced them (each row's `git_sha`) did not compute it; later versions write last verified frame -> truth on glass (see the regression check below).
-- Regression check after the code review, 5 injections per class at commit b896938 ([`evidence/bench-regress-r03.csv`](evidence/bench-regress-r03.csv), [`evidence/bench-regress-r03-crash.csv`](evidence/bench-regress-r03-crash.csv)): 25/25 detected, 0 missed; detect p95 BLANK 21.9, FREEZE 118.5, STARVE 175.7, STALE 259.7, CRASH 18.8 ms; `exposure_ms` (last verified frame -> truth on glass) 35.8-50.1 ms for BLANK, FREEZE, STALE and STARVE, 203.9-251.8 ms for CRASH. Five per class checks that nothing regressed; it does not replace the 50-per-class tables above.
+- Conditions: the bench driver runs on the Mac and the stamps are written on the target; the runmask column reads `0xf` for every row although STARVE runs pin the renderer and the hog to one CPU; host load1 during the fault, ablation, crash and period runs was 1.8-35.9 and is logged per row. Every bench run had no security policy loaded (`TT_POLICY` unset: processes untyped, uid checks in code); the policy is exercised by `make test-target` (a FREEZE run with every process in its secpol type, plus the denial checks). The rows' `exposure_ms` column reads 0.0 because the monitor version that produced them (each row's `git_sha`) did not compute it; later versions write it (see the regression checks below). The B6 CRASH safe-layer column (p50 217 ms in `RESULTS.md`) is an upper bound: that monitor did not read the glass while no renderer window existed, so the stamp waited for the respawned window.
+- Regression checks after the code review, 5 injections per class each, 25/25 detected and 0 missed both times: at commit b896938 ([`evidence/bench-regress-r03.csv`](evidence/bench-regress-r03.csv), [`-crash.csv`](evidence/bench-regress-r03-crash.csv)) and at d2b7ddc, the current monitor ([`evidence/bench-regress-r04.csv`](evidence/bench-regress-r04.csv), [`-crash.csv`](evidence/bench-regress-r04-crash.csv)): detect p95 BLANK 19.6, FREEZE 125.6, STARVE 181.4, STALE 267.8, CRASH 19.7 ms; safe layer read back on glass p50 21.5-30.7 ms after detection for every class including CRASH (at b896938 the CRASH stamp waited for the respawn: 184-233 ms); `exposure_ms` (last verified frame -> truth verified on glass) 40.6-54.5 ms for BLANK, FREEZE, STALE and STARVE, 35.1-40.9 ms for CRASH. Five per class checks that nothing regressed; it does not replace the 50-per-class tables above.
 - Not run: the B7 holdout variants other than MISDRAW (external SIGSTOP of the renderer or Screen, random-time and steady-cruise injections, an independent fixture renderer) and monitor CPU % per period.
 
 ## What is here today
@@ -85,7 +87,10 @@ STALE needs the true speed to move, so it carries the 100 ms truth window by con
 - Not asserted by a test yet: the restart cap on the no-window kill path (the test covers the main kill path: a renderer
   blank on every start is killed 3 times, then TT-GIVEUP, then rearm -> NORMAL), the kill after an UNKNOWN-cause stall
   (counted from when the cause became UNKNOWN, so one mixed state sample in a long STARVE cannot kill), the restart when a
-  live renderer's window stays unreadable during SAFE-HOLD, and a renderer that is starved first and then hangs. `DCMD_VEH_GET_SINCE`
+  live renderer's window stays unreadable during SAFE-HOLD, a renderer that is starved first and then hangs or draws wrong
+  (a stall's cause expires when the tick moves again), dashes on the safe layer after a restarted `vehicled` empties the
+  truth window, and a failed `kill()` (TT-GIVEUP, cause `kill-failed`). Incident ids restart at 0001 when the monitor
+  restarts, so `incidents.csv` can repeat an id across monitor runs (`t_detect_ns` tells them apart). `DCMD_VEH_GET_SINCE`
   (the monitor's truth path) and the ionotify pulses (the renderer's data path) run in every recorded run but have no
   separate assertion.
 - **The monitor is not supervised:** nothing restarts `telltale` if it dies (the display keeps whatever the renderer draws);
