@@ -62,9 +62,12 @@ static void cfg_load(const char *path)
 {
     FILE *f = path ? fopen(path, "r") : NULL;
     if (!f) return;
-    char line[160], k[64]; int v;
+    char line[160], k[64], val[32]; int v;
     while (fgets(line, sizeof line, f)) {
-        if (line[0] == '#' || sscanf(line, " %63[^= ]=%d", k, &v) != 2) continue;
+        if (line[0] == '#' || sscanf(line, " %63[^= ]=%31s", k, val) != 2) continue;
+        char *end; long lv = strtol(val, &end, 0);   /* base 0: decimal, 0x hex */
+        if (end == val || *end) { fprintf(stderr, "telltale: conf %s=%s is not an integer, ignored\n", k, val); continue; }
+        v = (int)lv;
 #define K(n) if (!strcmp(k, #n)) cfg.n = v;
         K(period_ms) K(W_ms) K(tick_stall_ms) K(h_max) K(truth_lost_ms) K(arm_grace_ms) K(restart_timeout_ms)
         K(max_restarts) K(restart_window_s) K(mismatch_n) K(unknown_kill_ms) K(screen_stall_ms) K(truth_ok_n) K(lamp_thr) K(lamp_mask) K(card_ms)
@@ -124,7 +127,7 @@ static struct {
     struct tt_register reg; int reg_new; uint64_t reg_t;
     int rearm;
     enum state st;
-    unsigned long checks, faults, restarts_total, late, screen_stalls, capture_errors;
+    unsigned long checks, faults, restarts_total, late, screen_stalls, capture_errors, ev_dropped;
     struct incident last; int have_last;
     struct incident open_inc; int have_open;   /* the incident in progress (not yet recovered), for cat /dev/telltale */
     unsigned long long truth_gaps;
@@ -149,6 +152,7 @@ static void ev_append(const struct incident *in)
     if ((size_t)n >= sizeof row) n = (int)sizeof row - 1;   /* truncated row: never write past the buffer */
     pthread_mutex_lock(&g_mtx);
     if (g.ev_len + (size_t)n < sizeof g.ev) { memcpy(g.ev + g.ev_len, row, (size_t)n); g.ev_len += (size_t)n; }
+    else g.ev_dropped++;   /* the incidents.csv file still has the row; the node says how many it could not keep */
     g.last = *in; g.have_last = 1;
     pthread_mutex_unlock(&g_mtx);
     if (evfd >= 0 && tt_write_all(evfd, row, (size_t)n) < 0) perror("telltale: incident log");
@@ -167,6 +171,7 @@ static void open_publish(const struct incident *in)   /* NULL = no incident open
 /* ---------- resource manager: /dev/telltale and /dev/telltale-events ---------- */
 static iofunc_attr_t attr_tt, attr_ev;
 static secpol_permission_t *perm_register, *perm_control;
+static int renderer_uid = 1000;   /* without a policy only this uid (TT_RENDERER_UID) or root may register as the renderer */
 static uint32_t self_type;
 
 static int allowed(resmgr_context_t *ctp, secpol_permission_t *p, int fallback)
@@ -192,7 +197,7 @@ static int io_read(resmgr_context_t *ctp, io_read_t *msg, iofunc_ocb_t *ocb)
             "armed=%d state=%s period_ms=%d W_ms=%d tick_stall_ms=%d checks=%lu faults=%lu restarts=%lu late=%lu screen_stalls=%lu renderer_pid=%d capture_errors=%lu\n",
             g.armed, ST[g.st], cfg.period_ms, cfg.W_ms, cfg.tick_stall_ms, g.checks, g.faults, g.restarts_total, g.late,
             g.screen_stalls, g.reg.pid, g.capture_errors);
-        n += (size_t)snprintf(buf + n, sizeof buf - n, "truth_gaps=%llu\n", g.truth_gaps);
+        n += (size_t)snprintf(buf + n, sizeof buf - n, "truth_gaps=%llu events_dropped=%lu\n", g.truth_gaps, g.ev_dropped);
         if (g.have_open) {
             const struct incident *o = &g.open_inc;
             n += (size_t)snprintf(buf + n, sizeof buf - n, "open=%s verdict=%s cause=%s shown=%d truth=%d caught_ms=%.1f restarts=%d\n",
@@ -225,7 +230,8 @@ static int io_devctl(resmgr_context_t *ctp, io_devctl_t *msg, iofunc_ocb_t *ocb)
         struct tt_register r; memcpy(&r, data, sizeof r);
         r.win_id[sizeof r.win_id - 1] = 0;
         /* the caller must be the process it registers, and (with a policy) of a type granted telltale:register */
-        if (r.pid != ctp->info.pid || !allowed(ctp, perm_register, 1)) { rc = EPERM; break; }
+        int ru = tt_client_euid(ctp->info.scoid);
+        if (r.pid != ctp->info.pid || !allowed(ctp, perm_register, ru == 0 || ru == renderer_uid)) { rc = EPERM; break; }
         g.reg = r; g.reg_new = 1; g.reg_t = tt_now_ns();
         break;
     }
@@ -330,7 +336,7 @@ static void drain_events(void)
     }
 }
 
-static screen_window_t find_window(const char *want, int pos[2])
+static screen_window_t find_window(const char *want, int owner, int pos[2])
 {
     int n = 0;
     if (screen_get_context_property_iv(ctx_app, SCREEN_PROPERTY_WINDOW_COUNT, &n) != 0 || n <= 0) return NULL;
@@ -339,7 +345,9 @@ static screen_window_t find_window(const char *want, int pos[2])
         for (int i = 0; i < n && !found; i++) {
             char id[64] = "";
             screen_get_window_property_cv(w[i], SCREEN_PROPERTY_ID_STRING, sizeof id, id);
-            if (!strcmp(id, want)) { found = w[i]; screen_get_window_property_iv(found, SCREEN_PROPERTY_POSITION, pos); }
+            int op = -1;
+            if (strcmp(id, want) || screen_get_window_property_iv(w[i], SCREEN_PROPERTY_OWNER_PID, &op) != 0 || op != owner) continue;
+            found = w[i]; screen_get_window_property_iv(found, SCREEN_PROPERTY_POSITION, pos);
         }
     free(w);
     return found;
@@ -436,8 +444,11 @@ static void safe_show_(const struct veh_state *s, int lost, int pos[2])
 static void safe_hide(void)
 {
     if (!safe_visible) return;
-    int z = SAFE_Z_DOWN;
+    /* invisible, not only under the cluster: when the renderer's window vanishes (crash) the composed read must see
+     * empty glass, never the stale truth of an earlier incident still painted in this buffer */
+    int z = SAFE_Z_DOWN, vis = 0;
     screen_set_window_property_iv(safe_win, SCREEN_PROPERTY_ZORDER, &z);
+    screen_set_window_property_iv(safe_win, SCREEN_PROPERTY_VISIBLE, &vis);
     screen_flush_context(ctx_app, 0);
     safe_visible = 0;
 }
@@ -618,6 +629,7 @@ int main(void)
         perm_control = secpol_get_permission(tt_policy_handle(), "telltale", "control", 0);
     }
     self_type = secpol_type_id();
+    if (getenv("TT_RENDERER_UID")) renderer_uid = atoi(getenv("TT_RENDERER_UID"));
     const char *evdir = getenv("TT_EVDIR") ? getenv("TT_EVDIR") : "/tmp/tt/ev";
     char path[256]; snprintf(path, sizeof path, "%s/incidents.csv", evdir);
     evfd = open(path, O_WRONLY | O_APPEND | O_CREAT, 0644);
@@ -658,6 +670,7 @@ int main(void)
         CK(screen_set_window_property_iv(safe_win, SCREEN_PROPERTY_SIZE, sz), "safe size");
         CK(screen_set_window_property_iv(safe_win, SCREEN_PROPERTY_POSITION, pos), "safe pos");
         CK(screen_set_window_property_iv(safe_win, SCREEN_PROPERTY_ZORDER, &z), "safe z");
+        vis = 0;   /* hidden = invisible (safe_hide); the first raise makes it visible */
         CK(screen_set_window_property_iv(safe_win, SCREEN_PROPERTY_VISIBLE, &vis), "safe visible");
         CK(screen_set_window_property_cv(safe_win, SCREEN_PROPERTY_ID_STRING, 13, "tt-safe-layer"), "safe id");
         CK(screen_create_window_buffers(safe_win, 1), "safe buffers");
@@ -756,7 +769,7 @@ int main(void)
             printf("telltale: renderer registered pid=%d draw_tid=%d window=%s\n", reg.pid, reg.draw_tid, reg.win_id); fflush(stdout);
         }
         if (rend.pid && !rwin) {
-            rwin = find_window(rend.win_id, rpos);
+            rwin = find_window(rend.win_id, rend.pid, rpos);
             if (rwin) { nowin_cnt = 0; printf("telltale: window %s found at %d,%d\n", rend.win_id, rpos[0], rpos[1]); fflush(stdout); }
         }
         drain_truth();
@@ -859,6 +872,7 @@ int main(void)
 
         /* renderer-sourced read (its own window; readable while the safe layer covers it) */
         enum verdict wv = V_NONE; struct shot ws = {SPD_UNREADABLE, -1, -1, 0, 0};
+        readerr = 0;                             /* per check: set only when THIS check's window read failed */
         uint64_t t_win0 = tt_now_ns(), win_ns = 0; safe_ns = 0;
         if (st == ST_HOLD || st == ST_RESTART || st == ST_NODISPLAY || st == ST_TRUTHLOST || st == ST_GIVEUP) {
             int wb[4] = {L_BLOCK_X, L_BLOCK_Y, L_BLOCK_W, L_BLOCK_H}, wt[4] = {L_TICK_X, L_TICK_Y, L_TICK_S, L_TICK_S};
@@ -893,7 +907,7 @@ int main(void)
             snprintf(inc.id, sizeof inc.id, "TT-%s-%04d", VCODE[V], ++seq_inc); snprintf(inc.cause, sizeof inc.cause, "-"); inc_open = 1; banner_inc = &inc; card_hide("new incident"); \
             pthread_mutex_lock(&g_mtx); g.faults++; g.open_inc = inc; g.have_open = 1; pthread_mutex_unlock(&g_mtx); \
             printf("telltale: DETECT %s %s shown=%d truth=%d lamps_shown=0x%02x lamps_truth=0x%02x caught_ms=%.1f\n", inc.id, VN[V], inc.shown, inc.truth, cs.lamps, lt ? lt->lamps : 0, (inc.t_detect - inc.t_last_verified) / 1e6); fflush(stdout); } while (0)
-#define CLOSE() do { if (inc_open) { inc.t_true = t_cap_end; if (inc.t_safe_visible) inc.exposure_ms = (inc.t_safe_visible - inc.t_last_verified) / 1e6; ev_append(&inc); open_publish(NULL); inc_open = 0; banner_inc = NULL; \
+#define CLOSE() do { if (inc_open) { inc.t_true = t_cap_end; inc.exposure_ms = ((inc.t_safe_visible ? inc.t_safe_visible : inc.t_true) - inc.t_last_verified) / 1e6; ev_append(&inc); open_publish(NULL); inc_open = 0; banner_inc = NULL; \
             if (dbg_on) card_show(&inc, rpos); } } while (0)
 
         enum state prev = st;
