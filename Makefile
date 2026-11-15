@@ -35,9 +35,13 @@ COMMON_SRC := src/common/decode.c src/common/truth.c src/common/disp.c
 $(HOSTBIN)/test_decode: tests/host/test_decode.c $(COMMON_SRC) src/common/*.h | $(HOSTBIN)
 	$(CC) $(CFLAGS) -o $@ tests/host/test_decode.c $(COMMON_SRC) -lm
 
-test-host-c: $(HOSTBIN)/test_disp $(HOSTBIN)/test_decode
+$(HOSTBIN)/test_text: tests/host/test_text.c src/common/text.c src/common/text.h src/common/textfont.h | $(HOSTBIN)
+	$(CC) $(CFLAGS) -o $@ tests/host/test_text.c src/common/text.c
+
+test-host-c: $(HOSTBIN)/test_disp $(HOSTBIN)/test_decode $(HOSTBIN)/test_text
 	$(HOSTBIN)/test_disp
 	$(HOSTBIN)/test_decode
+	$(HOSTBIN)/test_text
 
 test-host-py:
 	$(PYTHON) -m unittest discover -s tests/host -p 'test_*.py' -v
@@ -83,8 +87,8 @@ $(QOUT)/vehfeed: src/vehfeed/vehfeed.c $(QCOMMON) $(QHDRS) | $(QOUT)
 $(QOUT)/cluster: src/cluster/cluster.c src/common/decode.c $(QCOMMON) $(QHDRS) | $(QOUT)
 	$(QCC) $(QCFLAGS) -o $@ src/cluster/cluster.c src/common/decode.c $(QCOMMON) -lscreen -lsecpol -lm
 
-$(QOUT)/telltale: src/telltale/telltale.c src/common/decode.c src/common/truth.c $(QCOMMON) $(QHDRS) | $(QOUT)
-	$(QCC) $(QCFLAGS) -o $@ src/telltale/telltale.c src/common/decode.c src/common/truth.c $(QCOMMON) -lscreen -lsecpol -lm
+$(QOUT)/telltale: src/telltale/telltale.c src/common/decode.c src/common/truth.c src/common/text.c $(QCOMMON) $(QHDRS) | $(QOUT)
+	$(QCC) $(QCFLAGS) -o $@ src/telltale/telltale.c src/common/decode.c src/common/truth.c src/common/text.c $(QCOMMON) -lscreen -lsecpol -lm
 
 $(QOUT)/ttinject $(QOUT)/ttctl $(QOUT)/hog: $(QOUT)/%: src/tools/%.c $(QCOMMON) $(QHDRS) | $(QOUT)
 	$(QCC) $(QCFLAGS) -o $@ $< $(QCOMMON) -lsecpol
