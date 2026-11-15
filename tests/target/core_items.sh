@@ -111,10 +111,10 @@ waitst NORMAL 300; S=$(st)
 chk "fault removed + rearm -> renderer restarted, verified hand-back, NORMAL" 'echo "$S" | grep -q "state=NORMAL "' "$S"
 # a crash AFTER earlier incidents in the same session: the hidden safe layer still holds an earlier truth; it must stay
 # invisible when the renderer's window vanishes, so the composed read sees empty glass (BLANK), never a stale value
-F0=$(field faults); ./ttinject crash > /dev/null 2>&1
+F0=$(field faults); L0=$(cat /dev/telltale | tail -1 | sed -n 's/^last=\([^ ]*\).*/\1/p'); ./ttinject crash > /dev/null 2>&1
 n=0; while { [ "$(field faults)" -le "$F0" ] || ! st | grep -q "state=NORMAL "; } && [ $n -lt 300 ]; do sleep 0.1; n=$((n+1)); done
 L=$(cat /dev/telltale | tail -1)
-chk "crash after earlier incidents -> BLANK (no stale safe layer exposed), restarted, NORMAL" 'echo "$L" | grep -Eq "last=TT-BLK-[0-9]+ verdict=BLANK .*recovered=yes"' "$L"
+chk "crash after earlier incidents -> a NEW incident, BLANK (no stale safe layer exposed), restarted, NORMAL" '[ "$(field faults)" -gt "$F0" ] && ! echo "$L" | grep -q "last=$L0 " && echo "$L" | grep -Eq "last=TT-BLK-[0-9]+ verdict=BLANK .*recovered=yes"' "$L"
 { grep -hE "TRUTH|NO_DISPLAY|NO-DISPLAY|restart timeout|DETECT|INCIDENT|->|reconnect|disarmed|GIVEUP|SIGKILL|not verified" log/core-telltale-a.log log/telltale.log; } > log/core-telltale.txt 2>/dev/null
 rm -f stop fault-on-start
 echo "core: $P/$N passed"

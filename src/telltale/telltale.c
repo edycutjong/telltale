@@ -953,7 +953,8 @@ int main(void)
              * moves, but its tick has stopped: wait for the stall and its cause (hung -> kill, starved -> no kill) instead
              * of racing it. Blank / unreadable frames are a lie whatever the tick does. */
             if ((wv == V_MISMATCH && t_tick_real > inc.t_detect && cause != C_STARVED && cause != C_SCREEN) ||
-                wv == V_BLANK || (wv == V_UNREADABLE && !(readerr && (cause == C_STARVED || cause == C_SCREEN)))) {
+                wv == V_BLANK || (wv == V_TICK_STALL && ws.kind == SPD_BLANK) ||   /* judge() reports the stall first */
+                (wv == V_UNREADABLE && !(readerr && (cause == C_STARVED || cause == C_SCREEN)))) {
                 if (++mismatch_cnt >= cfg.mismatch_n) kill_now = 1;
             }
             if (stalled && cause == C_HUNG) kill_now = 1;
