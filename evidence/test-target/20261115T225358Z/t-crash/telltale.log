@@ -1,0 +1,24 @@
+telltale: conf period_ms=20
+telltale: conf W_ms=100
+telltale: conf tick_stall_ms=151
+telltale: conf truth_lost_ms=200
+telltale: conf restart_timeout_ms=4000
+telltale: conf mismatch_n=3
+telltale: conf truth_ok_n=5
+telltale: pid=41000982 uid=0 type=untyped prio=60
+telltale: period_ms=20 W_ms=100 tick_stall_ms=151 h_max=615 mismatch_n=3 unknown_kill_ms=755 restart_timeout_ms=4000 policy=none (uid/pid checks) slog2=telltale/incidents
+telltale: display 1280x768, tier G1-FULL (screen_read_display, display-manager context)
+telltale: BANNER x=371 w=538 mode=driver text="DISPLAY FAULT · SHOWING TRUE SPEED"
+telltale: renderer registered pid=41025566 draw_tid=3 window=tt-cluster-41025566
+telltale: window tt-cluster-41025566 found at 0,24
+telltale: ARMED renderer pid=41025566 (window tt-cluster-41025566)
+telltale: WAIT -> NORMAL
+telltale: DETECT TT-VAL-0001 VALUE_MISMATCH shown=48 truth=48 lamps_shown=0x00 lamps_truth=0x01 caught_ms=21.7
+telltale: NORMAL -> SAFE-HOLD
+telltale: SAFE verified on glass TT-VAL-0001 (20.8 ms after detect, composed check)
+telltale: screen_read_window: Invalid argument
+telltale: renderer pid 41025566 is gone (crash)
+telltale: renderer registered pid=41185308 draw_tid=3 window=tt-cluster-41185308
+telltale: window tt-cluster-41185308 found at 0,24
+telltale: INCIDENT TT-VAL-0001,VALUE_MISMATCH,crash,48,48,1292301547393,1292323228906,21.7,1292344071664,0,1292558030227,1292582631368,0,42.5,41025566,41185308,0x00,0x01,1292344071664
+telltale: RESTARTING -> NORMAL

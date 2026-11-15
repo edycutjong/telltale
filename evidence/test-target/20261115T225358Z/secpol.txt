@@ -1,0 +1,23 @@
+PASS vehicle write denied for monitor_t (DCMD_VEH_SET: Operation not permitted)
+PASS vehicle write denied for renderer_t (DCMD_VEH_SET: Operation not permitted)
+PASS vehicle write denied for injector_t (DCMD_VEH_SET: Operation not permitted)
+PASS vehicle write denied for hog_t (/dev/vehicle: Operation not permitted)
+PASS vehicle write denied for untyped root (DCMD_VEH_SET: Operation not permitted)
+PASS feeder_t writes (1939 -> 1969)
+PASS monitor control denied for renderer_t
+PASS monitor control denied for feeder_t
+PASS monitor control denied for untyped root
+PASS injector_t controls the monitor
+PASS fault hook denied for renderer_t
+PASS fault hook denied for feeder_t
+PASS fault hook denied for monitor_t
+PASS fault hook denied for untyped root
+PASS injector_t may use the fault hook
+PASS hog_t refused prio 50
+PASS hog_t runs at prio 40
+PASS vehicled runs as vehicle_t
+PASS telltale runs as monitor_t
+PASS cluster runs as renderer_t
+PASS vehfeed runs as feeder_t
+PASS fault-on-start file ignored under the policy (renderer respawned, not blank)
+secpol: 22/22 passed
