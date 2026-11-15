@@ -451,7 +451,7 @@ static void safe_show_(const struct veh_state *s, int lost, int pos[2])
         tt_fill(px + (long)L_LAMP_Y * st + L_LAMP[i].x, st, L_LAMP_S, L_LAMP_S, s && !lost && ((s->lamps >> i) & 1) ? L_LAMP[i].rgb : PAL_GLASS);
     int full[4] = {0, 0, L_SAFE_W, L_SAFE_H};
     int dirty[12] = {L_DIGIT_X0, L_DIGIT_Y, L_DIGIT_N * GLYPH_W, GLYPH_H, 0, L_LAMP_Y, L_LAMP_W, L_LAMP_H, 0, L_BANNER_Y, L_SAFE_W, L_BANNER_H};
-    if (!safe_visible) {            /* raise: always VISIBLE, hidden by sitting under the opaque cluster window */
+    if (!safe_visible) {            /* raise: VISIBLE + top z (hidden = invisible, safe_hide / safe_off) */
         int z = SAFE_Z_UP, vis = 1;
         screen_set_window_property_iv(safe_win, SCREEN_PROPERTY_VISIBLE, &vis);   /* undo safe_off() */
         screen_set_window_property_iv(safe_win, SCREEN_PROPERTY_POSITION, pos);
@@ -752,6 +752,14 @@ int main(void)
     /* one status update per check on every path: state, counters and the open incident as it is NOW (cause, restarts) */
 #define PUB(CAPERR) do { pthread_mutex_lock(&g_mtx); g.checks++; if (CAPERR) g.capture_errors++; g.st = st; g.truth_gaps = T.gaps; \
             if (inc_open) { g.open_inc = inc; g.have_open = 1; } pthread_mutex_unlock(&g_mtx); } while (0)
+    /* stamp the correction on glass from a composed read S taken in [T0, T1]: marker seen, then digits + lamps = truth
+     * (the stall is ignored: the safe layer has no tick). Used with and without a renderer window. */
+#define SAFE_STAMP(S, T0, T1, FRESH) do { if (inc_open && (S).marker) { \
+            if (!inc.t_safe_visible) inc.t_safe_visible = (T1); \
+            int a_, b_; \
+            if (!inc.t_safe_true && (FRESH) && judge(&(S), (T0) - (uint64_t)cfg.W_ms * MS, (T1), 0, &a_, &b_) == V_PASS) { \
+                inc.t_safe_true = (T1); \
+                printf("telltale: SAFE verified on glass %s (%.1f ms after detect)\n", inc.id, (inc.t_safe_true - inc.t_detect) / 1e6); fflush(stdout); } } } while (0)
 
     for (;;) {
         struct _pulse p;
@@ -798,7 +806,7 @@ int main(void)
 
         if (newreg && reg.pid != rend.pid) {
             rend = reg; rwin = NULL; tick_moves_since_reg = 0; t_reg_seen = now; tick_seed = 1;
-            if (inc_open && !inc.t_register) { inc.t_register = now; inc.new_pid = reg.pid; }
+            if (inc_open) { if (!inc.t_register) inc.t_register = now; inc.new_pid = reg.pid; }   /* t_register: first respawn; new_pid: the latest */
             printf("telltale: renderer registered pid=%d draw_tid=%d window=%s\n", reg.pid, reg.draw_tid, reg.win_id); fflush(stdout);
         }
         if (rend.pid && !rwin) {
@@ -841,12 +849,18 @@ int main(void)
                     printf("telltale: TT-GIVEUP (no-window)\n"); fflush(stdout);
                 } else if (cause != C_STARVED && cause != C_SCREEN && nowin_cnt >= cfg.mismatch_n) {
                     if (inc_open && !strcmp(inc.cause, "-")) snprintf(inc.cause, sizeof inc.cause, "no-window");
-                    rcap_note(&kills, now); if (inc_open) inc.restarts++;
-                    killed_pid = rend.pid; if (inc_open) inc.t_kill = tt_now_ns();
-                    kill(rend.pid, SIGKILL);
-                    pthread_mutex_lock(&g_mtx); g.restarts_total++; pthread_mutex_unlock(&g_mtx);
-                    printf("telltale: SIGKILL renderer pid %d (no-window)\n", rend.pid); fflush(stdout);
-                    st = ST_RESTART; t_state = now; nowin_cnt = 0;
+                    uint64_t tk = tt_now_ns();
+                    if (kill(rend.pid, SIGKILL) == -1 && errno != ESRCH) {
+                        printf("telltale: SIGKILL renderer pid %d failed: %s -> TT-GIVEUP\n", rend.pid, strerror(errno)); fflush(stdout);
+                        st = ST_GIVEUP; t_state = now; nowin_cnt = 0;
+                        if (inc_open) { snprintf(inc.cause, sizeof inc.cause, "kill-failed"); inc_write(&inc); open_publish(&inc); }
+                    } else {
+                        rcap_note(&kills, now); killed_pid = rend.pid;
+                        if (inc_open) { inc.restarts++; inc.t_kill = tk; }
+                        pthread_mutex_lock(&g_mtx); g.restarts_total++; pthread_mutex_unlock(&g_mtx);
+                        printf("telltale: SIGKILL renderer pid %d (no-window)\n", rend.pid); fflush(stdout);
+                        st = ST_RESTART; t_state = now; nowin_cnt = 0;
+                    }
                 }
             }
             if (st == ST_RESTART && rend.pid && rend.pid != killed_pid && t_reg_seen &&
@@ -858,6 +872,22 @@ int main(void)
             } else if (st == ST_RESTART && (rend.pid == killed_pid || !rend.pid) && now - t_state > (uint64_t)cfg.restart_timeout_ms * MS) {
                 printf("telltale: restart timeout (pid %d did not register)\n", killed_pid); fflush(stdout);
                 st = ST_NODISPLAY; t_state = now;
+            }
+            if (inc_open && safe_visible && (!inc.t_safe_visible || !inc.t_safe_true)) {
+                /* no renderer window, but the safe layer is up at the last window position: read the glass back so the
+                 * correction is verified (and exposure measured) in the crash gap too, not only after the respawn */
+                int nb[4] = {rpos[0] + L_BLOCK_X, rpos[1] + L_BLOCK_Y, L_BLOCK_W, L_BLOCK_H};
+                int nl[4] = {rpos[0] + L_LAMP_X, rpos[1] + L_LAMP_Y, L_LAMP_W, L_LAMP_H};
+                uint64_t n0 = tt_now_ns();
+                if (screen_read_display(disp, bb, 1, nb, 0) == 0 && screen_read_display(disp, bl, 1, nl, 0) == 0) {
+                    uint64_t n1 = tt_now_ns(); struct shot ss;
+                    decode_at(pb, sb, L_DIGIT_X0 - L_BLOCK_X, L_DIGIT_Y - L_BLOCK_Y, -1, 0, &ss);
+                    ss.lamps = tt_lamps_decode(pl, sl, cfg.lamp_thr);
+                    ss.marker = tt_marker_ok(pb + (long)(L_MARK_Y - L_BLOCK_Y) * sb + (L_MARK_X - L_BLOCK_X), sb);
+                    drain_truth();
+                    const struct veh_state *nlt = truth_latest(&T);
+                    SAFE_STAMP(ss, n0, n1, nlt && (nlt->t_ns >= n1 || n1 - nlt->t_ns <= (uint64_t)cfg.truth_lost_ms * MS));
+                }
             }
             if (st != prev_nw) { printf("telltale: %s -> %s\n", ST[prev_nw], ST[st]); fflush(stdout); }
             PUB(0);   /* status stays truthful without a window */
@@ -917,6 +947,7 @@ int main(void)
         uint64_t t_lo = t_cap_start - (uint64_t)cfg.W_ms * MS;
         enum verdict cv = judge(&cs, t_lo, t_cap_end, stalled, &tmin, &tmax);
         if (!truth_fresh) cv = V_TRUTH_LOST;
+        SAFE_STAMP(cs, t_cap_start, t_cap_end, truth_fresh);
 
         /* renderer-sourced read (its own window; readable while the safe layer covers it) */
         enum verdict wv = V_NONE; struct shot ws = {SPD_UNREADABLE, -1, -1, 0, 0};
@@ -947,14 +978,6 @@ int main(void)
         }
 
         win_ns = tt_now_ns() - t_win0;
-        if (inc_open && !inc.t_safe_visible && cs.marker) inc.t_safe_visible = t_cap_end;
-        if (inc_open && !inc.t_safe_true && cs.marker && truth_fresh) {   /* stall ignored: the safe layer has no tick */
-            int a2, b2;
-            if (judge(&cs, t_lo, t_cap_end, 0, &a2, &b2) == V_PASS) {
-                inc.t_safe_true = t_cap_end;
-                printf("telltale: SAFE verified on glass %s (%.1f ms after detect)\n", inc.id, (inc.t_safe_true - inc.t_detect) / 1e6); fflush(stdout);
-            }
-        }
         uint64_t since_last_verified = t_last_verified;
         int truth_disp = lt ? disp_kmh(lt->speed_kmh) : -1;
 #define OPEN(V, SH) do { memset(&inc, 0, sizeof inc); inc.v = (V); inc.shown = (SH).kind == SPD_VALUE ? (SH).value : -1; inc.truth = truth_disp; inc.lamps_shown = (SH).lamps; inc.lamps_truth = lt ? lt->lamps : 0; \
@@ -1038,9 +1061,14 @@ int main(void)
                 }
                 if (!strcmp(inc.cause, "-") || cause == C_NONE)   /* the kill reason: the frame verdict unless a stall cause decided */
                     snprintf(inc.cause, sizeof inc.cause, "%s", wv == V_MISMATCH ? "live-wrong" : VN[wv]);
-                rcap_note(&kills, now); inc.restarts++;   /* restarts = kills the monitor sent in THIS incident */
-                killed_pid = rend.pid; inc.t_kill = tt_now_ns();
-                kill(rend.pid, SIGKILL);
+                uint64_t tk = tt_now_ns();
+                if (kill(rend.pid, SIGKILL) == -1 && errno != ESRCH) {   /* ESRCH: it died on its own -> the respawn path */
+                    printf("telltale: SIGKILL renderer pid %d failed: %s -> TT-GIVEUP\n", rend.pid, strerror(errno)); fflush(stdout);
+                    st = ST_GIVEUP; snprintf(inc.cause, sizeof inc.cause, "kill-failed"); inc_write(&inc); open_publish(&inc);
+                    break;
+                }
+                rcap_note(&kills, now); inc.restarts++;   /* restarts = kills the monitor sent in THIS incident (delivered) */
+                killed_pid = rend.pid; inc.t_kill = tk;
                 pthread_mutex_lock(&g_mtx); g.restarts_total++; pthread_mutex_unlock(&g_mtx);
                 printf("telltale: SIGKILL renderer pid %d (%s)\n", rend.pid, inc.cause); fflush(stdout);
                 rwin = NULL; st = ST_RESTART;
