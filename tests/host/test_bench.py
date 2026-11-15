@@ -200,5 +200,18 @@ class Cli(unittest.TestCase):
         self.assertIn("missing columns", p.stderr)
 
 
+
+class Ablation(unittest.TestCase):
+    ROWS = [{"class": "FREEZE", "seconds_wrong": "29.5", "wrong_at_end": "1", "monitor_acted": "0", "window_s": "30"},
+            {"class": "FREEZE", "seconds_wrong": "20.0", "wrong_at_end": "0", "monitor_acted": "0", "window_s": "30"},
+            {"class": "BLANK", "seconds_wrong": "", "wrong_at_end": "", "monitor_acted": "", "window_s": "30"}]
+
+    def test_counts_and_missing(self):
+        res = bench.analyze_ablation(self.ROWS)
+        self.assertEqual((res["runs"], res["missing_rows"], res["runs_below_bar"], res["wrong_at_end"]), (2, 1, 1, 1))
+        self.assertEqual(res["classes"]["FREEZE"]["median_s"], 20.0)
+        self.assertIn("rows without a measurement: 1", bench.render_ablation(res))
+
+
 if __name__ == "__main__":
     unittest.main()

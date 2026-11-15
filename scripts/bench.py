@@ -302,9 +302,46 @@ def render_clean(result: dict, synthetic: bool) -> str:
     return "\n".join(out) + "\n"
 
 
+ABLATION_COLUMNS = ["run_id", "git_sha", "accel", "class", "window_s", "seconds_wrong", "wrong_at_end", "monitor_acted"]
+ABLATION_BAR_S = 25.0  # spec.md: median >= 25 s of the 30-s window, per run, all runs
+
+
+def analyze_ablation(rows: list[dict]) -> dict:
+    """B2: monitor disarmed. Per class: seconds of the window the display showed a wrong value / no valid speed."""
+    per: dict[str, list[float]] = {}
+    bad = acted = still_wrong = 0
+    for r in rows:
+        v = _float(r, "seconds_wrong")
+        if v is None:
+            bad += 1  # no measurement for this run: counted, never estimated
+            continue
+        per.setdefault((r.get("class") or "?").strip(), []).append(v)
+        acted += int((r.get("monitor_acted") or "0") or 0)
+        still_wrong += int((r.get("wrong_at_end") or "0") or 0)
+    allv = [v for vs in per.values() for v in vs]
+    classes = {c: {"n": len(vs), "median_s": percentile(vs, 50), "min_s": min(vs), "max_s": max(vs)}
+               for c, vs in sorted(per.items())}
+    return {"kind": "ablation", "classes": classes, "runs": len(allv), "missing_rows": bad,
+            "median_s": percentile(allv, 50) if allv else None, "min_s": min(allv) if allv else None,
+            "runs_below_bar": sum(1 for v in allv if v < ABLATION_BAR_S), "monitor_acted_incidents": acted,
+            "wrong_at_end": still_wrong, "window_s": (rows[0].get("window_s") if rows else None),
+            "problem_rows": bad}
+
+
+def render_ablation(res: dict) -> str:
+    out = [f"Monitor disarmed (observe-only); {res['runs']} runs, window {res['window_s']} s. QEMU timing, not hardware timing.\n",
+           "| class | runs | median s wrong | min | max |", "|---|---|---|---|---|"]
+    for c, v in res["classes"].items():
+        out.append(f"| {c} | {v['n']} | {v['median_s']:.2f} | {v['min_s']:.2f} | {v['max_s']:.2f} |")
+    out.append(f"\nall runs: median {res['median_s']:.2f} s, min {res['min_s']:.2f} s; runs below the {ABLATION_BAR_S:.0f}-s bar: "
+               f"{res['runs_below_bar']}; still wrong at the end of the window: {res['wrong_at_end']}/{res['runs']}; "
+               f"monitor incidents while disarmed: {res['monitor_acted_incidents']}; rows without a measurement: {res['missing_rows']}")
+    return "\n".join(out) + "\n"
+
+
 def main(argv: list[str] | None = None) -> int:
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
-    ap.add_argument("kind", choices=["faults", "clean"])
+    ap.add_argument("kind", choices=["faults", "clean", "ablation"])
     ap.add_argument("csv", nargs="+")
     ap.add_argument("--json", action="store_true", help="print the result as JSON")
     ap.add_argument("--strict", action="store_true",
@@ -319,6 +356,10 @@ def main(argv: list[str] | None = None) -> int:
             t = load(a.csv, FAULT_COLUMNS)
             res = analyze_faults(t.rows, allow_mixed=a.allow_mixed, detect_only=tuple(a.detect_only))
             text = render_faults(res, t.synthetic)
+        elif a.kind == "ablation":
+            t = load(a.csv, ABLATION_COLUMNS)
+            res = analyze_ablation(t.rows)
+            text = render_ablation(res)
         else:
             if len(a.csv) != 1:
                 raise BenchError("clean: one run per report (exactly one CSV)")
