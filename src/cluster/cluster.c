@@ -66,7 +66,8 @@ static void *data_thread(void *arg)
 {
     (void)arg;
     struct sched_param sp = {.sched_priority = 21};
-    pthread_setschedparam(pthread_self(), SCHED_RR, &sp);
+    int prc = pthread_setschedparam(pthread_self(), SCHED_RR, &sp);
+    if (prc) fprintf(stderr, "cluster: data thread priority 21: %s\n", strerror(prc));
     pthread_setname_np(0, "data");
     int fd;
     while ((fd = open(PATH_VEHICLE, O_RDONLY)) < 0) usleep(50000);
@@ -124,7 +125,8 @@ static void *draw_thread(void *arg)
 {
     (void)arg;
     struct sched_param sp = {.sched_priority = 20};
-    pthread_setschedparam(pthread_self(), SCHED_RR, &sp);
+    int prc = pthread_setschedparam(pthread_self(), SCHED_RR, &sp);
+    if (prc) fprintf(stderr, "cluster: draw thread priority 20: %s\n", strerror(prc));
     pthread_setname_np(0, "draw");
     atomic_store(&draw_tid, gettid());
     struct timespec next; clock_gettime(CLOCK_MONOTONIC, &next);
@@ -207,17 +209,18 @@ static void *register_thread(void *arg)
     const char *wid = g_wid;
     struct tt_register r = {.pid = getpid(), .draw_tid = atomic_load(&draw_tid)};
     snprintf(r.win_id, sizeof r.win_id, "%s", wid);
-    for (int tries = 0; tries < 600; tries++) {          /* the monitor may start after us: retry up to 60 s */
-        int fd = open(PATH_TELLTALE, O_RDWR);
-        if (fd >= 0) {
-            int rc = devctl(fd, DCMD_TT_REGISTER, &r, sizeof r, NULL);
-            close(fd);
-            if (rc == EOK) { printf("cluster: registered with the monitor (pid %d, draw tid %d, window %s)\n", r.pid, r.draw_tid, wid); fflush(stdout); return NULL; }
-            fprintf(stderr, "cluster: DCMD_TT_REGISTER: %s\n", strerror(rc));
-        }
-        usleep(100000);
+    /* register until it succeeds (the monitor may start after us), then re-register every second for life: a restarted
+     * monitor relearns the renderer within 1 s (the monitor ignores a repeat registration of the pid it already watches) */
+    int registered = 0, warned = 0;
+    for (;;) {
+        int fd = open(PATH_TELLTALE, O_RDWR), rc = -1;
+        if (fd >= 0) { rc = devctl(fd, DCMD_TT_REGISTER, &r, sizeof r, NULL); close(fd); }
+        if (rc == EOK && !registered) { printf("cluster: registered with the monitor (pid %d, draw tid %d, window %s)\n", r.pid, r.draw_tid, wid); fflush(stdout); }
+        if (rc != EOK && registered) { fprintf(stderr, "cluster: monitor gone, re-registering\n"); }
+        if (rc != EOK && fd >= 0 && !warned) { fprintf(stderr, "cluster: DCMD_TT_REGISTER: %s\n", strerror(rc)); warned = 1; }
+        registered = rc == EOK;
+        usleep(registered ? 1000000 : 100000);
     }
-    fprintf(stderr, "cluster: no monitor to register with; running unmonitored\n");
     return NULL;
 }
 

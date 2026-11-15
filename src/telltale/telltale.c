@@ -118,6 +118,7 @@ struct incident {
     int shown, truth, restarts, old_pid, new_pid;
     unsigned lamps_shown, lamps_truth;   /* lamp bits read back / latest truth at detection */
     uint64_t t_last_verified, t_detect, t_safe_visible, t_kill, t_register, t_true;
+    uint64_t t_safe_true;   /* first composed read showing the safe layer's digits + lamps equal to the truth */
     double exposure_ms;
 };
 
@@ -142,12 +143,12 @@ static slog2_buffer_t slog;        /* incidents also go to slog2 (buffer set "te
 static void ev_append(const struct incident *in)
 {
     char row[400];
-    int n = snprintf(row, sizeof row, "%s,%s,%s,%d,%d,%llu,%llu,%.1f,%llu,%llu,%llu,%llu,%d,%.1f,%d,%d,0x%02x,0x%02x\n",
+    int n = snprintf(row, sizeof row, "%s,%s,%s,%d,%d,%llu,%llu,%.1f,%llu,%llu,%llu,%llu,%d,%.1f,%d,%d,0x%02x,0x%02x,%llu\n",
                      in->id, VN[in->v], in->cause, in->shown, in->truth, (unsigned long long)in->t_last_verified,
                      (unsigned long long)in->t_detect, (in->t_detect - in->t_last_verified) / 1e6,
                      (unsigned long long)in->t_safe_visible, (unsigned long long)in->t_kill,
                      (unsigned long long)in->t_register, (unsigned long long)in->t_true, in->restarts,
-                     in->exposure_ms, in->old_pid, in->new_pid, in->lamps_shown, in->lamps_truth);
+                     in->exposure_ms, in->old_pid, in->new_pid, in->lamps_shown, in->lamps_truth, (unsigned long long)in->t_safe_true);
     if (n < 0) return;
     if ((size_t)n >= sizeof row) n = (int)sizeof row - 1;   /* truncated row: never write past the buffer */
     pthread_mutex_lock(&g_mtx);
@@ -166,7 +167,7 @@ static void open_publish(const struct incident *in)   /* NULL = no incident open
     if (in) { g.open_inc = *in; g.have_open = 1; } else g.have_open = 0;
     pthread_mutex_unlock(&g_mtx);
 }
-#define EV_HEADER "id,verdict,cause,shown,truth,t_last_verified_ns,t_detect_ns,caught_ms,t_safe_visible_ns,t_kill_ns,t_register_ns,t_true_ns,restarts,exposure_ms,renderer_pid,new_pid,lamps_shown,lamps_truth\n"
+#define EV_HEADER "id,verdict,cause,shown,truth,t_last_verified_ns,t_detect_ns,caught_ms,t_safe_visible_ns,t_kill_ns,t_register_ns,t_true_ns,restarts,exposure_ms,renderer_pid,new_pid,lamps_shown,lamps_truth,t_safe_true_ns\n"
 
 /* ---------- resource manager: /dev/telltale and /dev/telltale-events ---------- */
 static iofunc_attr_t attr_tt, attr_ev;
@@ -256,7 +257,8 @@ static void *resmgr_thread(void *arg)
 {
     (void)arg;
     struct sched_param sp = {.sched_priority = 30};
-    pthread_setschedparam(pthread_self(), SCHED_FIFO, &sp);
+    int prc = pthread_setschedparam(pthread_self(), SCHED_FIFO, &sp);
+    if (prc) fprintf(stderr, "telltale: resmgr thread priority 30: %s\n", strerror(prc));
     pthread_setname_np(0, "resmgr");
     dispatch_t *dpp = dispatch_create();
     resmgr_attr_t rattr = {.nparts_max = 1, .msg_max_size = 2048};
@@ -286,7 +288,8 @@ static void *stall_guard(void *arg)
 {
     (void)arg;
     struct sched_param sp = {.sched_priority = 61};
-    pthread_setschedparam(pthread_self(), SCHED_FIFO, &sp);
+    int prc = pthread_setschedparam(pthread_self(), SCHED_FIFO, &sp);
+    if (prc) fprintf(stderr, "telltale: stall guard priority 61: %s\n", strerror(prc));
     pthread_setname_np(0, "stallguard");
     uint64_t reported = 0;
     for (;;) {
@@ -573,11 +576,12 @@ static void decode_at(const uint32_t *base, int st, int dx, int dy, int tx, int 
     o->tick = tx >= 0 ? tt_tick_value(base + (long)ty * st + tx, st) : -1;
 }
 
-static int vfd = -1, vfd_lost;
+static int vfd = -1, vfd_lost, truth_timed_out;   /* truth_timed_out: this period's GET_SINCE already timed out */
 static struct truth T;
 static void drain_truth(void)
 {
     static struct veh_since q;
+    if (truth_timed_out) return;
     if (vfd < 0) {
         if ((vfd = open(PATH_VEHICLE, O_RDONLY)) < 0) return;
         if (vfd_lost) {   /* a restarted vehicled numbers its samples from 1 again: drop the old window and watermark */
@@ -590,6 +594,7 @@ static void drain_truth(void)
     TimerTimeout(CLOCK_MONOTONIC, _NTO_TIMEOUT_SEND | _NTO_TIMEOUT_REPLY, NULL, &to, NULL);
     int rc = devctl(vfd, DCMD_VEH_GET_SINCE, &q, sizeof q, NULL);
     if (rc != EOK) {
+        if (rc == ETIMEDOUT) truth_timed_out = 1;
         if (rc != ETIMEDOUT && rc != EINTR) {   /* the connection is dead (vehicled exited): reconnect on a later check */
             printf("telltale: %s: %s -- reconnecting\n", PATH_VEHICLE, strerror(rc)); fflush(stdout);
             close(vfd); vfd = -1; vfd_lost = 1;
@@ -717,6 +722,7 @@ int main(void)
     struct rcap kills; rcap_reset(&kills);
     struct incident inc; int inc_open = 0, armed = 1, prev_armed = 1, seq_inc = 0;
     int cap_errs = 0;                /* composed reads failed in a row */
+    int tick_seed = 0;               /* the next composed tick read belongs to a newly registered renderer */
     enum cause cause = C_NONE;
     uint64_t t_unknown = 0;          /* when the current cause became UNKNOWN: the UNKNOWN kill counts from here */
     int readerr = 0;                 /* this check's window verdict is UNREADABLE because screen_read_window failed */
@@ -729,6 +735,7 @@ int main(void)
         }
         uint64_t now = tt_now_ns();
         atomic_store(&hb_start, now);
+        truth_timed_out = 0;
         int late = t_prev_loop && now - t_prev_loop >= 266 * MS;   /* >= 16 frames: the 4-bit tick may alias */
         t_prev_loop = now;
         drain_events();
@@ -764,7 +771,7 @@ int main(void)
         prev_armed = armed;
 
         if (newreg && reg.pid != rend.pid) {
-            rend = reg; rwin = NULL; tick_moves_since_reg = 0; t_reg_seen = now;
+            rend = reg; rwin = NULL; tick_moves_since_reg = 0; t_reg_seen = now; tick_seed = 1;
             if (inc_open && !inc.t_register) { inc.t_register = now; inc.new_pid = reg.pid; }
             printf("telltale: renderer registered pid=%d draw_tid=%d window=%s\n", reg.pid, reg.draw_tid, reg.win_id); fflush(stdout);
         }
@@ -851,7 +858,8 @@ int main(void)
         cs.lamps = tt_lamps_decode(pl, sl, cfg.lamp_thr);
         cs.marker = tt_marker_ok(pb + (long)(L_MARK_Y - L_BLOCK_Y) * sb + (L_MARK_X - L_BLOCK_X), sb);
 
-        if (late) { last_tick = cs.tick; t_tick_change = t_cap_end; }
+        if (tick_seed) { last_tick = cs.tick; t_tick_change = t_cap_end; tick_seed = 0; }   /* new renderer: seed, no move */
+        else if (late) { last_tick = cs.tick; t_tick_change = t_cap_end; }
         else if (cs.tick != last_tick) { last_tick = cs.tick; t_tick_change = t_tick_real = t_cap_end; tick_moves_since_reg++; }   /* t_tick_real: a genuine change, never a lateness reset */
         int stalled = t_tick_change && t_cap_end - t_tick_change > (uint64_t)cfg.tick_stall_ms * MS;
         if (!t_tick_change) t_tick_change = t_cap_end;
@@ -900,6 +908,13 @@ int main(void)
 
         win_ns = tt_now_ns() - t_win0;
         if (inc_open && !inc.t_safe_visible && cs.marker) inc.t_safe_visible = t_cap_end;
+        if (inc_open && !inc.t_safe_true && cs.marker && truth_fresh) {   /* stall ignored: the safe layer has no tick */
+            int a2, b2;
+            if (judge(&cs, t_lo, t_cap_end, 0, &a2, &b2) == V_PASS) {
+                inc.t_safe_true = t_cap_end;
+                printf("telltale: SAFE verified on glass %s (%.1f ms after detect)\n", inc.id, (inc.t_safe_true - inc.t_detect) / 1e6); fflush(stdout);
+            }
+        }
         uint64_t since_last_verified = t_last_verified;
         int truth_disp = lt ? disp_kmh(lt->speed_kmh) : -1;
 #define OPEN(V) do { memset(&inc, 0, sizeof inc); inc.v = (V); inc.shown = cs.kind == SPD_VALUE ? cs.value : -1; inc.truth = truth_disp; inc.lamps_shown = cs.lamps; inc.lamps_truth = lt ? lt->lamps : 0; \

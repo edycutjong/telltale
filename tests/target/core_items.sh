@@ -103,6 +103,7 @@ R1=$(field restarts)
 chk "exactly max_restarts=3 kills before TT-GIVEUP (restarts $R0 -> $R1)" '[ -n "$R1" ] && [ $((R1 - R0)) -eq 3 ]' "$S"
 G=$(cat /dev/telltale-events | grep ',TT-GIVEUP,' | tail -1)
 chk "the TT-GIVEUP incident is in /dev/telltale-events at once, restarts=3" 'echo "$G" | cut -d, -f13 | grep -qx 3' "$G"
+chk "the correction was verified on glass during it (t_safe_true_ns set: safe layer read back = truth)" 'echo "$G" | cut -d, -f19 | grep -Eq "^[1-9][0-9]*$"' "$G"
 O=$(cat /dev/telltale | grep '^open=')
 chk "cat /dev/telltale keeps the unrecovered incident open (cause=TT-GIVEUP)" 'echo "$O" | grep -q "cause=TT-GIVEUP"' "$O"
 rm -f fault-on-start
@@ -115,6 +116,12 @@ F0=$(field faults); L0=$(cat /dev/telltale | tail -1 | sed -n 's/^last=\([^ ]*\)
 n=0; while { [ "$(field faults)" -le "$F0" ] || ! st | grep -q "state=NORMAL "; } && [ $n -lt 300 ]; do sleep 0.1; n=$((n+1)); done
 L=$(cat /dev/telltale | tail -1)
 chk "crash after earlier incidents -> a NEW incident, BLANK (no stale safe layer exposed), restarted, NORMAL" '[ "$(field faults)" -gt "$F0" ] && ! echo "$L" | grep -q "last=$L0 " && echo "$L" | grep -Eq "last=TT-BLK-[0-9]+ verdict=BLANK .*recovered=yes"' "$L"
-{ grep -hE "TRUTH|NO_DISPLAY|NO-DISPLAY|restart timeout|DETECT|INCIDENT|->|reconnect|disarmed|GIVEUP|SIGKILL|not verified" log/core-telltale-a.log log/telltale.log; } > log/core-telltale.txt 2>/dev/null
+# a restarted monitor relearns the renderer (the cluster re-registers every second) and arms again; nothing else restarts
+slay -f -Q telltale > /dev/null 2>&1; sleep 0.5; T0=$(date +%s)
+TT_CONF=/tmp/tt/telltale-run.conf TT_CHECKLOG=/tmp/tt/log/checks2.csv ./telltale > log/telltale2.log 2>&1 < /dev/null &
+waitfor /dev/telltale 5
+waitst NORMAL 300; S=$(st); T1=$(date +%s)
+chk "monitor restarted -> relearns the renderer, arms again (NORMAL after $((T1 - T0)) s)" 'echo "$S" | grep -q "armed=1 state=NORMAL "' "$S"
+{ grep -hE "TRUTH|NO_DISPLAY|NO-DISPLAY|restart timeout|DETECT|INCIDENT|->|reconnect|disarmed|GIVEUP|SIGKILL|not verified" log/core-telltale-a.log log/telltale.log log/telltale2.log; } > log/core-telltale.txt 2>/dev/null
 rm -f stop fault-on-start
 echo "core: $P/$N passed"
