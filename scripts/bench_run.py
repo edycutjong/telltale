@@ -76,6 +76,20 @@ def windows(trace: list[tuple[float, float]], thr_kmh: float = 1.0) -> list[floa
     return onsets
 
 
+def stale_observable(trace: list[tuple[float, float]], onset: float, min_delta_kmh: float = 2.0) -> bool:
+    """A STALE injection (data thread stops taking samples at onset + AT_S - PRE_S) can only be seen by a value check if the
+    true speed then moves: |v(t + 1 s) - v(t)| >= 2 km/h at the injection instant t. Windows that are only the last 1-2 km/h
+    step into a standstill fail this (the held value equals the truth) and are not used for STALE. Computed from the
+    trace alone, before any run (rule recorded in progress.md after the first attempt showed the defect, 2026-11-15)."""
+    import bisect
+    ts = [t for t, _ in trace]
+
+    def kmh(t: float) -> float:
+        return trace[min(bisect.bisect_left(ts, t), len(ts) - 1)][1] * 3.6
+    t = onset + (AT_S - PRE_S)
+    return abs(kmh(t + 1.0) - kmh(t)) >= min_delta_kmh
+
+
 def sh(cmd: list[str], env: dict | None = None, check: bool = True) -> subprocess.CompletedProcess:
     e = dict(os.environ)
     e.update(env or {})
@@ -255,11 +269,16 @@ def cmd_faults(a) -> None:
     meta0 = {"sha": sha, "seed": a.seed, "period_ms": conf_value("period_ms", a.conf_extra) or "20",
              "tick_stall_ms": conf_value("tick_stall_ms", a.conf_extra), "trace": trace, "hog_prio": ""}
     have = done_ids(out)
+    seen: dict[str, int] = {}
+    stale_pool = [o for o in onsets if stale_observable(trace, o)]
+    print(f"windows: {len(onsets)} (STALE-observable: {len(stale_pool)})", flush=True)
     for i, cls in enumerate(sched):
         tag = f"{a.tag}-{i + 1:03d}"
+        pool = stale_pool if cls == "STALE" else onsets
+        onset = pool[seen.get(cls, 0) % len(pool)]     # each class walks the windows in time order
+        seen[cls] = seen.get(cls, 0) + 1
         if tag in have:
             continue
-        onset = onsets[i % len(onsets)]
         meta = dict(meta0, onset=onset, load1=load1(), hog_prio="40" if cls == "STARVE" else "")
         run = one_fault_run(tag, cls, onset, meta, evroot, a.conf_extra, a.settle, INJECT_ARG.get(cls))
         row = make_row(run, tag, cls, meta)

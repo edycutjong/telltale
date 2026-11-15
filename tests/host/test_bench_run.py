@@ -121,5 +121,14 @@ class Ablation(unittest.TestCase):
             self.assertEqual(last, 1)
 
 
+
+class StaleRule(unittest.TestCase):
+    def test_standstill_step_is_not_observable_but_braking_is(self):
+        tr = [(i * 0.05, 0.0) for i in range(0, 200)]                  # 10 s standing still
+        self.assertFalse(br.stale_observable(tr, 2.0))
+        tr = [(i * 0.05, 5.0 + 2.0 * i * 0.05) for i in range(0, 200)]  # +2 m/s per s = 7.2 km/h per s
+        self.assertTrue(br.stale_observable(tr, 2.0))
+
+
 if __name__ == "__main__":
     unittest.main()
