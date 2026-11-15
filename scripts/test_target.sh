@@ -37,7 +37,10 @@ run_case slm freeze "$AT" 12 TT_SUP=slm                     # S-SLM: slm (not th
 # vehicled restart, NO_DISPLAY, startup without truth, the restart cap (TT-GIVEUP) + rearm
 out=$(scripts/guest.sh sudo 'sh /tmp/tt/core_items.sh' 2>&1)
 echo "$out" | tee "$TT_EVROOT/core.txt" | tee -a "$SUM"
-mkdir -p "$TT_EVROOT/core"; for f in telltale.log core-telltale.txt core-telltale-a.log core-up.txt core-up2.txt; do scripts/guest.sh get "/tmp/tt/log/$f" "$TT_EVROOT/core/" 2>/dev/null || true; done
+mkdir -p "$TT_EVROOT/core"
+for f in telltale.log telltale2.log core-telltale.txt core-telltale-a.txt core-telltale-a2.txt core-telltale-b.txt core-up.txt core-up2.txt core-up3.txt card-hidden.ppm; do
+  scripts/guest.sh get "/tmp/tt/log/$f" "$TT_EVROOT/core/" 2>/dev/null || { echo "FAIL evidence not collected: core/$f" | tee -a "$SUM"; fail=$((fail + 1)); }
+done
 pass=$((pass + $(echo "$out" | grep -c '^PASS'))); fail=$((fail + $(echo "$out" | grep -c '^FAIL')))
 if [ "${1:-}" != --no-policy ]; then
   run_case pol freeze "$AT" 12 TT_POLICY=1

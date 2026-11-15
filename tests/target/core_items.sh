@@ -2,7 +2,8 @@
 # On-target checks of the Core items the fault runs do not assert (run as root from /tmp/tt on the QNX guest, no policy):
 # cat /dev/vehicle, ttctl status|disarm|arm|period|rearm|debug, cat /dev/telltale + /dev/telltale-events,
 # TRUTH_LOST (the feeder dies -> truth lost -> the feeder returns -> hand-back), DISARM in the middle of an incident
-# (observe-only in every state), a vehicled restart (the monitor reconnects), NO_DISPLAY (no renderer comes back),
+# (observe-only in every state), a vehicled restart (the monitor reconnects; the renderer left on the dead connection
+# is killed and respawned), NO_DISPLAY (no renderer comes back; the safe layer read back true without a window),
 # (a crash after earlier incidents is checked at the end)
 # startup without truth (TRUTH-LOST, never WAIT forever), the restart cap (a renderer wrong on every start -> TT-GIVEUP,
 # then rearm; one record per incident), a renderer blank from boot (never parked in NO-DISPLAY) and the hidden card (invisible). Starts its own stack on the hero drive. Each line: PASS|FAIL <what>. Last line: core: <n>/<m> passed.
@@ -68,20 +69,29 @@ chk "disarmed: no kill, same renderer pid $RP, still NORMAL" 'echo "$S" | grep -
 ./ttctl arm > /dev/null 2>&1
 waitst NORMAL 100; S=$(st)
 chk "arm again -> armed=1 NORMAL" 'echo "$S" | grep -q "armed=1 state=NORMAL "' "$S"
-# vehicled restart: the monitor drops the dead connection, reconnects and resets its truth window (new seq numbering)
+# vehicled restart: the monitor drops the dead connection, reconnects and resets its truth window (new seq numbering).
+# The renderer's truth connection died with vehicled, so it keeps drawing the held sample with a live tick: a STALE
+# renderer. The new feeder publishes a DIFFERENT speed, so the check fails unless that renderer is killed and respawned.
+RP2=$(field renderer_pid)
+V0=$(sed -n '2s/^[^,]*,\([0-9]*\).*/\1/p' trace-hero.csv)   # integer m/s of the held sample the stale renderer keeps
+if [ "${V0:-0}" -lt 5 ]; then MV=15.0; else MV=0.0; fi       # >= 18 km/h away from it
+{ echo "t_s,speed_mps"; echo "0.0,$MV"; } > moved.csv
 slay -f -Q vehfeed vehicled > /dev/null 2>&1
 waitst TRUTH-LOST 50; S=$(st)
 chk "vehicled gone -> TRUTH-LOST" 'echo "$S" | grep -q "state=TRUTH-LOST "' "$S"
 ./vehicled > log/vehicled2.log 2>&1 < /dev/null &
 waitfor /dev/vehicle 5
-./vehfeed trace-hero.csv --hold 30 $SC > log/vehfeed4.log 2>&1 < /dev/null &
+./vehfeed moved.csv --hold 60 > log/vehfeed4.log 2>&1 < /dev/null &
+n=0; while [ "$(field renderer_pid)" = "$RP2" ] && [ $n -lt 300 ]; do sleep 0.1; n=$((n+1)); done
 waitst NORMAL 400; S=$(st)
-chk "vehicled + feeder restarted -> verified hand-back, NORMAL" 'echo "$S" | grep -q "state=NORMAL "' "$S"
+chk "stale renderer on the dead truth connection killed + respawned (pid $RP2 -> $(field renderer_pid)), NORMAL" '[ "$(field renderer_pid)" != "$RP2" ] && echo "$S" | grep -q "state=NORMAL "' "$S"
+chk "its incident names the kill (TRUTH_LOST, cause live-wrong, restarts >= 1)" 'cat /dev/telltale-events | grep ",TRUTH_LOST,live-wrong," | tail -1 | cut -d, -f13 | grep -Eq "^[1-9]"' "$(cat /dev/telltale-events | tail -1)"
 chk "the monitor reconnected to /dev/vehicle (truth window reset)" 'grep -q "reconnected to /dev/vehicle" log/telltale.log' "$(grep -i 'vehicle' log/telltale.log | tail -2)"
 # NO_DISPLAY: stop the respawn loop, kill the renderer; nothing registers within restart_timeout_ms
 touch stop; slay -f -Q cluster > /dev/null 2>&1
 waitst NO-DISPLAY 120; S=$(st)
 chk "renderer gone and not restarted -> state NO-DISPLAY (safe layer keeps the truth up)" 'echo "$S" | grep -q "state=NO-DISPLAY "' "$S"
+chk "renderer gone: the safe layer is read back true on glass with no renderer window" 'grep -q "SAFE verified on glass TT-BLK-" log/telltale.log' "$(grep 'SAFE verified' log/telltale.log | tail -1)"
 # the hidden incident card is INVISIBLE, not only under the cluster: disarmed (the safe layer is off) and no renderer
 # window, the glass at the card's rect must not be the card's fill (PAL_CARD 1a1916; debug is off, so the card was never shown)
 ./ttctl disarm > /dev/null 2>&1; sleep 0.5
@@ -89,7 +99,7 @@ chk "renderer gone and not restarted -> state NO-DISPLAY (safe layer keeps the t
 H=$(tail -c 48 log/card-hidden.ppm 2>/dev/null | od -An -v -tx1 | tr -d ' \n')
 chk "no renderer window, safe layer off: the hidden incident card is not composed (card rect != its fill)" '[ ${#H} -eq 96 ] && ! echo "$H" | grep -q 1a1916' "$H"
 ./ttctl arm > /dev/null 2>&1
-cp log/telltale.log log/core-telltale-a.log
+cp log/telltale.log log/core-telltale-a.txt      # .txt: tt_up.sh deletes log/*.log
 rm -f stop
 # (a crash after earlier incidents is checked at the end)
 # startup without truth: fresh vehicled (no sample yet), no feeder -> after arm_grace_ms TRUTH-LOST, never WAIT forever
@@ -123,7 +133,7 @@ GX=$(echo "$G" | cut -d, -f14)
 chk "the TT-GIVEUP record carries its exposure (last verified frame -> truth verified on glass > 0 ms)" 'echo "$GX" | grep -Eq "^[1-9][0-9]*\.[0-9]$|^0\.[1-9]$"' "$GX"
 # a renderer that is blank from boot (never verified, never NORMAL) is not parked in NO-DISPLAY: restart_timeout_ms after it
 # registered it goes to SAFE-HOLD, is killed under the cap, and TT-GIVEUP is recorded
-cp log/telltale.log log/core-telltale-a2.log
+cp log/telltale.log log/core-telltale-a2.txt
 echo blank > fault-on-start
 sh tt_up.sh trace-hero.csv 30 0 - all script > log/core-up3.txt 2>&1
 waitst GIVEUP 600; S=$(st)
@@ -132,7 +142,7 @@ rm -f fault-on-start
 ./ttctl rearm > /dev/null 2>&1
 waitst NORMAL 300; S=$(st)
 chk "blank-from-boot fault removed + rearm -> NORMAL" 'echo "$S" | grep -q "state=NORMAL "' "$S"
-cp log/telltale.log log/core-telltale-b.log
+cp log/telltale.log log/core-telltale-b.txt
 # a crash AFTER earlier incidents in the same session: the hidden safe layer still holds an earlier truth; it must stay
 # invisible when the renderer's window vanishes, so the composed read sees empty glass (BLANK), never a stale value
 F0=$(field faults); L0=$(cat /dev/telltale | tail -1 | sed -n 's/^last=\([^ ]*\).*/\1/p'); ./ttinject crash > /dev/null 2>&1
@@ -145,6 +155,6 @@ TT_CONF=/tmp/tt/telltale-run.conf TT_CHECKLOG=/tmp/tt/log/checks2.csv ./telltale
 waitfor /dev/telltale 5
 waitst NORMAL 300; S=$(st); T1=$(date +%s)
 chk "monitor restarted -> relearns the renderer, arms again (NORMAL after $((T1 - T0)) s)" 'echo "$S" | grep -q "armed=1 state=NORMAL "' "$S"
-{ grep -hE "TRUTH|NO_DISPLAY|NO-DISPLAY|restart timeout|DETECT|INCIDENT|->|reconnect|disarmed|GIVEUP|SIGKILL|not verified" log/core-telltale-a.log log/core-telltale-a2.log log/core-telltale-b.log log/telltale.log log/telltale2.log; } > log/core-telltale.txt 2>/dev/null
-rm -f stop fault-on-start
+{ grep -hE "TRUTH|NO_DISPLAY|NO-DISPLAY|restart timeout|DETECT|INCIDENT|->|reconnect|disarmed|GIVEUP|SIGKILL|not verified" log/core-telltale-a.txt log/core-telltale-a2.txt log/core-telltale-b.txt log/telltale.log log/telltale2.log; } > log/core-telltale.txt
+rm -f stop fault-on-start moved.csv
 echo "core: $P/$N passed"
