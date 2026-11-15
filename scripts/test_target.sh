@@ -14,6 +14,7 @@ set -uo pipefail
 cd "$(dirname "$0")/.."
 TS=$(date -u +%Y%m%dT%H%M%SZ); export TT_EVROOT=evidence/test-target/$TS; mkdir -p "$TT_EVROOT"
 SUM="$TT_EVROOT/summary.txt"; : > "$SUM"
+echo "git: $(git rev-parse --short HEAD)$(git diff --quiet HEAD -- src secpol scripts tests Makefile || echo ' (uncommitted source changes)')" | tee -a "$SUM"
 hostload() { echo "host load ($1): $(sysctl -n vm.loadavg 2>/dev/null || cat /proc/loadavg)" | tee -a "$SUM"; }   # TCG timing depends on it
 hostload start
 pass=0; fail=0
