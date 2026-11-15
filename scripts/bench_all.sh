@@ -27,7 +27,8 @@ report() {
         python3 - "$p" <<'PY'
 import csv, sys, io
 sys.path.insert(0, "scripts"); import bench
-rows = [r for r in csv.DictReader(l for l in open("evidence/bench-period.csv") if not l.startswith("#")) if r["period_ms"] == sys.argv[1]]
+src = "evidence/bench-faults.csv" if sys.argv[1] == "20" else "evidence/bench-period.csv"   # 20 ms = B1's FREEZE rows
+rows = [r for r in csv.DictReader(l for l in open(src) if not l.startswith("#")) if r["period_ms"] == sys.argv[1] and r["class"] == "FREEZE"]
 if rows: print(bench.render_faults(bench.analyze_faults(rows), False))
 PY
       done
@@ -45,7 +46,7 @@ case "${1:-report}" in
     $B clean --seconds 1800 --tag b3 --out evidence/bench-clean.csv
     $B faults --n 50 --classes CRASH --tag b6 --out evidence/bench-crash.csv --evroot evidence/bench-runs/b6
     $B faults --n 10 --classes MISDRAW --tag b7e --out evidence/bench-misdraw.csv --evroot evidence/bench-runs/b7e
-    for p in 10 20 50; do
+    for p in 10 50; do   # the 20 ms point is B1's FREEZE x 50 (same configuration), not re-run
       $B faults --n 50 --classes FREEZE --tag b4p$p --conf-extra "period_ms=$p" --out evidence/bench-period.csv --evroot evidence/bench-runs/b4-$p
     done
     report ;;
