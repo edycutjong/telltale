@@ -12,7 +12,6 @@ A renderer 'frame' is one change of the tick counter the monitor reads from the 
 """
 import csv
 import gzip
-import sys
 import argparse
 
 
