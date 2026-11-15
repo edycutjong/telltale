@@ -89,11 +89,13 @@ STALE needs the true speed to move, so it carries the 100 ms truth window by con
   (counted from when the cause became UNKNOWN, so one mixed state sample in a long STARVE cannot kill), the restart when a
   live renderer's window stays unreadable during SAFE-HOLD, a renderer that is starved first and then hangs or draws wrong
   (a stall's cause expires when the tick moves again), dashes on the safe layer after a restarted `vehicled` empties the
-  truth window, and a failed `kill()` (TT-GIVEUP, cause `kill-failed`). Incident ids restart at 0001 when the monitor
+  truth window, a failed `kill()` (TT-GIVEUP, cause `kill-failed`), and the no-window glass read on its own (on this
+  guest the regular composed check verifies the safe layer before the crashed window is found gone; the no-window read is
+  the fallback when the post is not composed yet). Incident ids restart at 0001 when the monitor
   restarts, so `incidents.csv` can repeat an id across monitor runs (`t_detect_ns` tells them apart). `DCMD_VEH_GET_SINCE`
   (the monitor's truth path) and the ionotify pulses (the renderer's data path) run in every recorded run but have no
   separate assertion.
-- **The monitor is not supervised:** nothing restarts `telltale` if it dies (the display keeps whatever the renderer draws);
+- **The monitor is not supervised:** nothing restarts `telltale` if it dies (the display is then no longer checked);
   a restarted monitor relearns the renderer and arms again (asserted by `core_items.sh`). The monitor holds the
   `xprocess_debug` ability (`secpol/telltale.pol`) to read the renderer's thread states through `/proc` for the
   hung-vs-starved decision.
