@@ -3,6 +3,7 @@
 # cat /dev/vehicle, ttctl status|disarm|arm|period|rearm|debug, cat /dev/telltale + /dev/telltale-events,
 # TRUTH_LOST (the feeder dies -> truth lost -> the feeder returns -> hand-back), DISARM in the middle of an incident
 # (observe-only in every state), a vehicled restart (the monitor reconnects), NO_DISPLAY (no renderer comes back),
+# (a crash after earlier incidents is checked at the end)
 # startup without truth (TRUTH-LOST, never WAIT forever) and the restart cap (a renderer wrong on every start -> TT-GIVEUP,
 # then rearm). Starts its own stack on the hero drive. Each line: PASS|FAIL <what>. Last line: core: <n>/<m> passed.
 cd /tmp/tt || exit 1
@@ -83,6 +84,7 @@ waitst NO-DISPLAY 120; S=$(st)
 chk "renderer gone and not restarted -> state NO-DISPLAY (safe layer keeps the truth up)" 'echo "$S" | grep -q "state=NO-DISPLAY "' "$S"
 cp log/telltale.log log/core-telltale-a.log
 rm -f stop
+# (a crash after earlier incidents is checked at the end)
 # startup without truth: fresh vehicled (no sample yet), no feeder -> after arm_grace_ms TRUTH-LOST, never WAIT forever
 sh tt_up.sh trace-hero.csv 30 0 - all script 0 > log/core-up2.txt 2>&1
 sleep 7; S=$(st)
@@ -107,6 +109,12 @@ rm -f fault-on-start
 ./ttctl rearm > /dev/null 2>&1
 waitst NORMAL 300; S=$(st)
 chk "fault removed + rearm -> renderer restarted, verified hand-back, NORMAL" 'echo "$S" | grep -q "state=NORMAL "' "$S"
+# a crash AFTER earlier incidents in the same session: the hidden safe layer still holds an earlier truth; it must stay
+# invisible when the renderer's window vanishes, so the composed read sees empty glass (BLANK), never a stale value
+F0=$(field faults); ./ttinject crash > /dev/null 2>&1
+n=0; while { [ "$(field faults)" -le "$F0" ] || ! st | grep -q "state=NORMAL "; } && [ $n -lt 300 ]; do sleep 0.1; n=$((n+1)); done
+L=$(cat /dev/telltale | tail -1)
+chk "crash after earlier incidents -> BLANK (no stale safe layer exposed), restarted, NORMAL" 'echo "$L" | grep -Eq "last=TT-BLK-[0-9]+ verdict=BLANK .*recovered=yes"' "$L"
 { grep -hE "TRUTH|NO_DISPLAY|NO-DISPLAY|restart timeout|DETECT|INCIDENT|->|reconnect|disarmed|GIVEUP|SIGKILL|not verified" log/core-telltale-a.log log/telltale.log; } > log/core-telltale.txt 2>/dev/null
 rm -f stop fault-on-start
 echo "core: $P/$N passed"

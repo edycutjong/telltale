@@ -83,6 +83,8 @@ static int io_devctl(resmgr_context_t *ctp, io_devctl_t *msg, iofunc_ocb_t *ocb)
         if (msg->i.nbytes < sizeof(struct veh_state)) return EINVAL;   /* never read past the client's payload */
         struct veh_state in;
         memcpy(&in, data, sizeof in);
+        /* a sample the cluster could not show is refused, never stored: finite speed in [-50, 500] km/h, gear P/R/N/D */
+        if (!(in.speed_kmh >= -50.0f && in.speed_kmh <= 500.0f) || in.gear > GEAR_D)   /* NaN fails both compares */ { denied++; return EINVAL; }
         in.seq = ++seq;
         in.t_ns = tt_now_ns();
         ring[(in.seq - 1) % VEH_RING] = in;

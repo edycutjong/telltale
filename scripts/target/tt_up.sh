@@ -38,6 +38,8 @@ else
 fi
 sleep 2
 SC=; [ "$TRACE" = trace-hero.csv ] && [ -f scenario-hero.csv ] && SC="--scenario scenario-hero.csv"
-[ "$FEED" = 1 ] && $PIN $F ./vehfeed "$TRACE" --hold "$HOLD" $SC > log/vehfeed.log 2>&1 < /dev/null &
+if [ "$FEED" = 1 ]; then   # an `[ ] && cmd &` list would background a subshell holding the ssh session's stdout open
+  $PIN $F ./vehfeed "$TRACE" --hold "$HOLD" $SC > log/vehfeed.log 2>&1 < /dev/null &
+fi
 sleep 1
 pidin -F '%a %b %N %p %J %B %i' | grep -E 'vehicled|vehfeed|telltale|cluster|slm' | grep -v grep

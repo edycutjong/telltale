@@ -24,10 +24,16 @@ static void scenario_load(const char *path)
     if (!f) { perror(path); exit(1); }
     size_t cap = 256; char line[128];
     sc_t = malloc(cap * sizeof *sc_t); sc_l = malloc(cap); sc_g = malloc(cap);
+    if (!sc_t || !sc_l || !sc_g) { perror("vehfeed: malloc"); exit(1); }
     while (fgets(line, sizeof line, f)) {
         double a; int l; char g;
         if (sscanf(line, "%lf,%i,%c", &a, &l, &g) != 3) continue;   /* header */
-        if (sc_n == cap) { cap *= 2; sc_t = realloc(sc_t, cap * sizeof *sc_t); sc_l = realloc(sc_l, cap); sc_g = realloc(sc_g, cap); }
+        if (sc_n == cap) {
+            cap *= 2;
+            double *nt = realloc(sc_t, cap * sizeof *sc_t); unsigned char *nl = realloc(sc_l, cap), *ng = realloc(sc_g, cap);
+            if (!nt || !nl || !ng) { perror("vehfeed: realloc"); exit(1); }
+            sc_t = nt; sc_l = nl; sc_g = ng;
+        }
         const char *gp = strchr("PRND", g);
         sc_t[sc_n] = a; sc_l[sc_n] = (uint8_t)l; sc_g[sc_n] = gp ? (uint8_t)(gp - "PRND") : GEAR_D; sc_n++;
     }
@@ -54,11 +60,17 @@ int main(int argc, char **argv)
     if (!f) { perror(argv[1]); return 1; }
     size_t cap = 1 << 16, n = 0;
     double *t = malloc(cap * sizeof *t), *v = malloc(cap * sizeof *v);
+    if (!t || !v) { perror("vehfeed: malloc"); return 1; }
     char line[128];
     while (fgets(line, sizeof line, f)) {
         double a, b;
         if (sscanf(line, "%lf,%lf", &a, &b) != 2) continue;   /* header */
-        if (n == cap) { cap *= 2; t = realloc(t, cap * sizeof *t); v = realloc(v, cap * sizeof *v); }
+        if (n == cap) {
+            cap *= 2;
+            double *nt = realloc(t, cap * sizeof *t), *nv = realloc(v, cap * sizeof *v);
+            if (!nt || !nv) { perror("vehfeed: realloc"); return 1; }
+            t = nt; v = nv;
+        }
         t[n] = a; v[n] = b; n++;
     }
     fclose(f);
