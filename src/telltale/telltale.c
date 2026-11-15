@@ -746,10 +746,15 @@ int main(void)
     struct incident inc; int inc_open = 0, armed = 1, prev_armed = 1, seq_inc = 0;
     int cap_errs = 0;                /* composed reads failed in a row */
     int tick_seed = 0;               /* the next composed tick read belongs to a newly registered renderer */
-    int live_n = 0;                  /* consecutive checks with a genuine tick move (a late check neither counts nor resets) */
+    int live_n = 0;                  /* genuine tick moves since the renderer was last stalled (reset by a stall or a new renderer) */
     enum cause cause = C_NONE;
     uint64_t t_unknown = 0;          /* when the current cause became UNKNOWN: the UNKNOWN kill counts from here */
     int readerr = 0;                 /* this check's window verdict is UNREADABLE because screen_read_window failed */
+    /* no renderer window in SAFE-HOLD: restart after mismatch_n checks; a starved / Screen-blocked renderer is given
+     * restart_timeout_ms first (never killed quickly), but without a readable window it cannot be verified, so it is
+     * restarted too rather than held forever (its cause cannot expire: no window, no tick read) */
+#define nowin_due(C, N) (((C) == C_STARVED || (C) == C_SCREEN) ? (uint64_t)(N) * (uint64_t)cfg.period_ms >= (uint64_t)cfg.restart_timeout_ms \
+                                                               : (N) >= cfg.mismatch_n)
     /* one status update per check on every path: state, counters and the open incident as it is NOW (cause, restarts) */
 #define PUB(CAPERR) do { pthread_mutex_lock(&g_mtx); g.checks++; if (CAPERR) g.capture_errors++; g.st = st; g.truth_gaps = T.gaps; \
             if (inc_open) { g.open_inc = inc; g.have_open = 1; } pthread_mutex_unlock(&g_mtx); } while (0)
@@ -844,11 +849,11 @@ int main(void)
                     if (inc_open && !strcmp(inc.cause, "-")) snprintf(inc.cause, sizeof inc.cause, "crash");
                     killed_pid = rend.pid; st = ST_RESTART; t_state = now; nowin_cnt = 0;
                     printf("telltale: renderer pid %d is gone (crash, no window)\n", rend.pid); fflush(stdout);
-                } else if (cause != C_STARVED && cause != C_SCREEN && ++nowin_cnt >= cfg.mismatch_n && cap_reached(now, &kills)) {
-                    st = ST_GIVEUP; t_state = now; nowin_cnt = 0;   /* never kill a starved / Screen-blocked renderer; cap applies here too */
+                } else if (++nowin_cnt, nowin_due(cause, nowin_cnt) && cap_reached(now, &kills)) {
+                    st = ST_GIVEUP; t_state = now; nowin_cnt = 0;   /* the cap applies here too */
                     if (inc_open) { snprintf(inc.cause, sizeof inc.cause, "TT-GIVEUP"); inc_write(&inc); open_publish(&inc); }
                     printf("telltale: TT-GIVEUP (no-window)\n"); fflush(stdout);
-                } else if (cause != C_STARVED && cause != C_SCREEN && nowin_cnt >= cfg.mismatch_n) {
+                } else if (nowin_due(cause, nowin_cnt)) {
                     if (inc_open && !strcmp(inc.cause, "-")) snprintf(inc.cause, sizeof inc.cause, "no-window");
                     uint64_t tk = tt_now_ns();
                     int kr = kill(rend.pid, SIGKILL), ke = errno;
@@ -858,7 +863,7 @@ int main(void)
                         if (inc_open) { snprintf(inc.cause, sizeof inc.cause, "kill-failed"); inc_write(&inc); open_publish(&inc); }
                     } else if (kr == -1) {   /* ESRCH: it died on its own between the checks -> the respawn path, no kill counted */
                         killed_pid = rend.pid; st = ST_RESTART; t_state = now; nowin_cnt = 0;
-                        if (inc_open) snprintf(inc.cause, sizeof inc.cause, "crash");
+                        if (inc_open && !strcmp(inc.cause, "-")) snprintf(inc.cause, sizeof inc.cause, "crash");
                         printf("telltale: renderer pid %d already gone (crash, no window)\n", rend.pid); fflush(stdout);
                     } else {
                         rcap_note(&kills, now); killed_pid = rend.pid;
@@ -937,8 +942,8 @@ int main(void)
         if (tick_seed) { last_tick = cs.tick; t_tick_change = t_cap_end; tick_seed = 0; live_n = 0; }   /* new renderer: seed, no move */
         else if (late) { last_tick = cs.tick; t_tick_change = t_cap_end; }
         else if (cs.tick != last_tick) { last_tick = cs.tick; t_tick_change = t_tick_real = t_cap_end; tick_moves_since_reg++; live_n++; }   /* t_tick_real: a genuine change, never a lateness reset */
-        else live_n = 0;
         int stalled = t_tick_change && t_cap_end - t_tick_change > (uint64_t)cfg.tick_stall_ms * MS;
+        if (stalled) live_n = 0;
         if (!t_tick_change) t_tick_change = t_cap_end;
         /* cause samples: while the tick has not moved for more than one period */
         if (t_cap_end - t_tick_change > (uint64_t)cfg.period_ms * MS) {   /* rolling: the latest 16 draw-thread states of this stall */
@@ -978,6 +983,7 @@ int main(void)
                     if (inc_open && !strcmp(inc.cause, "-")) snprintf(inc.cause, sizeof inc.cause, "crash");
                     killed_pid = rend.pid; st = ST_RESTART; t_state = now;
                     printf("telltale: renderer pid %d is gone (crash)\n", rend.pid); fflush(stdout);
+                    PUB(0);
                     atomic_store(&hb_start, 0);
                     continue;
                 }
@@ -1038,9 +1044,10 @@ int main(void)
                 snprintf(inc.cause, sizeof inc.cause, "%s", CN[cause]);
                 printf("telltale: cause %s (draw thread states %d,%d,%d)\n", CN[cause], cstates[ncs - 3], cstates[ncs - 2], cstates[ncs - 1]); fflush(stdout);
             } else if (cause != C_NONE && !stalled && live_n >= cfg.mismatch_n) {
-                /* the stall is over: the tick moved genuinely in mismatch_n checks in a row (one frame slipped through a
-                 * starvation is not enough), so its cause no longer protects or condemns the renderer; from here it is
-                 * judged live, and starved-then-wrong is killed as live-wrong after mismatch_n more wrong frames */
+                /* the stall is over: not stalled (a new frame within tick_stall_ms) and mismatch_n genuine tick moves since
+                 * the last stalled check (one frame slipping through a starvation is not enough; back-to-back is not required:
+                 * on TCG the renderer's frame gap, p50 ~38 ms, is longer than the check period). Its cause no longer protects
+                 * or condemns the renderer; starved-then-wrong is killed as live-wrong after mismatch_n more wrong checks */
                 printf("telltale: cause %s cleared (tick moving again)\n", CN[cause]); fflush(stdout);
                 cause = C_NONE; mismatch_cnt = 0;
             }
@@ -1081,7 +1088,7 @@ int main(void)
                     rcap_note(&kills, now); inc.restarts++; inc.t_kill = tk;
                     pthread_mutex_lock(&g_mtx); g.restarts_total++; pthread_mutex_unlock(&g_mtx);
                     printf("telltale: SIGKILL renderer pid %d (%s)\n", rend.pid, inc.cause); fflush(stdout);
-                } else { snprintf(inc.cause, sizeof inc.cause, "crash"); printf("telltale: renderer pid %d already gone (crash)\n", rend.pid); fflush(stdout); }
+                } else { if (!strcmp(inc.cause, "-")) snprintf(inc.cause, sizeof inc.cause, "crash"); printf("telltale: renderer pid %d already gone (crash)\n", rend.pid); fflush(stdout); }
                 rwin = NULL; st = ST_RESTART;
             }
             break;
