@@ -1,0 +1,1 @@
+run t class=debug inject=stale heal_at=14.0 conf_extra=mismatch_n=1000 at=12.221 accel=QEMU(TCG) policy=0 debug=1 cpu=any scope=all sup=script

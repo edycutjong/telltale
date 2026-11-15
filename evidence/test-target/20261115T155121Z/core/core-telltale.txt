@@ -1,0 +1,10 @@
+telltale: WAIT -> NORMAL
+telltale: DETECT TT-TRL-0001 TRUTH_LOST shown=52 truth=52 lamps_shown=0x10 lamps_truth=0x10 caught_ms=21.1
+telltale: NORMAL -> TRUTH-LOST
+telltale: TRUTH-LOST -> SAFE-HOLD
+telltale: INCIDENT TT-TRL-0001,TRUTH_LOST,-,52,52,2249398237943,2249419311587,21.1,2249443347008,0,0,2249757213328,0,0.0,25215004,0,0x10,0x10
+telltale: SAFE-HOLD -> NORMAL
+telltale: DETECT TT-FRZ-0002 TICK_STALL shown=52 truth=52 lamps_shown=0x10 lamps_truth=0x10 caught_ms=16.1
+telltale: NORMAL -> SAFE-HOLD
+telltale: restart timeout (pid 25215004 did not register)
+telltale: RESTARTING -> NO-DISPLAY

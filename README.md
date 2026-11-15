@@ -9,15 +9,13 @@ the digits and lamps, and checks them against `/dev/vehicle`. On a lie it puts a
 top, decides hung vs starved from the renderer's thread states, kills and respawns a hung or wrong renderer, verifies
 the new one, and hands the display back. 20 ms is the configured check period (`period_ms`), not a measured figure.
 Recorded runs per fault class: [`evidence/runs/`](evidence/runs/). Tests: `make test-host` = C checks (test_disp 12, test_decode 91,
-test_text 17) + 82 Python tests (8 need Pillow). `make test-target`: 111 passed, 0 failed on the QEMU (TCG) guest at
-commit 5e1789d ([`evidence/test-target/20261115T142358Z/summary.txt`](evidence/test-target/20261115T142358Z/summary.txt)),
-including the engineering-mode case whose banner and incident card are read back from frames a separate process captured.
-The suite run before it ([`20261115T141317Z`](evidence/test-target/20261115T141317Z/summary.txt), 110 passed, 1 failed) is
-kept: it caught a race where a frozen renderer was killed as "live-wrong" before its stall was classified. A later QA round
-added `tests/target/core_items.sh` (17/17, which found two more monitor bugs, now fixed) and a third read-back frame (card
-gone after `card_ms`, [`evidence/runs/p1b-151033-debug/`](evidence/runs/p1b-151033-debug/)); full-suite re-runs with those
-fixes lost single checks to spurious TICK_STALLs while the macOS host was loaded (load average 31–44, logged in the
-summary), so a quiet-host re-run is pending.
+test_text 17) + 82 Python tests (8 need Pillow). `make test-target`: 130 passed, 0 failed on the QEMU (TCG) guest at
+commit 10627eb ([`evidence/test-target/20261115T155121Z/summary.txt`](evidence/test-target/20261115T155121Z/summary.txt), host
+load logged at start and end), including `tests/target/core_items.sh` 17/17 (`/dev/vehicle`, `ttctl`, `/dev/telltale`,
+TRUTH_LOST + recovery, NO_DISPLAY, the incident in slog2), the secpol denials 16/16, and the engineering-mode case whose banner
+and incident card (and the card gone after `card_ms`) are read back from frames a separate process captured.
+An earlier run ([`20261115T141317Z`](evidence/test-target/20261115T141317Z/summary.txt), 110 passed, 1 failed) is
+kept: it caught a race where a frozen renderer was killed as "live-wrong" before its stall was classified (fixed since).
 The bench (200 injected faults, ablation, false-positive run) comes next. Every timing here is QEMU (TCG), not hardware timing.
 
 ## What is here today

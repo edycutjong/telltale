@@ -1,0 +1,18 @@
+PASS monitor armed on the parked car (state NORMAL)
+PASS cat /dev/vehicle prints seq, speed, gear and lamps
+PASS ttctl status = the /dev/telltale status line
+PASS ttctl disarm -> armed=0
+PASS ttctl arm -> armed=1
+PASS ttctl period 40 -> period_ms=40 (the knob)
+PASS ttctl period 3 refused (EINVAL, range 5..1000)
+PASS ttctl period 20 -> period_ms=20
+PASS ttctl rearm + debug off accepted
+PASS cat /dev/telltale-events starts with the incident CSV header
+PASS feeder killed -> state TRUTH-LOST
+PASS feeder back -> verified hand-back, state NORMAL
+PASS TRUTH_LOST incident closed: last=TT-TRL-* verdict=TRUTH_LOST recovered=yes in /dev/telltale
+PASS the TRUTH_LOST row is in /dev/telltale-events
+PASS the TRUTH_LOST incident is in slog2 (slog2info, buffer set telltale)
+PASS period knob kept the configured tick_stall_ms=150 (not the 57 ms rule floor)
+PASS renderer gone and not restarted -> state NO-DISPLAY (safe layer keeps the truth up)
+core: 17/17 passed

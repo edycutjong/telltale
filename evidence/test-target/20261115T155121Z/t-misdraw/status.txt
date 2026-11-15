@@ -1,0 +1,7 @@
+armed=1 state=NORMAL period_ms=20 W_ms=100 tick_stall_ms=150 checks=1751 faults=1 restarts=1 late=0 screen_stalls=0 renderer_pid=5640220
+last=TT-VAL-0001 verdict=VALUE_MISMATCH cause=live-wrong shown=84 truth=48 caught_ms=20.5 (since last verified frame) recovered=yes
+
+id,verdict,cause,shown,truth,t_last_verified_ns,t_detect_ns,caught_ms,t_safe_visible_ns,t_kill_ns,t_register_ns,t_true_ns,restarts,exposure_ms,renderer_pid,new_pid,lamps_shown,lamps_truth
+TT-VAL-0001,VALUE_MISMATCH,live-wrong,84,48,1905376205723,1905396700020,20.5,1905416432860,1905502572544,1905750815489,1905776459876,1,0.0,5480478,5640220,0x01,0x01
+
+seq=1406 t_ns=1918094931959 trace_s=24.964 speed_kmh=0.00 gear=D lamps=0x04
