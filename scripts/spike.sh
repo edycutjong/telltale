@@ -8,6 +8,7 @@ G=scripts/guest.sh
 B=out/${QNX_ARCH:-x86_64}
 RID="${TT_RUN_ID:-$(date -u +%Y%m%dT%H%MZ)}"
 EV="evidence/spike/$RID"
+if [ -n "$(ls -A "$EV" 2>/dev/null)" ]; then echo "spike.sh: $EV already has files; use a new TT_RUN_ID" >&2; exit 1; fi
 mkdir -p "$EV"
 log() { echo "== $*" | tee -a "$EV/run.log"; }
 

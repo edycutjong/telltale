@@ -5,7 +5,7 @@
 
 Reads g1.txt (RESULT lines), g4-timer.csv, g4-readback.csv, g3.txt, g2.txt; converts every *.ppm to *.png
 (and deletes the ppm); writes SUMMARY.md with each gate's measured numbers and verdict against the bar in
-the project spec. Percentiles are nearest-rank. Every timing is QEMU (TCG), not hardware timing.
+the gate bars (timer p95 <= 5 ms, 3-rect check p95 <= 10 ms; see evidence/spike/README.md). Percentiles are nearest-rank. Every timing is QEMU (TCG), not hardware timing.
 """
 import csv
 import math
@@ -109,7 +109,8 @@ def main(d: Path) -> int:
           and re.search(r"type=monitor_t\(id \d+\) -> \S*r\.chan: ConnectAttach DENIED errno=1", g3))
     drop_denied = re.search(r"drop to uid 1001[^\n]*\n(?:[^\n]*\n)??setuid: Operation not permitted", g3)
     verdicts["G3 uid drop limited"] = "PASS" if drop_denied else "FAIL"
-    verdicts["G3 (minimal)"] = "PASS" if ok else "FAIL"
+    in_run = "policy id:0" in g3  # the push happened inside this run (else a policy from earlier in this boot)
+    verdicts["G3 (minimal)"] = ("PASS" if in_run else "PASS (policy pushed before this run)") if ok else "FAIL"
     out += ["## G3 — secpol least privilege (minimal: types + channel connect + uid drop)", "", "```", g3.strip(), "```", ""]
 
     out[1:1] = ["", "| gate | verdict |", "|---|---|"] + [f"| {k} | {v} |" for k, v in verdicts.items()] + [""]
