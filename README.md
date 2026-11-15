@@ -1,6 +1,6 @@
 # Telltale
 
-Telltale is being built as an isolated QNX 8.0 monitor that reads back what the instrument cluster actually shows and checks it against the vehicle state.
+Telltale is an isolated QNX 8.0 monitor that reads back what the instrument cluster actually shows and checks it against the vehicle state.
 
 **Status: core flow running on the QNX 8.0 target (QEMU).** This repository is being written during the QNX
 hackathon (Nov–Dec 2026). The whole loop runs on a QNX 8.0 x86_64 guest under QEMU (TCG): `vehicled` serves the
@@ -8,14 +8,16 @@ vehicle state, `cluster` draws it with QNX Screen, and `telltale` reads the comp
 the digits and lamps, and checks them against `/dev/vehicle`. On a lie it puts a safe layer with the true values on
 top, decides hung vs starved from the renderer's thread states, kills and respawns a hung or wrong renderer, verifies
 the new one, and hands the display back. 20 ms is the configured check period (`period_ms`), not a measured figure.
-Recorded runs per fault class: [`evidence/runs/`](evidence/runs/). Tests: `make test-host` = C 12 + 91 + 17 checks, 80 Python
-tests; `make test-target` = 111 passed, 0 failed on the QEMU (TCG) guest
-([`evidence/test-target/20261115T142358Z/summary.txt`](evidence/test-target/20261115T142358Z/summary.txt)), including the
-engineering-mode case whose banner and incident card are read back from frames a separate process captured
-([`banner.png`](evidence/test-target/20261115T142358Z/t-debug/banner.png), [`card.png`](evidence/test-target/20261115T142358Z/t-debug/card.png)).
+Recorded runs per fault class: [`evidence/runs/`](evidence/runs/). Tests: `make test-host` = C checks (test_disp 12, test_decode 91,
+test_text 17) + 82 Python tests (2 need Pillow). `make test-target`: 111 passed, 0 failed on the QEMU (TCG) guest at
+commit 5e1789d ([`evidence/test-target/20261115T142358Z/summary.txt`](evidence/test-target/20261115T142358Z/summary.txt)),
+including the engineering-mode case whose banner and incident card are read back from frames a separate process captured.
 The suite run before it ([`20261115T141317Z`](evidence/test-target/20261115T141317Z/summary.txt), 110 passed, 1 failed) is
-kept: it caught a race where a frozen renderer was killed as "live-wrong" before its stall was classified; a wrong value
-now counts towards a kill only once the renderer's tick has moved since detection.
+kept: it caught a race where a frozen renderer was killed as "live-wrong" before its stall was classified. A later QA round
+added `tests/target/core_items.sh` (16/16, which found two more monitor bugs, now fixed) and a third read-back frame (card
+gone after `card_ms`, [`evidence/runs/p1b-151033-debug/`](evidence/runs/p1b-151033-debug/)); full-suite re-runs with those
+fixes lost single checks to spurious TICK_STALLs while the macOS host was loaded (load average 31–44, logged in the
+summary), so a quiet-host re-run is pending.
 The bench (200 injected faults, ablation, false-positive run) comes next. Every timing here is QEMU (TCG), not hardware timing.
 
 ## What is here today
@@ -24,14 +26,14 @@ The bench (200 injected faults, ablation, false-positive run) comes next. Every 
 | `src/vehicled/` | the `/dev/vehicle` resource manager: `cat /dev/vehicle`, devctl GET / GET_SINCE / SET, ionotify pulses; writes only from the feeder (secpol `vehicle:write`) |
 | `src/vehfeed/` | replays a real comma2k19 speed trace plus the scripted lamp scenario (`data/scenario-hero.csv`) into `/dev/vehicle` in real time |
 | `src/cluster/` | the instrument cluster: a QNX Screen renderer (speed digits from the D-DIN glyph atlas, gear strip (drawn, not verified by the monitor), 6 lamps, a 4-bit liveness tick) with test hooks on `/dev/cluster-ctl` |
-| `src/telltale/` | the monitor: SCHED_FIFO 60, 20 ms timer pulse, `screen_read_display` of the composed digits, lamps and tick, `screen_read_window` of the renderer's own window, truth window, verdicts, safe layer, cause check via `/proc`, kill / respawn / verified hand-back, incidents on `/dev/telltale-events`; the fault banner (driver mode: `DISPLAY FAULT · SHOWING TRUE SPEED`, no metrics; engineering mode adds the class and this incident's caught ms) and, in engineering mode, a 5-s incident card in its own window after recovery (id, verdict, shown vs truth, caught / restored ms, action, `cat /dev/telltale`) |
+| `src/telltale/` | the monitor: SCHED_FIFO 60, 20 ms timer pulse, `screen_read_display` of the composed digits, lamps and tick, `screen_read_window` of the renderer's own window, truth window, verdicts, safe layer, cause check via `/proc`, kill / respawn / verified hand-back, incidents on `/dev/telltale-events`; the fault banner (driver mode: `DISPLAY FAULT · SHOWING TRUE SPEED`, or `· SPEED DATA LOST` when the truth is lost, no metrics; engineering mode adds the verdict name, e.g. `VALUE_MISMATCH`, and this incident's caught ms) and, in engineering mode, an incident card in its own window for `card_ms` (default 5000) after recovery (id, verdict (+ cause), shown vs truth, caught / restored ms — both measured from the last verified frame — action, `cat /dev/telltale`) |
 | `src/tools/` | `ttinject` (FREEZE lock inversion, BLANK, STALE, MISDRAW, CRASH, LAMPDROP, heal), `hog` (the STARVE fault: an external priority hog), `ttctl` (arm / disarm / rearm / period / `debug on` = engineering mode), `ttshot` (display capture to PPM) |
 | `src/common/` | shared C code: vehicle state and devctl protocol, layout and palette, glyph atlas (`glyphs.h`, generated by `tools/gen_glyphs.py`), digit + lamp decoder, truth window, `disp_kmh()` rounding rule, secpol entry (`ttsec.c`) |
 | `secpol/telltale.pol` | the security policy: one type per process, channel-connect rules, `vehicle:write` for the feeder only, `telltale:control` for the injector only, the monitor's signal / process-query abilities, the hog capped at priority 40 |
 | `scripts/scenario.sh`, `scripts/target/` | one recorded run on the target (start the stack, fire a fault at a trace time, collect the logs); `scripts/target/tt_up.sh` is the start script (vehicled → telltale → cluster → vehfeed); the renderer is restarted by a shell loop or, with `TT_SUP=slm`, by QNX `slm` (`telltale-slm.xml`) |
-| `scripts/test_target.sh`, `scripts/check_run.py`, `tests/target/` | the on-target test suite (`make test-target`): one run per fault class, a clean drive, the hold → heal → hand-back sequence, secpol denials |
+| `scripts/test_target.sh`, `scripts/check_run.py`, `tests/target/` | the on-target test suite (`make test-target`): one run per fault class, a clean drive, the hold → heal → hand-back sequence, the same in engineering mode (banner + card read back), `tests/target/core_items.sh` (`/dev/vehicle`, `ttctl`, `/dev/telltale`, TRUTH_LOST and its recovery, NO_DISPLAY), secpol denials |
 | `scripts/bench.py` | host-side analysis of bench CSVs from the target: per-class p50/p95/max, misses, failed rows, false positives |
-| `tools/fetch_comma_speed.py` | pulls only the CAN speed arrays out of a ~9 GB comma2k19 chunk with HTTP range reads (about 16 MB of extracted arrays for Chunk_1 plus one Chunk_8 route, measured with `du` outside the repo; each zip's directory is read too) |
+| `tools/fetch_comma_speed.py` | pulls only the CAN speed arrays out of a comma2k19 chunk with HTTP range reads (each zip's central directory is read too) |
 | `tools/trace_from_comma.py` | builds the real speed traces: the hero stop, the 31-min bench drive, the speed-changing-window census |
 | `data/` | the derived traces (real comma2k19 CAN samples, MIT) with provenance and SHA-256 in [`data/SOURCES.md`](data/SOURCES.md) |
 | `spike/` | the QNX 8.0 gate spikes (C, `qcc`): Screen read-back of the composed display and of a window (G1), a 20 ms timer-pulse jitter probe (G4), secpol types and channel-connect rules (G3) |
@@ -41,10 +43,11 @@ The bench (200 injected faults, ablation, false-positive run) comes next. Every 
 | `scripts/guest.sh`, `tools/qnx_serial.py`, `scripts/spike.sh` | ssh/serial helpers for the guest and the spike runner (`make spike`) |
 | `tests/host/` | host-runnable unit tests (C + Python); `tests/fixtures/synthetic-*.csv` are hand-written test inputs, not measurements |
 
-## Known limits (measured, not hidden)
+## Known limits (measured)
 - **Whole-CPU starvation:** with Screen, the monitor, the renderer and the hog all on one CPU, Telltale detects the stall
   but its safe layer only becomes visible when the hog ends, because Screen's own threads (priority 10–16) are starved too
-  ([`evidence/runs/p1b-130521-starve/`](evidence/runs/p1b-130521-starve/)). STARVE is therefore shown and tested as
+  ([`evidence/runs/p1b-130521-starve/`](evidence/runs/p1b-130521-starve/)); that one-CPU setup also overloads on TCG
+  without the hog: 55 incidents in the run, 2 before the hog, 1 during it, 52 after it ended. STARVE is therefore shown and tested as
   **"STARVE (renderer CPU only)"**: renderer + hog pinned to one CPU, Screen and monitor free
   ([`evidence/runs/p1b-130644-starve/`](evidence/runs/p1b-130644-starve/)). No priority-inheritance claim is made.
 - **Gear** is drawn but not verified. Speed digits, the 6 lamps and the liveness tick are verified.
@@ -53,6 +56,11 @@ The bench (200 injected faults, ablation, false-positive run) comes next. Every 
   code), and reading Screen buffers is a Screen permission, not a secpol rule. There is no `screen_t`: Screen is started
   before the runtime policy push (the push is immutable until reboot).
 - `tick_stall_ms=150` and `restart_timeout_ms=4000` are provisional values for QEMU (TCG) until the bench calibration.
+- Not asserted by a test yet: the restart cap (TT-GIVEUP) and the kill after an UNKNOWN-cause stall. `DCMD_VEH_GET_SINCE`
+  (the monitor's truth path) and the ionotify pulses (the renderer's data path) run in every recorded run but have no
+  separate assertion.
+- The fault banner shows the monitor's verdict (`VALUE_MISMATCH`, `TICK_STALL`, ...), not the injected fault class: the
+  monitor cannot know what was injected.
 
 ## Run the host tests
 ```sh

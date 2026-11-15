@@ -1,0 +1,1 @@
+ttshot: log/banner.ppm 1280x768+0+0 of display 1280x768 at t_ns=462162751954

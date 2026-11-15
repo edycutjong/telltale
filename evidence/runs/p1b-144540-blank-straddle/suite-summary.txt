@@ -1,0 +1,131 @@
+PASS freeze: 1 incident(s): 1 fault + 0 self-resolved stall(s) within 2 s of hand-back + 0 other (want <= 1 settle stall, 0 other: no flapping)
+PASS freeze: verdict TICK_STALL in ['TICK_STALL', 'VALUE_MISMATCH']
+PASS freeze: cause hung in ['hung']
+PASS freeze: detected after the fault command (t_detect 145547842137 > 145406939776)
+PASS freeze: detected 141 ms after the fault command (< 2000 ms)
+PASS freeze: safe layer read back visible after detection
+PASS freeze: renderer killed (t_kill set)
+PASS freeze: hand-back: a verified-true renderer frame after detection (t_true set)
+PASS blank: 1 incident(s): 1 fault + 0 self-resolved stall(s) within 2 s of hand-back + 0 other (want <= 1 settle stall, 0 other: no flapping)
+FAIL blank: verdict VALUE_MISMATCH in ['BLANK', 'UNREADABLE']
+PASS blank: detected after the fault command (t_detect 186004358743 > 185973792517)
+PASS blank: detected 31 ms after the fault command (< 2000 ms)
+PASS blank: safe layer read back visible after detection
+PASS blank: renderer killed (t_kill set)
+PASS blank: hand-back: a verified-true renderer frame after detection (t_true set)
+PASS stale: 1 incident(s): 1 fault + 0 self-resolved stall(s) within 2 s of hand-back + 0 other (want <= 1 settle stall, 0 other: no flapping)
+PASS stale: verdict VALUE_MISMATCH in ['VALUE_MISMATCH']
+PASS stale: cause live-wrong in ['live-wrong']
+PASS stale: detected after the fault command (t_detect 226812916166 > 226646155462)
+PASS stale: detected 167 ms after the fault command (< 2000 ms)
+PASS stale: safe layer read back visible after detection
+PASS stale: renderer killed (t_kill set)
+PASS stale: hand-back: a verified-true renderer frame after detection (t_true set)
+PASS misdraw: 1 incident(s): 1 fault + 0 self-resolved stall(s) within 2 s of hand-back + 0 other (want <= 1 settle stall, 0 other: no flapping)
+PASS misdraw: verdict VALUE_MISMATCH in ['VALUE_MISMATCH']
+PASS misdraw: cause live-wrong in ['live-wrong']
+PASS misdraw: detected after the fault command (t_detect 267602464986 > 267558813525)
+PASS misdraw: detected 44 ms after the fault command (< 2000 ms)
+PASS misdraw: safe layer read back visible after detection
+PASS misdraw: renderer killed (t_kill set)
+PASS misdraw: hand-back: a verified-true renderer frame after detection (t_true set)
+PASS misdraw: shown 84 != truth 47
+PASS crash: 1 incident(s): 1 fault + 0 self-resolved stall(s) within 2 s of hand-back + 0 other (want <= 1 settle stall, 0 other: no flapping)
+PASS crash: verdict VALUE_MISMATCH in ['BLANK', 'NO_DISPLAY', 'TICK_STALL', 'UNREADABLE', 'VALUE_MISMATCH']
+PASS crash: cause crash in ['crash']
+PASS crash: detected after the fault command (t_detect 308368739496 > 308343556423)
+PASS crash: detected 25 ms after the fault command (< 2000 ms)
+PASS crash: safe layer read back visible after detection
+PASS crash: hand-back: a verified-true renderer frame after detection (t_true set)
+PASS crash: a new renderer registered (pid 12439583 -> 12681244)
+PASS lampdrop: 1 incident(s): 1 fault + 0 self-resolved stall(s) within 2 s of hand-back + 0 other (want <= 1 settle stall, 0 other: no flapping)
+PASS lampdrop: verdict VALUE_MISMATCH in ['VALUE_MISMATCH']
+PASS lampdrop: cause live-wrong in ['live-wrong']
+PASS lampdrop: detected after the fault command (t_detect 353183087235 > 353161644658)
+PASS lampdrop: detected 21 ms after the fault command (< 2000 ms)
+PASS lampdrop: safe layer read back visible after detection
+PASS lampdrop: renderer killed (t_kill set)
+PASS lampdrop: hand-back: a verified-true renderer frame after detection (t_true set)
+PASS lampdrop: lamps shown 0x01 != truth 0x05
+PASS starve: 1 incident(s): 1 fault + 0 self-resolved stall(s) within 2 s of hand-back + 0 other (want <= 1 settle stall, 0 other: no flapping)
+PASS starve: verdict VALUE_MISMATCH in ['TICK_STALL', 'VALUE_MISMATCH']
+PASS starve: cause starved in ['starved']
+PASS starve: detected after the fault command (t_detect 394015473189 > 393866054422)
+PASS starve: detected 149 ms after the fault command (< 2000 ms)
+PASS starve: safe layer read back visible after detection
+PASS starve: no kill, no restart
+PASS starve: hand-back: a verified-true renderer frame after detection (t_true set)
+PASS none: clean drive: 0 incidents (want 0)
+PASS accept: 1 incident(s): 1 fault + 0 self-resolved stall(s) within 2 s of hand-back + 0 other (want <= 1 settle stall, 0 other: no flapping)
+PASS accept: verdict VALUE_MISMATCH in ['VALUE_MISMATCH']
+PASS accept: detected after the fault command (t_detect 500867881152 > 500712615046)
+PASS accept: detected 155 ms after the fault command (< 2000 ms)
+PASS accept: safe layer read back visible after detection
+PASS accept: no kill, no restart
+PASS accept: hand-back: a verified-true renderer frame after detection (t_true set)
+PASS accept: heal sent during the hold, before the hand-back (t_heal 502482474990)
+PASS debug: 1 incident(s): 1 fault + 0 self-resolved stall(s) within 2 s of hand-back + 0 other (want <= 1 settle stall, 0 other: no flapping)
+PASS debug: verdict VALUE_MISMATCH in ['VALUE_MISMATCH']
+PASS debug: detected after the fault command (t_detect 541797379952 > 541641626651)
+PASS debug: detected 156 ms after the fault command (< 2000 ms)
+PASS debug: safe layer read back visible after detection
+PASS debug: no kill, no restart
+PASS debug: hand-back: a verified-true renderer frame after detection (t_true set)
+PASS debug: heal sent during the hold, before the hand-back (t_heal 543406445578)
+PASS debug: engineering banner logged with this incident's class + caught ms ('ENGINEERING VIEW · DISPLAY FAULT CAUGHT · VALUE_MISMATCH · 19 ms')
+PASS debug: incident card logged, every row = this incident's incidents.csv values (['INCIDENT TT-VAL-0001', 'VALUE_MISMATCH', 'shown 48 · truth 47 km/h', 'caught 19 ms · restored 1696 ms', 'handed back, no restart', 'service: cat /dev/telltale'])
+PASS debug: card hidden after card_ms
+PASS debug: banner read back: amber 0.87, text spans x 150..1130 vs drawn 148..1131 (+-4/6 px)
+PASS debug: card read back: background 0.84, 2991 lit text px, amber top stripe True
+PASS debug: card gone from the frame after card_ms: background 0.00, stripe 0.00 (want < 0.2)
+PASS freeze: 1 incident(s): 1 fault + 0 self-resolved stall(s) within 2 s of hand-back + 0 other (want <= 1 settle stall, 0 other: no flapping)
+PASS freeze: verdict TICK_STALL in ['TICK_STALL', 'VALUE_MISMATCH']
+PASS freeze: cause hung in ['hung']
+PASS freeze: detected after the fault command (t_detect 590551162465 > 590413130252)
+PASS freeze: detected 138 ms after the fault command (< 2000 ms)
+PASS freeze: safe layer read back visible after detection
+PASS freeze: renderer killed (t_kill set)
+PASS freeze: hand-back: a verified-true renderer frame after detection (t_true set)
+PASS monitor armed on the parked car (state NORMAL)
+PASS cat /dev/vehicle prints seq, speed, gear and lamps
+PASS ttctl status = the /dev/telltale status line
+PASS ttctl disarm -> armed=0
+PASS ttctl arm -> armed=1
+PASS ttctl period 40 -> period_ms=40 (the knob)
+PASS ttctl period 3 refused (EINVAL, range 5..1000)
+PASS ttctl period 20 -> period_ms=20
+PASS ttctl rearm + debug off accepted
+PASS cat /dev/telltale-events starts with the incident CSV header
+PASS feeder killed -> state TRUTH-LOST
+PASS feeder back -> verified hand-back, state NORMAL
+PASS TRUTH_LOST incident closed: last=TT-TRL-* verdict=TRUTH_LOST recovered=yes in /dev/telltale
+PASS the TRUTH_LOST row is in /dev/telltale-events
+PASS period knob kept the configured tick_stall_ms=150 (not the 57 ms rule floor)
+PASS renderer gone and not restarted -> state NO-DISPLAY (safe layer keeps the truth up)
+core: 16/16 passed
+PASS freeze: 1 incident(s): 1 fault + 0 self-resolved stall(s) within 2 s of hand-back + 0 other (want <= 1 settle stall, 0 other: no flapping)
+PASS freeze: verdict VALUE_MISMATCH in ['TICK_STALL', 'VALUE_MISMATCH']
+PASS freeze: cause hung in ['hung']
+PASS freeze: detected after the fault command (t_detect 645836002401 > 645680009004)
+PASS freeze: detected 156 ms after the fault command (< 2000 ms)
+PASS freeze: safe layer read back visible after detection
+PASS freeze: renderer killed (t_kill set)
+PASS freeze: hand-back: a verified-true renderer frame after detection (t_true set)
+PASS vehicle write denied for monitor_t (DCMD_VEH_SET: Operation not permitted)
+PASS vehicle write denied for renderer_t (DCMD_VEH_SET: Operation not permitted)
+PASS vehicle write denied for injector_t (DCMD_VEH_SET: Operation not permitted)
+PASS vehicle write denied for hog_t (/dev/vehicle: Operation not permitted)
+PASS vehicle write denied for untyped root (DCMD_VEH_SET: Operation not permitted)
+PASS feeder_t writes (1926 -> 1955)
+PASS monitor control denied for renderer_t
+PASS monitor control denied for feeder_t
+PASS monitor control denied for untyped root
+PASS injector_t controls the monitor
+PASS hog_t refused prio 50
+PASS hog_t runs at prio 40
+PASS vehicled runs as vehicle_t
+PASS telltale runs as monitor_t
+PASS cluster runs as renderer_t
+PASS vehfeed runs as feeder_t
+secpol: 16/16 passed
+test-target: 127 passed, 1 failed  (QEMU (TCG) x86_64 guest; logs evidence/test-target/20261115T144328Z)
