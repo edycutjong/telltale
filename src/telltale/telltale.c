@@ -746,6 +746,7 @@ int main(void)
     struct incident inc; int inc_open = 0, armed = 1, prev_armed = 1, seq_inc = 0;
     int cap_errs = 0;                /* composed reads failed in a row */
     int tick_seed = 0;               /* the next composed tick read belongs to a newly registered renderer */
+    int live_n = 0;                  /* consecutive checks with a genuine tick move (a late check neither counts nor resets) */
     enum cause cause = C_NONE;
     uint64_t t_unknown = 0;          /* when the current cause became UNKNOWN: the UNKNOWN kill counts from here */
     int readerr = 0;                 /* this check's window verdict is UNREADABLE because screen_read_window failed */
@@ -754,12 +755,12 @@ int main(void)
             if (inc_open) { g.open_inc = inc; g.have_open = 1; } pthread_mutex_unlock(&g_mtx); } while (0)
     /* stamp the correction on glass from a composed read S taken in [T0, T1]: marker seen, then digits + lamps = truth
      * (the stall is ignored: the safe layer has no tick). Used with and without a renderer window. */
-#define SAFE_STAMP(S, T0, T1, FRESH) do { if (inc_open && (S).marker) { \
+#define SAFE_STAMP(S, T0, T1, FRESH, PATH) do { if (inc_open && (S).marker) { \
             if (!inc.t_safe_visible) inc.t_safe_visible = (T1); \
             int a_, b_; \
             if (!inc.t_safe_true && (FRESH) && judge(&(S), (T0) - (uint64_t)cfg.W_ms * MS, (T1), 0, &a_, &b_) == V_PASS) { \
                 inc.t_safe_true = (T1); \
-                printf("telltale: SAFE verified on glass %s (%.1f ms after detect)\n", inc.id, (inc.t_safe_true - inc.t_detect) / 1e6); fflush(stdout); } } } while (0)
+                printf("telltale: SAFE verified on glass %s (%.1f ms after detect, %s)\n", inc.id, (inc.t_safe_true - inc.t_detect) / 1e6, PATH); fflush(stdout); } } } while (0)
 
     for (;;) {
         struct _pulse p;
@@ -850,10 +851,15 @@ int main(void)
                 } else if (cause != C_STARVED && cause != C_SCREEN && nowin_cnt >= cfg.mismatch_n) {
                     if (inc_open && !strcmp(inc.cause, "-")) snprintf(inc.cause, sizeof inc.cause, "no-window");
                     uint64_t tk = tt_now_ns();
-                    if (kill(rend.pid, SIGKILL) == -1 && errno != ESRCH) {
-                        printf("telltale: SIGKILL renderer pid %d failed: %s -> TT-GIVEUP\n", rend.pid, strerror(errno)); fflush(stdout);
+                    int kr = kill(rend.pid, SIGKILL), ke = errno;
+                    if (kr == -1 && ke != ESRCH) {
+                        printf("telltale: SIGKILL renderer pid %d failed: %s -> TT-GIVEUP\n", rend.pid, strerror(ke)); fflush(stdout);
                         st = ST_GIVEUP; t_state = now; nowin_cnt = 0;
                         if (inc_open) { snprintf(inc.cause, sizeof inc.cause, "kill-failed"); inc_write(&inc); open_publish(&inc); }
+                    } else if (kr == -1) {   /* ESRCH: it died on its own between the checks -> the respawn path, no kill counted */
+                        killed_pid = rend.pid; st = ST_RESTART; t_state = now; nowin_cnt = 0;
+                        if (inc_open) snprintf(inc.cause, sizeof inc.cause, "crash");
+                        printf("telltale: renderer pid %d already gone (crash, no window)\n", rend.pid); fflush(stdout);
                     } else {
                         rcap_note(&kills, now); killed_pid = rend.pid;
                         if (inc_open) { inc.restarts++; inc.t_kill = tk; }
@@ -886,7 +892,7 @@ int main(void)
                     ss.marker = tt_marker_ok(pb + (long)(L_MARK_Y - L_BLOCK_Y) * sb + (L_MARK_X - L_BLOCK_X), sb);
                     drain_truth();
                     const struct veh_state *nlt = truth_latest(&T);
-                    SAFE_STAMP(ss, n0, n1, nlt && (nlt->t_ns >= n1 || n1 - nlt->t_ns <= (uint64_t)cfg.truth_lost_ms * MS));
+                    SAFE_STAMP(ss, n0, n1, nlt && (nlt->t_ns >= n1 || n1 - nlt->t_ns <= (uint64_t)cfg.truth_lost_ms * MS), "no renderer window");
                 }
             }
             if (st != prev_nw) { printf("telltale: %s -> %s\n", ST[prev_nw], ST[st]); fflush(stdout); }
@@ -928,9 +934,10 @@ int main(void)
         cs.lamps = tt_lamps_decode(pl, sl, cfg.lamp_thr);
         cs.marker = tt_marker_ok(pb + (long)(L_MARK_Y - L_BLOCK_Y) * sb + (L_MARK_X - L_BLOCK_X), sb);
 
-        if (tick_seed) { last_tick = cs.tick; t_tick_change = t_cap_end; tick_seed = 0; }   /* new renderer: seed, no move */
+        if (tick_seed) { last_tick = cs.tick; t_tick_change = t_cap_end; tick_seed = 0; live_n = 0; }   /* new renderer: seed, no move */
         else if (late) { last_tick = cs.tick; t_tick_change = t_cap_end; }
-        else if (cs.tick != last_tick) { last_tick = cs.tick; t_tick_change = t_tick_real = t_cap_end; tick_moves_since_reg++; }   /* t_tick_real: a genuine change, never a lateness reset */
+        else if (cs.tick != last_tick) { last_tick = cs.tick; t_tick_change = t_tick_real = t_cap_end; tick_moves_since_reg++; live_n++; }   /* t_tick_real: a genuine change, never a lateness reset */
+        else live_n = 0;
         int stalled = t_tick_change && t_cap_end - t_tick_change > (uint64_t)cfg.tick_stall_ms * MS;
         if (!t_tick_change) t_tick_change = t_cap_end;
         /* cause samples: while the tick has not moved for more than one period */
@@ -947,7 +954,7 @@ int main(void)
         uint64_t t_lo = t_cap_start - (uint64_t)cfg.W_ms * MS;
         enum verdict cv = judge(&cs, t_lo, t_cap_end, stalled, &tmin, &tmax);
         if (!truth_fresh) cv = V_TRUTH_LOST;
-        SAFE_STAMP(cs, t_cap_start, t_cap_end, truth_fresh);
+        SAFE_STAMP(cs, t_cap_start, t_cap_end, truth_fresh, "composed check");
 
         /* renderer-sourced read (its own window; readable while the safe layer covers it) */
         enum verdict wv = V_NONE; struct shot ws = {SPD_UNREADABLE, -1, -1, 0, 0};
@@ -1030,9 +1037,10 @@ int main(void)
                 if (cause == C_UNKNOWN) t_unknown = now;
                 snprintf(inc.cause, sizeof inc.cause, "%s", CN[cause]);
                 printf("telltale: cause %s (draw thread states %d,%d,%d)\n", CN[cause], cstates[ncs - 3], cstates[ncs - 2], cstates[ncs - 1]); fflush(stdout);
-            } else if (cause != C_NONE && !stalled && t_tick_real == t_cap_end) {
-                /* the stall is over (a genuine tick move, never a lateness reset): its cause no longer protects or condemns
-                 * the renderer; from here it is judged live, so starved-then-wrong is killed as live-wrong (mismatch_n fresh) */
+            } else if (cause != C_NONE && !stalled && live_n >= cfg.mismatch_n) {
+                /* the stall is over: the tick moved genuinely in mismatch_n checks in a row (one frame slipped through a
+                 * starvation is not enough), so its cause no longer protects or condemns the renderer; from here it is
+                 * judged live, and starved-then-wrong is killed as live-wrong after mismatch_n more wrong frames */
                 printf("telltale: cause %s cleared (tick moving again)\n", CN[cause]); fflush(stdout);
                 cause = C_NONE; mismatch_cnt = 0;
             }
@@ -1062,15 +1070,18 @@ int main(void)
                 if (!strcmp(inc.cause, "-") || cause == C_NONE)   /* the kill reason: the frame verdict unless a stall cause decided */
                     snprintf(inc.cause, sizeof inc.cause, "%s", wv == V_MISMATCH ? "live-wrong" : VN[wv]);
                 uint64_t tk = tt_now_ns();
-                if (kill(rend.pid, SIGKILL) == -1 && errno != ESRCH) {   /* ESRCH: it died on its own -> the respawn path */
-                    printf("telltale: SIGKILL renderer pid %d failed: %s -> TT-GIVEUP\n", rend.pid, strerror(errno)); fflush(stdout);
+                int kr = kill(rend.pid, SIGKILL), ke = errno;
+                if (kr == -1 && ke != ESRCH) {
+                    printf("telltale: SIGKILL renderer pid %d failed: %s -> TT-GIVEUP\n", rend.pid, strerror(ke)); fflush(stdout);
                     st = ST_GIVEUP; snprintf(inc.cause, sizeof inc.cause, "kill-failed"); inc_write(&inc); open_publish(&inc);
                     break;
                 }
-                rcap_note(&kills, now); inc.restarts++;   /* restarts = kills the monitor sent in THIS incident (delivered) */
-                killed_pid = rend.pid; inc.t_kill = tk;
-                pthread_mutex_lock(&g_mtx); g.restarts_total++; pthread_mutex_unlock(&g_mtx);
-                printf("telltale: SIGKILL renderer pid %d (%s)\n", rend.pid, inc.cause); fflush(stdout);
+                killed_pid = rend.pid;
+                if (kr == 0) {   /* delivered: counts towards the cap; ESRCH = it died on its own (a crash, not our kill) */
+                    rcap_note(&kills, now); inc.restarts++; inc.t_kill = tk;
+                    pthread_mutex_lock(&g_mtx); g.restarts_total++; pthread_mutex_unlock(&g_mtx);
+                    printf("telltale: SIGKILL renderer pid %d (%s)\n", rend.pid, inc.cause); fflush(stdout);
+                } else { snprintf(inc.cause, sizeof inc.cause, "crash"); printf("telltale: renderer pid %d already gone (crash)\n", rend.pid); fflush(stdout); }
                 rwin = NULL; st = ST_RESTART;
             }
             break;
