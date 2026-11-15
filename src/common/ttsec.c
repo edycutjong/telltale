@@ -77,3 +77,14 @@ int tt_policy_loaded(void)
     uint32_t id = 0;
     return secpol_get_policy_id(&id) == 0 && id != 0;
 }
+
+int tt_write_all(int fd, const void *buf, size_t n)
+{
+    const char *p = buf;
+    while (n) {
+        ssize_t w = write(fd, p, n);
+        if (w < 0) { if (errno == EINTR) continue; return -1; }
+        p += w; n -= (size_t)w;
+    }
+    return 0;
+}

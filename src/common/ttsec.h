@@ -19,6 +19,8 @@ int tt_policy_loaded(void);
 void *tt_policy_handle(void);
 /* effective uid of the client behind a resmgr message (scoid), or -1 */
 int tt_client_euid(int scoid);
+/* write all n bytes (retries short writes and EINTR); 0 on success, -1 on error */
+int tt_write_all(int fd, const void *buf, size_t n);
 static inline uint64_t tt_now_ns(void)
 {
     struct timespec t; clock_gettime(CLOCK_MONOTONIC, &t);

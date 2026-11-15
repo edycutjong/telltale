@@ -38,10 +38,14 @@ $(HOSTBIN)/test_decode: tests/host/test_decode.c $(COMMON_SRC) src/common/*.h | 
 $(HOSTBIN)/test_text: tests/host/test_text.c src/common/text.c src/common/text.h src/common/textfont.h | $(HOSTBIN)
 	$(CC) $(CFLAGS) -o $@ tests/host/test_text.c src/common/text.c
 
-test-host-c: $(HOSTBIN)/test_disp $(HOSTBIN)/test_decode $(HOSTBIN)/test_text
+$(HOSTBIN)/test_rcap: tests/host/test_rcap.c src/common/rcap.h | $(HOSTBIN)
+	$(CC) $(CFLAGS) -o $@ tests/host/test_rcap.c
+
+test-host-c: $(HOSTBIN)/test_disp $(HOSTBIN)/test_decode $(HOSTBIN)/test_text $(HOSTBIN)/test_rcap
 	$(HOSTBIN)/test_disp
 	$(HOSTBIN)/test_decode
 	$(HOSTBIN)/test_text
+	$(HOSTBIN)/test_rcap
 
 test-host-py:
 	$(PYTHON) -m unittest discover -s tests/host -p 'test_*.py' -v

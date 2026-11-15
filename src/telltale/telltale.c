@@ -34,6 +34,7 @@
 #include "../common/decode.h"
 #include "../common/glyphs.h"
 #include "../common/truth.h"
+#include "../common/rcap.h"
 #include "../common/disp.h"
 #include "../common/text.h"
 
@@ -66,11 +67,38 @@ static void cfg_load(const char *path)
         if (line[0] == '#' || sscanf(line, " %63[^= ]=%d", k, &v) != 2) continue;
 #define K(n) if (!strcmp(k, #n)) cfg.n = v;
         K(period_ms) K(W_ms) K(tick_stall_ms) K(h_max) K(truth_lost_ms) K(arm_grace_ms) K(restart_timeout_ms)
-        K(max_restarts) K(mismatch_n) K(unknown_kill_ms) K(screen_stall_ms) K(truth_ok_n) K(lamp_thr) K(lamp_mask) K(card_ms)
+        K(max_restarts) K(restart_window_s) K(mismatch_n) K(unknown_kill_ms) K(screen_stall_ms) K(truth_ok_n) K(lamp_thr) K(lamp_mask) K(card_ms)
 #undef K
         printf("telltale: conf %s=%d\n", k, v);
     }
     fclose(f);
+}
+
+/* the supported check period: the 4-bit renderer tick aliases after 16 frames (266 ms at 60 fps), and the
+ * benched points are 10/20/50 ms, so periods outside 5..100 ms are refused (config and DCMD_TT_SET_PERIOD) */
+#define PERIOD_MIN_MS 5
+#define PERIOD_MAX_MS 100
+static int period_ok(int p) { return p >= PERIOD_MIN_MS && p <= PERIOD_MAX_MS; }
+
+/* reject out-of-range configuration loudly and keep the built-in default for that key */
+static void cfg_check(void)
+{
+#define R(n, lo, hi, def) if (cfg.n < (lo) || cfg.n > (hi)) { \
+        fprintf(stderr, "telltale: conf %s=%d out of range [%d, %d], using %d\n", #n, cfg.n, lo, hi, def); cfg.n = def; }
+    R(period_ms, PERIOD_MIN_MS, PERIOD_MAX_MS, 20) R(W_ms, 0, 5000, 100) R(tick_stall_ms, 0, 60000, 0)
+    R(truth_lost_ms, 1, 60000, 200) R(arm_grace_ms, 0, 600000, 5000) R(restart_timeout_ms, 100, 60000, 3000)
+    R(max_restarts, 1, RCAP_N, 3) R(restart_window_s, 1, 3600, 60) R(mismatch_n, 1, 100000, 3)
+    R(unknown_kill_ms, 0, 600000, 0) R(screen_stall_ms, 0, 600000, 0) R(truth_ok_n, 1, 1000, 5)
+    R(lamp_thr, 0, 1000, 500) R(card_ms, 0, 600000, 5000)
+#undef R
+}
+
+static struct itimerspec period_its(int ms)       /* normalized: tv_nsec stays in [0, 1e9) */
+{
+    struct itimerspec it;
+    it.it_value.tv_sec = it.it_interval.tv_sec = ms / 1000;
+    it.it_value.tv_nsec = it.it_interval.tv_nsec = (long)(ms % 1000) * 1000000L;
+    return it;
 }
 
 /* ---------- shared state (resmgr thread <-> check loop) ---------- */
@@ -96,12 +124,15 @@ static struct {
     struct tt_register reg; int reg_new; uint64_t reg_t;
     int rearm;
     enum state st;
-    unsigned long checks, faults, restarts_total, late, screen_stalls;
+    unsigned long checks, faults, restarts_total, late, screen_stalls, capture_errors;
     struct incident last; int have_last;
+    struct incident open_inc; int have_open;   /* the incident in progress (not yet recovered), for cat /dev/telltale */
+    unsigned long long truth_gaps;
     char ev[1 << 16]; size_t ev_len;
 } g = {.armed = 1};
 
 static atomic_ullong hb_start;      /* check start (0 = idle), for the Screen-stall guard */
+static atomic_int guard_period_ms, guard_stall_ms;   /* the guard's copy of cfg, published by the check loop */
 static int evfd = -1;
 static slog2_buffer_t slog;        /* incidents also go to slog2 (buffer set "telltale"); NULL if slogger2 refused */
 
@@ -114,14 +145,22 @@ static void ev_append(const struct incident *in)
                      (unsigned long long)in->t_safe_visible, (unsigned long long)in->t_kill,
                      (unsigned long long)in->t_register, (unsigned long long)in->t_true, in->restarts,
                      in->exposure_ms, in->old_pid, in->new_pid, in->lamps_shown, in->lamps_truth);
+    if (n < 0) return;
+    if ((size_t)n >= sizeof row) n = (int)sizeof row - 1;   /* truncated row: never write past the buffer */
     pthread_mutex_lock(&g_mtx);
     if (g.ev_len + (size_t)n < sizeof g.ev) { memcpy(g.ev + g.ev_len, row, (size_t)n); g.ev_len += (size_t)n; }
     g.last = *in; g.have_last = 1;
     pthread_mutex_unlock(&g_mtx);
-    if (evfd >= 0 && write(evfd, row, (size_t)n) < 0) perror("telltale: incident log");
+    if (evfd >= 0 && tt_write_all(evfd, row, (size_t)n) < 0) perror("telltale: incident log");
     if (slog) slog2f(slog, 0, SLOG2_WARNING, "INCIDENT %s %s cause=%s shown=%d truth=%d caught_ms=%.1f restarts=%d",
                      in->id, VN[in->v], in->cause, in->shown, in->truth, (in->t_detect - in->t_last_verified) / 1e6, in->restarts);
     printf("telltale: INCIDENT %s", row); fflush(stdout);
+}
+static void open_publish(const struct incident *in)   /* NULL = no incident open */
+{
+    pthread_mutex_lock(&g_mtx);
+    if (in) { g.open_inc = *in; g.have_open = 1; } else g.have_open = 0;
+    pthread_mutex_unlock(&g_mtx);
 }
 #define EV_HEADER "id,verdict,cause,shown,truth,t_last_verified_ns,t_detect_ns,caught_ms,t_safe_visible_ns,t_kill_ns,t_register_ns,t_true_ns,restarts,exposure_ms,renderer_pid,new_pid,lamps_shown,lamps_truth\n"
 
@@ -150,9 +189,15 @@ static int io_read(resmgr_context_t *ctp, io_read_t *msg, iofunc_ocb_t *ocb)
     } else {
         const struct incident *l = &g.last;
         n = (size_t)snprintf(buf, sizeof buf,
-            "armed=%d state=%s period_ms=%d W_ms=%d tick_stall_ms=%d checks=%lu faults=%lu restarts=%lu late=%lu screen_stalls=%lu renderer_pid=%d\n",
+            "armed=%d state=%s period_ms=%d W_ms=%d tick_stall_ms=%d checks=%lu faults=%lu restarts=%lu late=%lu screen_stalls=%lu renderer_pid=%d capture_errors=%lu\n",
             g.armed, ST[g.st], cfg.period_ms, cfg.W_ms, cfg.tick_stall_ms, g.checks, g.faults, g.restarts_total, g.late,
-            g.screen_stalls, g.reg.pid);
+            g.screen_stalls, g.reg.pid, g.capture_errors);
+        n += (size_t)snprintf(buf + n, sizeof buf - n, "truth_gaps=%llu\n", g.truth_gaps);
+        if (g.have_open) {
+            const struct incident *o = &g.open_inc;
+            n += (size_t)snprintf(buf + n, sizeof buf - n, "open=%s verdict=%s cause=%s shown=%d truth=%d caught_ms=%.1f restarts=%d\n",
+                                  o->id, VN[o->v], o->cause, o->shown, o->truth, (o->t_detect - o->t_last_verified) / 1e6, o->restarts);
+        }
         if (g.have_last)
             n += (size_t)snprintf(buf + n, sizeof buf - n,
                 "last=%s verdict=%s cause=%s shown=%d truth=%d caught_ms=%.1f (since last verified frame) recovered=%s\n",
@@ -176,6 +221,7 @@ static int io_devctl(resmgr_context_t *ctp, io_devctl_t *msg, iofunc_ocb_t *ocb)
     pthread_mutex_lock(&g_mtx);
     switch (msg->i.dcmd) {
     case DCMD_TT_REGISTER: {
+        if (msg->i.nbytes < sizeof(struct tt_register)) { rc = EINVAL; break; }   /* never read past the client's payload */
         struct tt_register r; memcpy(&r, data, sizeof r);
         r.win_id[sizeof r.win_id - 1] = 0;
         /* the caller must be the process it registers, and (with a policy) of a type granted telltale:register */
@@ -184,12 +230,13 @@ static int io_devctl(resmgr_context_t *ctp, io_devctl_t *msg, iofunc_ocb_t *ocb)
         break;
     }
     case DCMD_TT_ARM: case DCMD_TT_DISARM: case DCMD_TT_REARM: case DCMD_TT_SET_PERIOD: case DCMD_TT_DEBUG:
+        if ((msg->i.dcmd == DCMD_TT_SET_PERIOD || msg->i.dcmd == DCMD_TT_DEBUG) && msg->i.nbytes < sizeof(int32_t)) { rc = EINVAL; break; }
         if (!allowed(ctp, perm_control, tt_client_euid(ctp->info.scoid) == 0 || tt_client_euid(ctp->info.scoid) == (int)getuid())) { rc = EPERM; break; }
         if (msg->i.dcmd == DCMD_TT_ARM) g.armed = 1;
         else if (msg->i.dcmd == DCMD_TT_DISARM) g.armed = 0;
         else if (msg->i.dcmd == DCMD_TT_REARM) g.rearm = 1;
-        else if (msg->i.dcmd == DCMD_TT_DEBUG) g.debug = *(int32_t *)data;
-        else { int p = *(int32_t *)data; if (p < 5 || p > 1000) rc = EINVAL; else g.new_period = p; }
+        else if (msg->i.dcmd == DCMD_TT_DEBUG) { int32_t d; memcpy(&d, data, sizeof d); g.debug = d; }
+        else { int32_t p; memcpy(&p, data, sizeof p); if (!period_ok(p)) rc = EINVAL; else g.new_period = p; }
         break;
     default: rc = ENOSYS;
     }
@@ -220,7 +267,11 @@ static void *resmgr_thread(void *arg)
         perror("telltale: resmgr_attach"); exit(1);
     }
     dispatch_context_t *ctp = dispatch_context_alloc(dpp);
-    for (;;) if ((ctp = dispatch_block(ctp))) dispatch_handler(ctp);
+    for (;;) {
+        dispatch_context_t *c = dispatch_block(ctp);
+        if (c) { ctp = c; dispatch_handler(ctp); }
+        else if (errno != EINTR) { perror("telltale: dispatch_block"); usleep(100000); }   /* no busy loop at FIFO 30 */
+    }
     return NULL;
 }
 
@@ -233,9 +284,9 @@ static void *stall_guard(void *arg)
     pthread_setname_np(0, "stallguard");
     uint64_t reported = 0;
     for (;;) {
-        usleep((useconds_t)cfg.period_ms * 1000);
+        usleep((useconds_t)atomic_load(&guard_period_ms) * 1000);
         uint64_t s = atomic_load(&hb_start);
-        if (s && s != reported && tt_now_ns() - s > (uint64_t)cfg.screen_stall_ms * MS) {
+        if (s && s != reported && tt_now_ns() - s > (uint64_t)atomic_load(&guard_stall_ms) * MS) {
             reported = s;
             pthread_mutex_lock(&g_mtx); g.screen_stalls++; pthread_mutex_unlock(&g_mtx);
             printf("telltale: SCREEN_STALL check started %llu ms ago\n", (unsigned long long)((tt_now_ns() - s) / MS)); fflush(stdout);
@@ -346,9 +397,11 @@ static void safe_init(void)
 }
 
 static uint64_t safe_ns;   /* cost of the last safe-layer update (per-check CSV) */
+static int safe_allowed = 1;   /* 0 while disarmed: observe-only means no safe-layer post in any state */
 static void safe_show_(const struct veh_state *s, int lost, int pos[2]);
 static void safe_show(const struct veh_state *s, int lost, int pos[2])
 {
+    if (!safe_allowed) return;
     uint64_t t = tt_now_ns();
     safe_show_(s, lost, pos);
     safe_ns += tt_now_ns() - t;
@@ -370,7 +423,8 @@ static void safe_show_(const struct veh_state *s, int lost, int pos[2])
     int full[4] = {0, 0, L_SAFE_W, L_SAFE_H};
     int dirty[12] = {L_DIGIT_X0, L_DIGIT_Y, L_DIGIT_N * GLYPH_W, GLYPH_H, 0, L_LAMP_Y, L_LAMP_W, L_LAMP_H, 0, L_BANNER_Y, L_SAFE_W, L_BANNER_H};
     if (!safe_visible) {            /* raise: always VISIBLE, hidden by sitting under the opaque cluster window */
-        int z = SAFE_Z_UP;
+        int z = SAFE_Z_UP, vis = 1;
+        screen_set_window_property_iv(safe_win, SCREEN_PROPERTY_VISIBLE, &vis);   /* undo safe_off() */
         screen_set_window_property_iv(safe_win, SCREEN_PROPERTY_POSITION, pos);
         screen_set_window_property_iv(safe_win, SCREEN_PROPERTY_ZORDER, &z);
         safe_visible = 1;
@@ -384,6 +438,15 @@ static void safe_hide(void)
     if (!safe_visible) return;
     int z = SAFE_Z_DOWN;
     screen_set_window_property_iv(safe_win, SCREEN_PROPERTY_ZORDER, &z);
+    screen_flush_context(ctx_app, 0);
+    safe_visible = 0;
+}
+
+static void safe_off(void)   /* disarm: really invisible, also when no opaque renderer window is there to cover it */
+{
+    int z = SAFE_Z_DOWN, vis = 0;
+    screen_set_window_property_iv(safe_win, SCREEN_PROPERTY_ZORDER, &z);
+    screen_set_window_property_iv(safe_win, SCREEN_PROPERTY_VISIBLE, &vis);
     screen_flush_context(ctx_app, 0);
     safe_visible = 0;
 }
@@ -416,7 +479,8 @@ static void card_show(const struct incident *in, const int wpos[2])
     else if (in->shown >= 0) snprintf(r[2], sizeof r[2], "shown %d " TT_MIDDOT " truth %d km/h", in->shown, in->truth);
     else snprintf(r[2], sizeof r[2], "shown -- " TT_MIDDOT " truth %d km/h", in->truth);
     snprintf(r[3], sizeof r[3], "caught %.0f ms " TT_MIDDOT " restored %.0f ms", caught, restored);
-    if (in->t_kill) snprintf(r[4], sizeof r[4], "restarted: pid %d -> %d", in->old_pid, in->new_pid);
+    if (in->t_kill || (in->new_pid > 0 && in->new_pid != in->old_pid))   /* killed by us, or crashed and re-registered */
+        snprintf(r[4], sizeof r[4], "restarted: pid %d -> %d", in->old_pid, in->new_pid);
     else snprintf(r[4], sizeof r[4], "handed back, no restart");
     snprintf(r[5], sizeof r[5], "service: cat /dev/telltale");
     const struct tt_font *f = &tt_font_card;
@@ -481,12 +545,10 @@ static enum cause classify(const int *st, int n)
     return C_UNKNOWN;
 }
 
-/* restart cap: max_restarts kills inside restart_window_s, shared by every kill site */
-static int cap_reached(uint64_t now, const uint64_t *kills, int nkills)
+/* restart cap: max_restarts kills inside restart_window_s, shared by every kill site (ring in rcap.h) */
+static int cap_reached(uint64_t now, const struct rcap *kills)
 {
-    int recent = 0;
-    for (int i = 0; i < nkills; i++) if (now - kills[i] < (uint64_t)cfg.restart_window_s * 1000 * MS) recent++;
-    return recent >= cfg.max_restarts;
+    return rcap_reached(kills, now, (uint64_t)cfg.restart_window_s * 1000 * MS, cfg.max_restarts);
 }
 
 /* ---------- the check loop ---------- */
@@ -500,16 +562,29 @@ static void decode_at(const uint32_t *base, int st, int dx, int dy, int tx, int 
     o->tick = tx >= 0 ? tt_tick_value(base + (long)ty * st + tx, st) : -1;
 }
 
-static int vfd = -1;
+static int vfd = -1, vfd_lost;
 static struct truth T;
 static void drain_truth(void)
 {
     static struct veh_since q;
+    if (vfd < 0) {
+        if ((vfd = open(PATH_VEHICLE, O_RDONLY)) < 0) return;
+        if (vfd_lost) {   /* a restarted vehicled numbers its samples from 1 again: drop the old window and watermark */
+            truth_init(&T); vfd_lost = 0;
+            printf("telltale: reconnected to %s (truth window reset)\n", PATH_VEHICLE); fflush(stdout);
+        }
+    }
     q.after_seq = T.last_seq;
-    if (vfd < 0 && (vfd = open(PATH_VEHICLE, O_RDONLY)) < 0) return;
-    uint64_t to = 10 * MS;                                    /* a wedged vehicled cannot stop the loop */
+    uint64_t to = 10 * MS;                                    /* bounds a SEND-blocked call (vehicled not receiving) */
     TimerTimeout(CLOCK_MONOTONIC, _NTO_TIMEOUT_SEND | _NTO_TIMEOUT_REPLY, NULL, &to, NULL);
-    if (devctl(vfd, DCMD_VEH_GET_SINCE, &q, sizeof q, NULL) != EOK) return;
+    int rc = devctl(vfd, DCMD_VEH_GET_SINCE, &q, sizeof q, NULL);
+    if (rc != EOK) {
+        if (rc != ETIMEDOUT && rc != EINTR) {   /* the connection is dead (vehicled exited): reconnect on a later check */
+            printf("telltale: %s: %s -- reconnecting\n", PATH_VEHICLE, strerror(rc)); fflush(stdout);
+            close(vfd); vfd = -1; vfd_lost = 1;
+        }
+        return;
+    }
     for (uint32_t i = 0; i < q.n && i < VEH_RING; i++) truth_push(&T, &q.s[i]);
 }
 
@@ -527,8 +602,10 @@ static enum verdict judge(const struct shot *s, uint64_t t_lo, uint64_t t_hi, in
 int main(void)
 {
     cfg_load(getenv("TT_CONF"));
+    cfg_check();
     conf_tick_stall_ms = cfg.tick_stall_ms; conf_unknown_kill_ms = cfg.unknown_kill_ms; conf_screen_stall_ms = cfg.screen_stall_ms;
     cfg_derive();
+    atomic_store(&guard_period_ms, cfg.period_ms); atomic_store(&guard_stall_ms, cfg.screen_stall_ms);
     {   /* slog2 before tt_enter drops privileges; failure is reported, never fatal */
         slog2_buffer_set_config_t sc = {.num_buffers = 1, .buffer_set_name = "telltale", .verbosity_level = SLOG2_INFO,
                                         .buffer_config = {{.buffer_name = "incidents", .num_pages = 4}}};
@@ -613,8 +690,8 @@ int main(void)
     int chid = ChannelCreate(_NTO_CHF_PRIVATE), coid = ConnectAttach(0, 0, chid, _NTO_SIDE_CHANNEL, 0);
     struct sigevent tev; SIGEV_PULSE_INIT(&tev, coid, 60, _PULSE_CODE_MINAVAIL, 0);
     timer_t tid; CK(timer_create(CLOCK_MONOTONIC, &tev, &tid), "timer_create");
-    struct itimerspec its = {{0, cfg.period_ms * 1000000L}, {0, cfg.period_ms * 1000000L}};
-    timer_settime(tid, 0, &its, NULL);
+    struct itimerspec its = period_its(cfg.period_ms);
+    CK(timer_settime(tid, 0, &its, NULL), "timer_settime");
 
     truth_init(&T);
     struct tt_register rend = {0};
@@ -624,15 +701,19 @@ int main(void)
     uint64_t t0 = tt_now_ns(), t_last_verified = 0, t_tick_change = 0, t_tick_real = 0, t_prev_loop = 0, t_state = t0, t_reg_seen = 0;
     int last_tick = -1, tick_moves_since_reg = 0, mismatch_cnt = 0, nowin_cnt = 0, fresh_cnt = 0, killed_pid = 0;
     int cstates[16], ncs = 0;
-    uint64_t kills[8] = {0}; int nkills = 0;
-    struct incident inc; int inc_open = 0, armed = 1, seq_inc = 0;
+    struct rcap kills; rcap_reset(&kills);
+    struct incident inc; int inc_open = 0, armed = 1, prev_armed = 1, seq_inc = 0;
+    int cap_errs = 0;                /* composed reads failed in a row */
     enum cause cause = C_NONE;
     uint64_t t_unknown = 0;          /* when the current cause became UNKNOWN: the UNKNOWN kill counts from here */
     int readerr = 0;                 /* this check's window verdict is UNREADABLE because screen_read_window failed */
 
     for (;;) {
         struct _pulse p;
-        if (MsgReceivePulse(chid, &p, sizeof p, NULL) == -1) continue;
+        if (MsgReceivePulse(chid, &p, sizeof p, NULL) == -1) {
+            if (errno != EINTR) { perror("telltale: MsgReceivePulse"); usleep((useconds_t)cfg.period_ms * 1000); }
+            continue;
+        }
         uint64_t now = tt_now_ns();
         atomic_store(&hb_start, now);
         int late = t_prev_loop && now - t_prev_loop >= 266 * MS;   /* >= 16 frames: the 4-bit tick may alias */
@@ -642,17 +723,32 @@ int main(void)
         pthread_mutex_lock(&g_mtx);
         armed = g.armed; dbg_on = g.debug;
         int newreg = g.reg_new; struct tt_register reg = g.reg; g.reg_new = 0;
-        if (g.rearm) { g.rearm = 0; nkills = 0; if (st == ST_GIVEUP) { st = ST_HOLD; t_state = now; } }
+        if (g.rearm) { g.rearm = 0; rcap_reset(&kills); if (st == ST_GIVEUP) { st = ST_HOLD; t_state = now; } }
         if (g.new_period) {
-            /* re-derive from the CONFIGURED values (telltale.conf), never below them: the rule only raises a floor */
-            cfg.period_ms = g.new_period; g.new_period = 0;
-            cfg.tick_stall_ms = conf_tick_stall_ms; cfg.unknown_kill_ms = conf_unknown_kill_ms; cfg.screen_stall_ms = conf_screen_stall_ms;
-            cfg_derive();
-            struct itimerspec ni = {{0, cfg.period_ms * 1000000L}, {0, cfg.period_ms * 1000000L}};
-            timer_settime(tid, 0, &ni, NULL);
+            int np = g.new_period; g.new_period = 0;
+            struct itimerspec ni = period_its(np);
+            if (timer_settime(tid, 0, &ni, NULL) == 0) {
+                /* re-derive from the CONFIGURED values (telltale.conf), never below them: the rule only raises a floor */
+                cfg.period_ms = np;
+                cfg.tick_stall_ms = conf_tick_stall_ms; cfg.unknown_kill_ms = conf_unknown_kill_ms; cfg.screen_stall_ms = conf_screen_stall_ms;
+                cfg_derive();
+                atomic_store(&guard_period_ms, cfg.period_ms); atomic_store(&guard_stall_ms, cfg.screen_stall_ms);
+            } else { printf("telltale: timer_settime(%d ms): %s -- period unchanged\n", np, strerror(errno)); fflush(stdout); }
         }
         if (late) g.late++;
         pthread_mutex_unlock(&g_mtx);
+
+        safe_allowed = armed;
+        if (prev_armed && !armed) {   /* DISARM = observe-only in EVERY state (ttproto.h): no safe layer, no kill, no incident */
+            if (inc_open) { snprintf(inc.cause, sizeof inc.cause, "disarmed"); ev_append(&inc); inc_open = 0; banner_inc = NULL; open_publish(NULL); }
+            safe_off(); card_hide("disarmed");
+            if (st != ST_NORMAL && st != ST_WAIT) {
+                printf("telltale: disarmed in %s -> %s\n", ST[st], rwin ? ST[ST_NORMAL] : ST[ST_WAIT]); fflush(stdout);
+                st = rwin ? ST_NORMAL : ST_WAIT; t_state = now;
+            }
+            mismatch_cnt = 0; nowin_cnt = 0; cause = C_NONE;
+        }
+        prev_armed = armed;
 
         if (newreg && reg.pid != rend.pid) {
             rend = reg; rwin = NULL; tick_moves_since_reg = 0; t_reg_seen = now;
@@ -667,23 +763,31 @@ int main(void)
         if (!rwin) {   /* no renderer window to read: boot wait or after a kill */
             const struct veh_state *lt = truth_latest(&T);
             enum state prev_nw = st;
-            if (st == ST_WAIT && armed && now - t0 > (uint64_t)cfg.arm_grace_ms * MS && lt) { st = ST_NODISPLAY; t_state = now; printf("telltale: NO_DISPLAY\n"); }
+            int fresh_nw = lt && (lt->t_ns >= now || now - lt->t_ns <= (uint64_t)cfg.truth_lost_ms * MS);
+            if (st == ST_WAIT && armed && now - t0 > (uint64_t)cfg.arm_grace_ms * MS) {
+                if (fresh_nw) { st = ST_NODISPLAY; t_state = now; printf("telltale: NO_DISPLAY\n"); }
+                else { st = ST_TRUTHLOST; fresh_cnt = 0; t_state = now; printf("telltale: NO_TRUTH (no fresh vehicle sample after arm_grace_ms)\n"); }
+            }
+            if (st == ST_TRUTHLOST) {   /* no window, no fresh truth: dashes up; truth back and no incident open -> NO-DISPLAY */
+                safe_show(lt, !fresh_nw, rpos);
+                if (fresh_nw && !inc_open) { st = ST_NODISPLAY; t_state = now; }
+            }
             if ((st == ST_NODISPLAY || st == ST_RESTART || st == ST_GIVEUP) && lt) safe_show(lt, lt->t_ns < now && now - lt->t_ns > (uint64_t)cfg.truth_lost_ms * MS, rpos);
             /* SAFE-HOLD but the live renderer's window is gone or unreadable: keep the truth up, and after mismatch_n
              * periods restart it (cause no-window) rather than hold forever */
-            if (st == ST_HOLD && rend.pid) {
+            if (st == ST_HOLD && rend.pid && armed) {
                 if (lt) safe_show(lt, lt->t_ns < now && now - lt->t_ns > (uint64_t)cfg.truth_lost_ms * MS, rpos);
                 if (kill(rend.pid, 0) == -1 && errno == ESRCH) {   /* the renderer died with its window already gone */
                     if (inc_open && !strcmp(inc.cause, "-")) snprintf(inc.cause, sizeof inc.cause, "crash");
                     killed_pid = rend.pid; st = ST_RESTART; t_state = now; nowin_cnt = 0;
                     printf("telltale: renderer pid %d is gone (crash, no window)\n", rend.pid); fflush(stdout);
-                } else if (cause != C_STARVED && cause != C_SCREEN && ++nowin_cnt >= cfg.mismatch_n && cap_reached(now, kills, nkills)) {
+                } else if (cause != C_STARVED && cause != C_SCREEN && ++nowin_cnt >= cfg.mismatch_n && cap_reached(now, &kills)) {
                     st = ST_GIVEUP; t_state = now; nowin_cnt = 0;   /* never kill a starved / Screen-blocked renderer; cap applies here too */
-                    if (inc_open) snprintf(inc.cause, sizeof inc.cause, "TT-GIVEUP");
+                    if (inc_open) { snprintf(inc.cause, sizeof inc.cause, "TT-GIVEUP"); ev_append(&inc); open_publish(&inc); }
                     printf("telltale: TT-GIVEUP (no-window)\n"); fflush(stdout);
                 } else if (cause != C_STARVED && cause != C_SCREEN && nowin_cnt >= cfg.mismatch_n) {
                     if (inc_open && !strcmp(inc.cause, "-")) snprintf(inc.cause, sizeof inc.cause, "no-window");
-                    kills[nkills++ % 8] = now; if (nkills > 8) nkills = 8;
+                    rcap_note(&kills, now); if (inc_open) inc.restarts++;
                     killed_pid = rend.pid; if (inc_open) inc.t_kill = tt_now_ns();
                     kill(rend.pid, SIGKILL);
                     pthread_mutex_lock(&g_mtx); g.restarts_total++; pthread_mutex_unlock(&g_mtx);
@@ -696,7 +800,7 @@ int main(void)
                 st = ST_NODISPLAY; t_state = now;
             }
             if (st != prev_nw) { printf("telltale: %s -> %s\n", ST[prev_nw], ST[st]); fflush(stdout); }
-            pthread_mutex_lock(&g_mtx); g.checks++; g.st = st; pthread_mutex_unlock(&g_mtx);   /* status stays truthful without a window */
+            pthread_mutex_lock(&g_mtx); g.checks++; g.st = st; g.truth_gaps = T.gaps; pthread_mutex_unlock(&g_mtx);   /* status stays truthful without a window */
             atomic_store(&hb_start, 0);
             continue;
         }
@@ -710,7 +814,24 @@ int main(void)
         if (!e1 && !e2) e2 = screen_read_display(disp, bl, 1, rl, 0);
         uint64_t t_cap_end = tt_now_ns();
         drain_truth();                           /* samples that arrived while we sat in Screen still count */
-        if (e1 || e2) { printf("telltale: screen_read_display: %s\n", strerror(errno)); fflush(stdout); atomic_store(&hb_start, 0); continue; }
+        if (e1 || e2) {
+            printf("telltale: screen_read_display: %s\n", strerror(errno)); fflush(stdout);
+            /* the composed display cannot be verified: after mismatch_n failed reads in a row say so (NO-DISPLAY) and keep
+             * the truth up as best effort; never a renderer kill (the fault is in the read path, not proven in the renderer) */
+            if (++cap_errs >= cfg.mismatch_n && st != ST_NODISPLAY && st != ST_GIVEUP) {
+                printf("telltale: CAPTURE_LOST (%d composed reads failed) %s -> %s\n", cap_errs, ST[st], ST[ST_NODISPLAY]); fflush(stdout);
+                if (slog) slog2f(slog, 0, SLOG2_WARNING, "CAPTURE_LOST state=%s", ST[st]);
+                st = ST_NODISPLAY; t_state = now;
+            }
+            if (cap_errs >= cfg.mismatch_n && st == ST_NODISPLAY) {
+                const struct veh_state *elt = truth_latest(&T); uint64_t en = tt_now_ns();
+                safe_show(elt, !(elt && (elt->t_ns >= en || en - elt->t_ns <= (uint64_t)cfg.truth_lost_ms * MS)), rpos);
+            }
+            pthread_mutex_lock(&g_mtx); g.capture_errors++; g.st = st; pthread_mutex_unlock(&g_mtx);
+            atomic_store(&hb_start, 0);
+            continue;
+        }
+        cap_errs = 0;
         struct shot cs;
         decode_at(pb, sb, L_DIGIT_X0 - L_BLOCK_X, L_DIGIT_Y - L_BLOCK_Y, -1, 0, &cs);
         cs.tick = tt_tick_value(pt, stt);
@@ -770,9 +891,9 @@ int main(void)
 #define OPEN(V) do { memset(&inc, 0, sizeof inc); inc.v = (V); inc.shown = cs.kind == SPD_VALUE ? cs.value : -1; inc.truth = truth_disp; inc.lamps_shown = cs.lamps; inc.lamps_truth = lt ? lt->lamps : 0; \
             inc.t_last_verified = since_last_verified ? since_last_verified : t0; inc.t_detect = t_cap_end; inc.old_pid = rend.pid; \
             snprintf(inc.id, sizeof inc.id, "TT-%s-%04d", VCODE[V], ++seq_inc); snprintf(inc.cause, sizeof inc.cause, "-"); inc_open = 1; banner_inc = &inc; card_hide("new incident"); \
-            pthread_mutex_lock(&g_mtx); g.faults++; pthread_mutex_unlock(&g_mtx); \
+            pthread_mutex_lock(&g_mtx); g.faults++; g.open_inc = inc; g.have_open = 1; pthread_mutex_unlock(&g_mtx); \
             printf("telltale: DETECT %s %s shown=%d truth=%d lamps_shown=0x%02x lamps_truth=0x%02x caught_ms=%.1f\n", inc.id, VN[V], inc.shown, inc.truth, cs.lamps, lt ? lt->lamps : 0, (inc.t_detect - inc.t_last_verified) / 1e6); fflush(stdout); } while (0)
-#define CLOSE() do { if (inc_open) { inc.t_true = t_cap_end; inc.restarts = nkills; ev_append(&inc); inc_open = 0; banner_inc = NULL; \
+#define CLOSE() do { if (inc_open) { inc.t_true = t_cap_end; if (inc.t_safe_visible) inc.exposure_ms = (inc.t_safe_visible - inc.t_last_verified) / 1e6; ev_append(&inc); open_publish(NULL); inc_open = 0; banner_inc = NULL; \
             if (dbg_on) card_show(&inc, rpos); } } while (0)
 
         enum state prev = st;
@@ -781,7 +902,10 @@ int main(void)
             if (truth_fresh && tick_moves_since_reg > 0 && (st == ST_WAIT ? cv : wv) == V_PASS) {
                 safe_hide(); st = ST_NORMAL; t_last_verified = t_cap_end; CLOSE();
                 printf("telltale: ARMED renderer pid=%d (window %s)\n", rend.pid, rend.win_id); fflush(stdout);
-            } else if (st == ST_WAIT && now - t0 > (uint64_t)cfg.arm_grace_ms * MS && truth_fresh) st = ST_NODISPLAY;
+            } else if (st == ST_WAIT && armed && now - t0 > (uint64_t)cfg.arm_grace_ms * MS) {
+                if (truth_fresh) st = ST_NODISPLAY;
+                else { st = ST_TRUTHLOST; fresh_cnt = 0; safe_show(lt, 1, rpos); printf("telltale: NO_TRUTH (no fresh vehicle sample after arm_grace_ms)\n"); fflush(stdout); }
+            }
             if (st == ST_NODISPLAY && lt) safe_show(lt, !truth_fresh, rpos);
             break;
         case ST_NORMAL:
@@ -822,10 +946,14 @@ int main(void)
             /* UNKNOWN only kills after unknown_kill_ms of UNKNOWN itself, so one mixed state window in a long STARVE
              * (READY, READY, SEND) cannot kill a starved renderer */
             if (stalled && cause == C_UNKNOWN && now - t_unknown > (uint64_t)cfg.unknown_kill_ms * MS) kill_now = 1;
+            if (!armed) kill_now = 0;
             if (kill_now) {
-                if (cap_reached(now, kills, nkills)) { st = ST_GIVEUP; snprintf(inc.cause, sizeof inc.cause, "TT-GIVEUP"); printf("telltale: TT-GIVEUP\n"); break; }
+                if (cap_reached(now, &kills)) {   /* the incident will not recover on its own: write its record now */
+                    st = ST_GIVEUP; snprintf(inc.cause, sizeof inc.cause, "TT-GIVEUP"); ev_append(&inc); open_publish(&inc);
+                    printf("telltale: TT-GIVEUP\n"); fflush(stdout); break;
+                }
                 if (!strcmp(inc.cause, "-")) snprintf(inc.cause, sizeof inc.cause, "%s", wv == V_MISMATCH ? "live-wrong" : VN[wv]);
-                kills[nkills++ % 8] = now; if (nkills > 8) nkills = 8;
+                rcap_note(&kills, now); inc.restarts++;   /* restarts = kills the monitor sent in THIS incident */
                 killed_pid = rend.pid; inc.t_kill = tt_now_ns();
                 kill(rend.pid, SIGKILL);
                 pthread_mutex_lock(&g_mtx); g.restarts_total++; pthread_mutex_unlock(&g_mtx);
@@ -837,10 +965,21 @@ int main(void)
             safe_show(lt, !truth_fresh, rpos);
             if (rend.pid != killed_pid && tick_moves_since_reg > 0 && wv == V_PASS) { safe_hide(); st = ST_NORMAL; t_last_verified = t_cap_end; CLOSE(); }
             else if (now - t_state > (uint64_t)cfg.restart_timeout_ms * MS && rend.pid == killed_pid) { st = ST_NODISPLAY; }
+            else if (rend.pid != killed_pid && t_reg_seen && now - t_reg_seen > (uint64_t)cfg.restart_timeout_ms * MS) {
+                /* the restarted renderer registered but has not shown one verified frame in restart_timeout_ms: back to
+                 * SAFE-HOLD, where the one kill site, the stall classifier and the restart cap decide (never hold forever) */
+                printf("telltale: restarted renderer pid %d not verified in %d ms -> SAFE-HOLD\n", rend.pid, cfg.restart_timeout_ms); fflush(stdout);
+                st = ST_HOLD; mismatch_cnt = 0; cause = C_NONE;
+            }
             break;
         case ST_TRUTHLOST:
             safe_show(lt, 1, rpos);
-            if (truth_fresh) { if (++fresh_cnt >= cfg.truth_ok_n) { st = ST_HOLD; mismatch_cnt = 0; cause = C_UNKNOWN; t_unknown = now; } } else fresh_cnt = 0;
+            if (truth_fresh) {
+                if (++fresh_cnt >= cfg.truth_ok_n) {
+                    if (inc_open) { st = ST_HOLD; mismatch_cnt = 0; cause = C_UNKNOWN; t_unknown = now; }
+                    else st = ST_NODISPLAY;
+                }
+            } else fresh_cnt = 0;
             break;
         case ST_GIVEUP:
             safe_show(lt, !truth_fresh, rpos);
@@ -851,9 +990,8 @@ int main(void)
             t_state = now;
             printf("telltale: %s -> %s\n", ST[prev], ST[st]); fflush(stdout);
         }
-        (void)t_reg_seen;
         uint64_t t_end = tt_now_ns();
-        pthread_mutex_lock(&g_mtx); g.checks++; g.st = st; pthread_mutex_unlock(&g_mtx);
+        pthread_mutex_lock(&g_mtx); g.checks++; g.st = st; g.truth_gaps = T.gaps; pthread_mutex_unlock(&g_mtx);
         if (chk) fprintf(chk, "%llu,%llu,%llu,%s,%d,%s,%d,%d,%d,%d,%d,%s,%d,%llu,%llu,0x%02x,0x%02x\n", (unsigned long long)t_cap_start, (unsigned long long)t_cap_end,
                          (unsigned long long)((t_end - t_cap_start) / 1000), ST[st], armed, VN[cv], cs.kind == SPD_VALUE ? cs.value : -1 - (int)cs.kind,
                          tmin, tmax, cs.tick, cs.marker, VN[wv], ws.kind == SPD_VALUE ? ws.value : -1 - (int)ws.kind,
