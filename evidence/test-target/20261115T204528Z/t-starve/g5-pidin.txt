@@ -1,0 +1,57 @@
+--- snapshot 1
+357912605   1 screen              10r SIGWAITINFO                                
+357912605   2 screen              15r CONDVAR        (0x36bc0ea438)              
+357912605   3 screen              10r NANOSLEEP                                  
+357912605   4 screen              60r RUNNING                                    
+357912605   5 screen              10r RECEIVE        1                           
+357912605   6 screen              10r RECEIVE        1                           
+357912605   7 screen              10r RECEIVE        1                           
+357912605   8 screen              60r RECEIVE        1                           
+357912605   9 screen              16r RECEIVE        1                           
+357912605  10 screen              10r REPLY          184339                      
+364015638   1 telltale            60f REPLY          357912605                   
+364015638   2 telltale            15f RECEIVE        1                           
+364015638   3 telltale            61f NANOSLEEP                                  
+364040220   1 cluster             15r RECEIVE        1                           
+364040220   2 cluster             10r READY                                      
+364040220   3 cluster             20r READY                                      
+364040220   4 cluster             15r DEAD                                       
+364163107   1 hog                 40f RUNNING                                    
+--- snapshot 2
+357912605   1 screen              10r SIGWAITINFO                                
+357912605   2 screen              15r CONDVAR        (0x36bc0ea438)              
+357912605   3 screen              10r NANOSLEEP                                  
+357912605   4 screen              60r RUNNING                                    
+357912605   5 screen              10r RECEIVE        1                           
+357912605   6 screen              10r RECEIVE        1                           
+357912605   7 screen              10r RECEIVE        1                           
+357912605   8 screen              60r RECEIVE        1                           
+357912605   9 screen              16r RECEIVE        1                           
+357912605  10 screen              10r REPLY          184339                      
+364015638   1 telltale            60f REPLY          357912605                   
+364015638   2 telltale            15f RECEIVE        1                           
+364015638   3 telltale            61f NANOSLEEP                                  
+364040220   1 cluster             15r RECEIVE        1                           
+364040220   2 cluster             10r READY                                      
+364040220   3 cluster             20r READY                                      
+364040220   4 cluster             15r DEAD                                       
+364163107   1 hog                 40f RUNNING                                    
+--- snapshot 3
+357912605   1 screen              10r SIGWAITINFO                                
+357912605   2 screen              15r CONDVAR        (0x36bc0ea438)              
+357912605   3 screen              10r NANOSLEEP                                  
+357912605   4 screen              16r RECEIVE        1                           
+357912605   5 screen              10r RECEIVE        1                           
+357912605   6 screen              10r RECEIVE        1                           
+357912605   7 screen              10r RECEIVE        1                           
+357912605   8 screen              60r RECEIVE        1                           
+357912605   9 screen              60r RUNNING                                    
+357912605  10 screen              10r REPLY          184339                      
+364015638   1 telltale            60f REPLY          357912605                   
+364015638   2 telltale            15f RECEIVE        1                           
+364015638   3 telltale            61f NANOSLEEP                                  
+364040220   1 cluster             15r RECEIVE        1                           
+364040220   2 cluster             10r READY                                      
+364040220   3 cluster             20r READY                                      
+364040220   4 cluster             15r DEAD                                       
+364163107   1 hog                 40f RUNNING                                    

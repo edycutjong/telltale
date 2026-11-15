@@ -1,0 +1,11 @@
+telltale: NO_TRUTH (no fresh vehicle sample after arm_grace_ms)
+telltale: WAIT -> TRUTH-LOST
+telltale: TRUTH-LOST -> NO-DISPLAY
+telltale: NO-DISPLAY -> NORMAL
+telltale: DETECT TT-BLK-0001 BLANK shown=-1 truth=52 lamps_shown=0x00 lamps_truth=0x10 caught_ms=18.6
+telltale: NORMAL -> SAFE-HOLD
+telltale: restarted renderer pid 384819235 not verified in 4000 ms -> SAFE-HOLD
+telltale: RESTARTING -> SAFE-HOLD
+telltale: SAFE-HOLD -> RESTARTING
+telltale: INCIDENT TT-BLK-0001,BLANK,unknown,-1,52,17426506616955,17426525256731,18.6,17426729813832,0,17426724407967,17577784235812,0,223.2,384503843,384819235,0x00,0x10
+telltale: RESTARTING -> NORMAL
