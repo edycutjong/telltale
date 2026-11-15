@@ -93,6 +93,8 @@ static void cfg_check(void)
     R(max_restarts, 1, RCAP_N, 3) R(restart_window_s, 1, 3600, 60) R(mismatch_n, 1, 100000, 3)
     R(unknown_kill_ms, 0, 600000, 0) R(screen_stall_ms, 0, 600000, 0) R(truth_ok_n, 1, 1000, 5)
     R(lamp_thr, 0, 1000, 500) R(card_ms, 0, 600000, 5000)
+    R(h_max, 0, GLYPH_MIN_HAMMING / 2 - 1, GLYPH_H_MAX_DEFAULT)   /* below half the closest glyph pair: a cell matches at most one glyph */
+    R(lamp_mask, 0, 0x3F, 0x3F)                                  /* the decoder reads 6 lamp bits; a wider mask could never pass */
 #undef R
 }
 
@@ -120,6 +122,7 @@ struct incident {
     uint64_t t_last_verified, t_detect, t_safe_visible, t_kill, t_register, t_true;
     uint64_t t_safe_true;   /* first composed read showing the safe layer's digits + lamps equal to the truth */
     double exposure_ms;
+    int written;            /* its record is already in incidents.csv / the events node (TT-GIVEUP writes at once) */
 };
 
 static pthread_mutex_t g_mtx = PTHREAD_MUTEX_INITIALIZER;
@@ -166,6 +169,20 @@ static void open_publish(const struct incident *in)   /* NULL = no incident open
     pthread_mutex_lock(&g_mtx);
     if (in) { g.open_inc = *in; g.have_open = 1; } else g.have_open = 0;
     pthread_mutex_unlock(&g_mtx);
+}
+/* exposure = last verified frame -> the truth verified on glass (the safe layer's digits + lamps read back equal to the
+ * truth, else the restarted renderer's verified hand-back); -1 = no such frame yet (e.g. truth lost throughout) */
+static void inc_exposure(struct incident *in)
+{
+    uint64_t end = in->t_safe_true ? in->t_safe_true : in->t_true;
+    in->exposure_ms = end > in->t_last_verified ? (end - in->t_last_verified) / 1e6 : -1.0;
+}
+/* one record per incident id: TT-GIVEUP writes it at once (the incident may never recover); a later end only logs */
+static void inc_write(struct incident *in)
+{
+    inc_exposure(in);
+    if (in->written) { printf("telltale: %s ended after give-up (record already written)\n", in->id); fflush(stdout); return; }
+    ev_append(in); in->written = 1;
 }
 #define EV_HEADER "id,verdict,cause,shown,truth,t_last_verified_ns,t_detect_ns,caught_ms,t_safe_visible_ns,t_kill_ns,t_register_ns,t_true_ns,restarts,exposure_ms,renderer_pid,new_pid,lamps_shown,lamps_truth,t_safe_true_ns\n"
 
@@ -344,6 +361,7 @@ static screen_window_t find_window(const char *want, int owner, int pos[2])
     int n = 0;
     if (screen_get_context_property_iv(ctx_app, SCREEN_PROPERTY_WINDOW_COUNT, &n) != 0 || n <= 0) return NULL;
     screen_window_t *w = calloc((size_t)n, sizeof *w), found = NULL;
+    if (!w) return NULL;
     if (screen_get_context_property_pv(ctx_app, SCREEN_PROPERTY_WINDOWS, (void **)w) == 0)
         for (int i = 0; i < n && !found; i++) {
             char id[64] = "";
@@ -467,8 +485,8 @@ static void safe_off(void)   /* disarm: really invisible, also when no opaque re
 
 /* ---------- incident card (engineering mode): monitor-owned top-z window, ui.md S4 ----------
  * Shown for card_ms after an incident closes (the renderer is verified true again), right of the digit block and clear
- * of every monitored rect, so the monitored frame never carries it. Hidden the same way as the safe layer (z under the
- * opaque cluster). Every value on it is the closed incident's. */
+ * of every monitored rect, so the monitored frame never carries it. Hidden the same way as the safe layer: invisible
+ * (created invisible too), so no renderer crash or boot ever composes it. Every value on it is the closed incident's. */
 #define CARD_Z_UP 110
 static screen_window_t card_win; static screen_buffer_t card_buf; static uint32_t *card_px; static int card_st;
 static int card_up; static uint64_t card_until; static char card_id[16];
@@ -503,8 +521,9 @@ static void card_show(const struct incident *in, const int wpos[2])
     tt_fill(card_px, card_st, L_CARD_W, 4, PAL_AMBER);
     for (int i = 0; i < 6; i++)
         tt_text_draw(card_px, card_st, L_CARD_W, L_CARD_H, L_CARD_PAD, L_CARD_PAD + i * L_CARD_PITCH, f, r[i], 0xFF000000u | fg[i], bg);
-    int full[4] = {0, 0, L_CARD_W, L_CARD_H}, pos[2] = {wpos[0] + L_CARD_X, wpos[1] + L_CARD_Y}, z = CARD_Z_UP;
+    int full[4] = {0, 0, L_CARD_W, L_CARD_H}, pos[2] = {wpos[0] + L_CARD_X, wpos[1] + L_CARD_Y}, z = CARD_Z_UP, vis = 1;
     screen_set_window_property_iv(card_win, SCREEN_PROPERTY_POSITION, pos);
+    screen_set_window_property_iv(card_win, SCREEN_PROPERTY_VISIBLE, &vis);   /* undo card_hide() */
     screen_set_window_property_iv(card_win, SCREEN_PROPERTY_ZORDER, &z);
     screen_post_window(card_win, card_buf, 1, full, 0);
     screen_flush_context(ctx_app, 0);
@@ -517,8 +536,9 @@ static void card_show(const struct incident *in, const int wpos[2])
 static void card_hide(const char *why)
 {
     if (!card_up) return;
-    int z = SAFE_Z_DOWN;
+    int z = SAFE_Z_DOWN, vis = 0;
     screen_set_window_property_iv(card_win, SCREEN_PROPERTY_ZORDER, &z);
+    screen_set_window_property_iv(card_win, SCREEN_PROPERTY_VISIBLE, &vis);
     screen_flush_context(ctx_app, 0);
     card_up = 0;
     printf("telltale: CARD hidden %s (%s)\n", card_id, why); fflush(stdout);
@@ -651,7 +671,9 @@ int main(void)
     CK(screen_create_context(&ctx_dm, SCREEN_DISPLAY_MANAGER_CONTEXT), "display-manager context (needs root)");
     CK(screen_create_context(&ctx_app, SCREEN_APPLICATION_CONTEXT), "app context");
     int n = 0; CK(screen_get_context_property_iv(ctx_dm, SCREEN_PROPERTY_DISPLAY_COUNT, &n), "display count");
+    if (n < 1) { fprintf(stderr, "telltale: Screen reports %d displays\n", n); exit(2); }
     screen_display_t *ds = calloc((size_t)n, sizeof *ds);
+    if (!ds) { perror("telltale: calloc displays"); exit(2); }
     CK(screen_get_context_property_pv(ctx_dm, SCREEN_PROPERTY_DISPLAYS, (void **)ds), "displays");
     disp = ds[0];
     int dsz[2] = {0, 0}; screen_get_display_property_iv(disp, SCREEN_PROPERTY_SIZE, dsz);
@@ -693,6 +715,7 @@ int main(void)
         CK(screen_set_window_property_iv(card_win, SCREEN_PROPERTY_SIZE, sz), "card size");
         CK(screen_set_window_property_iv(card_win, SCREEN_PROPERTY_POSITION, pos), "card pos");
         CK(screen_set_window_property_iv(card_win, SCREEN_PROPERTY_ZORDER, &z), "card z");
+        vis = 0;   /* hidden = invisible (card_hide); card_show makes it visible */
         CK(screen_set_window_property_iv(card_win, SCREEN_PROPERTY_VISIBLE, &vis), "card visible");
         CK(screen_set_window_property_cv(card_win, SCREEN_PROPERTY_ID_STRING, 16, "tt-incident-card"), "card id");
         CK(screen_create_window_buffers(card_win, 1), "card buffers");
@@ -726,6 +749,9 @@ int main(void)
     enum cause cause = C_NONE;
     uint64_t t_unknown = 0;          /* when the current cause became UNKNOWN: the UNKNOWN kill counts from here */
     int readerr = 0;                 /* this check's window verdict is UNREADABLE because screen_read_window failed */
+    /* one status update per check on every path: state, counters and the open incident as it is NOW (cause, restarts) */
+#define PUB(CAPERR) do { pthread_mutex_lock(&g_mtx); g.checks++; if (CAPERR) g.capture_errors++; g.st = st; g.truth_gaps = T.gaps; \
+            if (inc_open) { g.open_inc = inc; g.have_open = 1; } pthread_mutex_unlock(&g_mtx); } while (0)
 
     for (;;) {
         struct _pulse p;
@@ -743,7 +769,7 @@ int main(void)
         pthread_mutex_lock(&g_mtx);
         armed = g.armed; dbg_on = g.debug;
         int newreg = g.reg_new; struct tt_register reg = g.reg; g.reg_new = 0;
-        if (g.rearm) { g.rearm = 0; rcap_reset(&kills); if (st == ST_GIVEUP) { st = ST_HOLD; t_state = now; } }
+        if (g.rearm) { g.rearm = 0; rcap_reset(&kills); if (st == ST_GIVEUP) { st = ST_HOLD; t_state = now; mismatch_cnt = 0; nowin_cnt = 0; } }
         if (g.new_period) {
             int np = g.new_period; g.new_period = 0;
             struct itimerspec ni = period_its(np);
@@ -760,7 +786,7 @@ int main(void)
 
         safe_allowed = armed;
         if (prev_armed && !armed) {   /* DISARM = observe-only in EVERY state (ttproto.h): no safe layer, no kill, no incident */
-            if (inc_open) { snprintf(inc.cause, sizeof inc.cause, "disarmed"); ev_append(&inc); inc_open = 0; banner_inc = NULL; open_publish(NULL); }
+            if (inc_open) { if (!inc.written) snprintf(inc.cause, sizeof inc.cause, "disarmed"); inc_write(&inc); inc_open = 0; banner_inc = NULL; open_publish(NULL); }
             safe_off(); card_hide("disarmed");
             if (st != ST_NORMAL && st != ST_WAIT) {
                 printf("telltale: disarmed in %s -> %s\n", ST[st], rwin ? ST[ST_NORMAL] : ST[ST_WAIT]); fflush(stdout);
@@ -788,22 +814,30 @@ int main(void)
                 if (fresh_nw) { st = ST_NODISPLAY; t_state = now; printf("telltale: NO_DISPLAY\n"); }
                 else { st = ST_TRUTHLOST; fresh_cnt = 0; t_state = now; printf("telltale: NO_TRUTH (no fresh vehicle sample after arm_grace_ms)\n"); }
             }
-            if (st == ST_TRUTHLOST) {   /* no window, no fresh truth: dashes up; truth back and no incident open -> NO-DISPLAY */
+            if (st == ST_TRUTHLOST) {   /* no window, no fresh truth: dashes up; truth back (truth_ok_n samples) -> SAFE-HOLD if an
+                                           incident is open and its renderer is registered (the no-window rules below restart it),
+                                           else NO-DISPLAY, where the next verified renderer frame closes any open incident */
                 safe_show(lt, !fresh_nw, rpos);
-                if (fresh_nw && !inc_open) { st = ST_NODISPLAY; t_state = now; }
+                if (!fresh_nw) fresh_cnt = 0;
+                else if (++fresh_cnt >= cfg.truth_ok_n) {
+                    if (inc_open && rend.pid) { st = ST_HOLD; mismatch_cnt = 0; nowin_cnt = 0; cause = C_UNKNOWN; t_unknown = now; }
+                    else st = ST_NODISPLAY;
+                    t_state = now;
+                }
             }
-            if ((st == ST_NODISPLAY || st == ST_RESTART || st == ST_GIVEUP) && lt) safe_show(lt, lt->t_ns < now && now - lt->t_ns > (uint64_t)cfg.truth_lost_ms * MS, rpos);
+            /* lt == NULL (a restarted vehicled, window emptied): dashes, never the last number painted */
+            if (st == ST_NODISPLAY || st == ST_RESTART || st == ST_GIVEUP) safe_show(lt, !fresh_nw, rpos);
             /* SAFE-HOLD but the live renderer's window is gone or unreadable: keep the truth up, and after mismatch_n
              * periods restart it (cause no-window) rather than hold forever */
             if (st == ST_HOLD && rend.pid && armed) {
-                if (lt) safe_show(lt, lt->t_ns < now && now - lt->t_ns > (uint64_t)cfg.truth_lost_ms * MS, rpos);
+                safe_show(lt, !fresh_nw, rpos);
                 if (kill(rend.pid, 0) == -1 && errno == ESRCH) {   /* the renderer died with its window already gone */
                     if (inc_open && !strcmp(inc.cause, "-")) snprintf(inc.cause, sizeof inc.cause, "crash");
                     killed_pid = rend.pid; st = ST_RESTART; t_state = now; nowin_cnt = 0;
                     printf("telltale: renderer pid %d is gone (crash, no window)\n", rend.pid); fflush(stdout);
                 } else if (cause != C_STARVED && cause != C_SCREEN && ++nowin_cnt >= cfg.mismatch_n && cap_reached(now, &kills)) {
                     st = ST_GIVEUP; t_state = now; nowin_cnt = 0;   /* never kill a starved / Screen-blocked renderer; cap applies here too */
-                    if (inc_open) { snprintf(inc.cause, sizeof inc.cause, "TT-GIVEUP"); ev_append(&inc); open_publish(&inc); }
+                    if (inc_open) { snprintf(inc.cause, sizeof inc.cause, "TT-GIVEUP"); inc_write(&inc); open_publish(&inc); }
                     printf("telltale: TT-GIVEUP (no-window)\n"); fflush(stdout);
                 } else if (cause != C_STARVED && cause != C_SCREEN && nowin_cnt >= cfg.mismatch_n) {
                     if (inc_open && !strcmp(inc.cause, "-")) snprintf(inc.cause, sizeof inc.cause, "no-window");
@@ -815,12 +849,18 @@ int main(void)
                     st = ST_RESTART; t_state = now; nowin_cnt = 0;
                 }
             }
-            if (st == ST_RESTART && now - t_state > (uint64_t)cfg.restart_timeout_ms * MS) {
+            if (st == ST_RESTART && rend.pid && rend.pid != killed_pid && t_reg_seen &&
+                now - t_reg_seen > (uint64_t)cfg.restart_timeout_ms * MS) {
+                /* the replacement registered but no window of it was found in restart_timeout_ms: SAFE-HOLD, where the
+                 * no-window rules above restart it under the cap (never parked in NO-DISPLAY) */
+                printf("telltale: restarted renderer pid %d registered, no window in %d ms -> SAFE-HOLD\n", rend.pid, cfg.restart_timeout_ms); fflush(stdout);
+                st = ST_HOLD; t_state = now; mismatch_cnt = 0; nowin_cnt = 0; cause = C_NONE;
+            } else if (st == ST_RESTART && (rend.pid == killed_pid || !rend.pid) && now - t_state > (uint64_t)cfg.restart_timeout_ms * MS) {
                 printf("telltale: restart timeout (pid %d did not register)\n", killed_pid); fflush(stdout);
                 st = ST_NODISPLAY; t_state = now;
             }
             if (st != prev_nw) { printf("telltale: %s -> %s\n", ST[prev_nw], ST[st]); fflush(stdout); }
-            pthread_mutex_lock(&g_mtx); g.checks++; g.st = st; g.truth_gaps = T.gaps; pthread_mutex_unlock(&g_mtx);   /* status stays truthful without a window */
+            PUB(0);   /* status stays truthful without a window */
             atomic_store(&hb_start, 0);
             continue;
         }
@@ -847,7 +887,7 @@ int main(void)
                 const struct veh_state *elt = truth_latest(&T); uint64_t en = tt_now_ns();
                 safe_show(elt, !(elt && (elt->t_ns >= en || en - elt->t_ns <= (uint64_t)cfg.truth_lost_ms * MS)), rpos);
             }
-            pthread_mutex_lock(&g_mtx); g.capture_errors++; g.st = st; pthread_mutex_unlock(&g_mtx);
+            PUB(1);
             atomic_store(&hb_start, 0);
             continue;
         }
@@ -917,12 +957,12 @@ int main(void)
         }
         uint64_t since_last_verified = t_last_verified;
         int truth_disp = lt ? disp_kmh(lt->speed_kmh) : -1;
-#define OPEN(V) do { memset(&inc, 0, sizeof inc); inc.v = (V); inc.shown = cs.kind == SPD_VALUE ? cs.value : -1; inc.truth = truth_disp; inc.lamps_shown = cs.lamps; inc.lamps_truth = lt ? lt->lamps : 0; \
+#define OPEN(V, SH) do { memset(&inc, 0, sizeof inc); inc.v = (V); inc.shown = (SH).kind == SPD_VALUE ? (SH).value : -1; inc.truth = truth_disp; inc.lamps_shown = (SH).lamps; inc.lamps_truth = lt ? lt->lamps : 0; \
             inc.t_last_verified = since_last_verified ? since_last_verified : t0; inc.t_detect = t_cap_end; inc.old_pid = rend.pid; \
             snprintf(inc.id, sizeof inc.id, "TT-%s-%04d", VCODE[V], ++seq_inc); snprintf(inc.cause, sizeof inc.cause, "-"); inc_open = 1; banner_inc = &inc; card_hide("new incident"); \
             pthread_mutex_lock(&g_mtx); g.faults++; g.open_inc = inc; g.have_open = 1; pthread_mutex_unlock(&g_mtx); \
-            printf("telltale: DETECT %s %s shown=%d truth=%d lamps_shown=0x%02x lamps_truth=0x%02x caught_ms=%.1f\n", inc.id, VN[V], inc.shown, inc.truth, cs.lamps, lt ? lt->lamps : 0, (inc.t_detect - inc.t_last_verified) / 1e6); fflush(stdout); } while (0)
-#define CLOSE() do { if (inc_open) { inc.t_true = t_cap_end; inc.exposure_ms = ((inc.t_safe_visible ? inc.t_safe_visible : inc.t_true) - inc.t_last_verified) / 1e6; ev_append(&inc); open_publish(NULL); inc_open = 0; banner_inc = NULL; \
+            printf("telltale: DETECT %s %s shown=%d truth=%d lamps_shown=0x%02x lamps_truth=0x%02x caught_ms=%.1f\n", inc.id, VN[V], inc.shown, inc.truth, inc.lamps_shown, lt ? lt->lamps : 0, (inc.t_detect - inc.t_last_verified) / 1e6); fflush(stdout); } while (0)
+#define CLOSE() do { if (inc_open) { inc.t_true = t_cap_end; inc_write(&inc); open_publish(NULL); inc_open = 0; banner_inc = NULL; \
             if (dbg_on) card_show(&inc, rpos); } } while (0)
 
         enum state prev = st;
@@ -935,12 +975,21 @@ int main(void)
                 if (truth_fresh) st = ST_NODISPLAY;
                 else { st = ST_TRUTHLOST; fresh_cnt = 0; safe_show(lt, 1, rpos); printf("telltale: NO_TRUTH (no fresh vehicle sample after arm_grace_ms)\n"); fflush(stdout); }
             }
-            if (st == ST_NODISPLAY && lt) safe_show(lt, !truth_fresh, rpos);
+            else if (st == ST_NODISPLAY && armed && truth_fresh && wv != V_NONE && wv != V_PASS && rend.pid &&
+                     t_reg_seen && now - t_reg_seen > (uint64_t)cfg.restart_timeout_ms * MS &&
+                     now - t_state > (uint64_t)cfg.restart_timeout_ms * MS) {
+                /* a window that stays wrong (blank at boot, or still wrong after a capture loss interrupted an incident):
+                 * SAFE-HOLD, where the kill rules and the restart cap decide; the safe layer stays up meanwhile */
+                if (!inc_open) OPEN(wv, ws);   /* the composed glass shows the safe layer: report the renderer's own frame */
+                printf("telltale: renderer pid %d not verified in NO-DISPLAY (%s) -> SAFE-HOLD\n", rend.pid, VN[wv]); fflush(stdout);
+                st = ST_HOLD; mismatch_cnt = 0; cause = C_NONE;
+            }
+            if (st == ST_NODISPLAY || st == ST_HOLD) safe_show(lt, !truth_fresh, rpos);   /* lt == NULL -> dashes */
             break;
         case ST_NORMAL:
             if (cv == V_PASS) { t_last_verified = t_cap_end; break; }
             if (!armed) break;                          /* observe-only: rows continue, no action */
-            OPEN(cv);
+            OPEN(cv, cs);
             if (cv == V_TRUTH_LOST) { st = ST_TRUTHLOST; fresh_cnt = 0; safe_show(lt, 1, rpos); break; }
             st = ST_HOLD; mismatch_cnt = 0; cause = C_NONE;
             safe_show(lt, 0, rpos);
@@ -958,6 +1007,11 @@ int main(void)
                 if (cause == C_UNKNOWN) t_unknown = now;
                 snprintf(inc.cause, sizeof inc.cause, "%s", CN[cause]);
                 printf("telltale: cause %s (draw thread states %d,%d,%d)\n", CN[cause], cstates[ncs - 3], cstates[ncs - 2], cstates[ncs - 1]); fflush(stdout);
+            } else if (cause != C_NONE && !stalled && t_tick_real == t_cap_end) {
+                /* the stall is over (a genuine tick move, never a lateness reset): its cause no longer protects or condemns
+                 * the renderer; from here it is judged live, so starved-then-wrong is killed as live-wrong (mismatch_n fresh) */
+                printf("telltale: cause %s cleared (tick moving again)\n", CN[cause]); fflush(stdout);
+                cause = C_NONE; mismatch_cnt = 0;
             }
             if (wv == V_PASS && !stalled) {             /* renderer-sourced frame true and its tick moving: hand back */
                 safe_hide(); st = ST_NORMAL; t_last_verified = t_cap_end; CLOSE(); break;
@@ -979,10 +1033,11 @@ int main(void)
             if (!armed) kill_now = 0;
             if (kill_now) {
                 if (cap_reached(now, &kills)) {   /* the incident will not recover on its own: write its record now */
-                    st = ST_GIVEUP; snprintf(inc.cause, sizeof inc.cause, "TT-GIVEUP"); ev_append(&inc); open_publish(&inc);
+                    st = ST_GIVEUP; snprintf(inc.cause, sizeof inc.cause, "TT-GIVEUP"); inc_write(&inc); open_publish(&inc);
                     printf("telltale: TT-GIVEUP\n"); fflush(stdout); break;
                 }
-                if (!strcmp(inc.cause, "-")) snprintf(inc.cause, sizeof inc.cause, "%s", wv == V_MISMATCH ? "live-wrong" : VN[wv]);
+                if (!strcmp(inc.cause, "-") || cause == C_NONE)   /* the kill reason: the frame verdict unless a stall cause decided */
+                    snprintf(inc.cause, sizeof inc.cause, "%s", wv == V_MISMATCH ? "live-wrong" : VN[wv]);
                 rcap_note(&kills, now); inc.restarts++;   /* restarts = kills the monitor sent in THIS incident */
                 killed_pid = rend.pid; inc.t_kill = tt_now_ns();
                 kill(rend.pid, SIGKILL);
@@ -1021,7 +1076,7 @@ int main(void)
             printf("telltale: %s -> %s\n", ST[prev], ST[st]); fflush(stdout);
         }
         uint64_t t_end = tt_now_ns();
-        pthread_mutex_lock(&g_mtx); g.checks++; g.st = st; g.truth_gaps = T.gaps; pthread_mutex_unlock(&g_mtx);
+        PUB(0);
         if (chk) fprintf(chk, "%llu,%llu,%llu,%s,%d,%s,%d,%d,%d,%d,%d,%s,%d,%llu,%llu,0x%02x,0x%02x\n", (unsigned long long)t_cap_start, (unsigned long long)t_cap_end,
                          (unsigned long long)((t_end - t_cap_start) / 1000), ST[st], armed, VN[cv], cs.kind == SPD_VALUE ? cs.value : -1 - (int)cs.kind,
                          tmin, tmax, cs.tick, cs.marker, VN[wv], ws.kind == SPD_VALUE ? ws.value : -1 - (int)ws.kind,
