@@ -9,13 +9,16 @@ the digits and lamps, and checks them against `/dev/vehicle`. On a lie it puts a
 top, decides hung vs starved from the renderer's thread states, kills and respawns a hung or wrong renderer, verifies
 the new one, and hands the display back. 20 ms is the configured check period (`period_ms`), not a measured figure.
 Recorded runs per fault class: [`evidence/runs/`](evidence/runs/). Tests: `make test-host` = C checks (test_disp 12, test_decode 91,
-test_text 17) + 95 Python tests (8 need Pillow). `make test-target`: 130 passed, 0 failed on the QEMU (TCG) guest at
-commit 10627eb ([`evidence/test-target/20261115T155121Z/summary.txt`](evidence/test-target/20261115T155121Z/summary.txt), host
-load logged at start and end), including `tests/target/core_items.sh` 17/17 (`/dev/vehicle`, `ttctl`, `/dev/telltale`,
-TRUTH_LOST + recovery, NO_DISPLAY, the incident in slog2), the secpol denials 16/16, and the engineering-mode case whose banner
+test_text 17, test_rcap 28) + 97 Python tests (8 need Pillow). `make test-target`: 155 passed, 0 failed on the QEMU (TCG) guest at
+commit 1989412 ([`evidence/test-target/20261115T213814Z/summary.txt`](evidence/test-target/20261115T213814Z/summary.txt), host
+load logged at start and end), including `tests/target/core_items.sh` 37/37 (`/dev/vehicle`, `ttctl`, `/dev/telltale`,
+TRUTH_LOST + recovery, DISARM mid-incident, a vehicled restart, NO_DISPLAY, startup without truth, the restart cap, a crash
+after earlier incidents, a monitor restart, the incident in slog2), the secpol denials 21/21, and the engineering-mode case whose banner
 and incident card (and the card gone after `card_ms`) are read back from frames a separate process captured.
-An earlier run ([`20261115T141317Z`](evidence/test-target/20261115T141317Z/summary.txt), 110 passed, 1 failed) is
-kept: it caught a race where a frozen renderer was killed as "live-wrong" before its stall was classified (fixed since).
+Two failing runs are kept: [`20261115T141317Z`](evidence/test-target/20261115T141317Z/summary.txt) (110 passed, 1 failed) caught a
+race where a frozen renderer was killed as "live-wrong" before its stall was classified, and
+[`20261115T204528Z`](evidence/test-target/20261115T204528Z/summary.txt) (148 passed, 5 failed) caught a renderer that was blank
+while its tick had stopped being held forever instead of killed (both fixed since).
 
 ## Bench results (QEMU TCG, raw rows in `evidence/`)
 **On QEMU (TCG), p95 detection was 24.8 ms (BLANK) to 271 ms (STALE); the pre-registered 197 ms formula bound is met for BLANK, FREEZE and STARVE, the < 100 ms stretch target only for BLANK, and STALE missed its W + 100 ms target. All 200 injected faults were detected, 0 missed; the monitor-off ablation showed a wrong or missing speed for about 29.9 of 30 s; the 30-minute clean replay had 0 false positives in 91,029 checks.**
@@ -37,7 +40,8 @@ STALE needs the true speed to move, so it carries the 100 ms truth window by con
 - **Monitor-off ablation** (40 runs, 10 per class, 30 s window, `ttctl disarm`: the monitor still reads but never acts): median 29.9 s of the window wrong (minimum 29.09 s; target: median >= 25 s, 0 runs below), still wrong at the end of all 40. A disarmed monitor cannot recover, so this is a control showing what the glass does without it, not a detection result.
 - **30-minute clean replay (the first 1800 s of the same drive, 1820.8 s measured): 0 false positives** (target <= 1) in 91,029 armed checks (121 pre-arm warm-up rows are excluded and counted in the CSV header); the three-region read-back costs p50 / p95 5.7 / 6.3 ms per check.
 - Also measured: 50 renderer crashes (detect p50 14 ms, 0 missed); 10 MISDRAW (the renderer intends the right value and draws another; 10/10 caught). Computed offline from the renderer's own intent log (within 1 km/h), a self-report check (intended value vs truth) would have passed all 50 BLANK and 10 MISDRAW runs; the pixel read caught every one. No self-report baseline is scored for FREEZE, STALE or STARVE.
-- Conditions: the bench driver runs on the Mac and the stamps are written on the target; the runmask column reads `0xf` for every row although STARVE runs pin the renderer and the hog to one CPU; host load1 during the fault, ablation, crash and period runs was 1.8-35.9 and is logged per row. Every bench run had no security policy loaded (`TT_POLICY` unset: processes untyped, uid checks in code); the policy is exercised by `make test-target` (a FREEZE run with every process in its secpol type, plus the denial checks). The rows' `exposure_ms` column reads 0.0 because the monitor version that produced them (each row's `git_sha`) did not compute it; later versions write last verified frame -> truth on glass.
+- Conditions: the bench driver runs on the Mac and the stamps are written on the target; the runmask column reads `0xf` for every row although STARVE runs pin the renderer and the hog to one CPU; host load1 during the fault, ablation, crash and period runs was 1.8-35.9 and is logged per row. Every bench run had no security policy loaded (`TT_POLICY` unset: processes untyped, uid checks in code); the policy is exercised by `make test-target` (a FREEZE run with every process in its secpol type, plus the denial checks). The rows' `exposure_ms` column reads 0.0 because the monitor version that produced them (each row's `git_sha`) did not compute it; later versions write last verified frame -> truth on glass (see the regression check below).
+- Regression check after the code review, 5 injections per class at commit b896938 ([`evidence/bench-regress-r03.csv`](evidence/bench-regress-r03.csv), [`evidence/bench-regress-r03-crash.csv`](evidence/bench-regress-r03-crash.csv)): 25/25 detected, 0 missed; detect p95 BLANK 21.9, FREEZE 118.5, STARVE 175.7, STALE 259.7, CRASH 18.8 ms; `exposure_ms` (last verified frame -> truth on glass) 35.8-50.1 ms for BLANK, FREEZE, STALE and STARVE, 203.9-251.8 ms for CRASH. Five per class checks that nothing regressed; it does not replace the 50-per-class tables above.
 - Not run: the B7 holdout variants other than MISDRAW (external SIGSTOP of the renderer or Screen, random-time and steady-cruise injections, an independent fixture renderer) and monitor CPU % per period.
 
 ## What is here today
@@ -51,7 +55,7 @@ STALE needs the true speed to move, so it carries the 100 ms truth window by con
 | `src/common/` | shared C code: vehicle state and devctl protocol, layout and palette, glyph atlas (`glyphs.h`, generated by `tools/gen_glyphs.py`), digit + lamp decoder, truth window, `disp_kmh()` rounding rule, secpol entry (`ttsec.c`) |
 | `secpol/telltale.pol` | the security policy: one type per process, channel-connect rules, `vehicle:write` for the feeder only, `telltale:control` for the injector only, the monitor's signal / process-query abilities, the hog capped at priority 40 |
 | `scripts/scenario.sh`, `scripts/target/` | one recorded run on the target (start the stack, fire a fault at a trace time, collect the logs); `scripts/target/tt_up.sh` is the start script (vehicled → telltale → cluster → vehfeed); the renderer is restarted by a shell loop or, with `TT_SUP=slm`, by QNX `slm` (`telltale-slm.xml`) |
-| `scripts/test_target.sh`, `scripts/check_run.py`, `tests/target/` | the on-target test suite (`make test-target`): one run per fault class, a clean drive, the hold → heal → hand-back sequence, the same in engineering mode (banner + card read back), `tests/target/core_items.sh` (`/dev/vehicle`, `ttctl`, `/dev/telltale`, TRUTH_LOST and its recovery, NO_DISPLAY), secpol denials |
+| `scripts/test_target.sh`, `scripts/check_run.py`, `tests/target/` | the on-target test suite (`make test-target`): one run per fault class, a clean drive, the hold → heal → hand-back sequence, the same in engineering mode (banner + card read back), `tests/target/core_items.sh` (`/dev/vehicle`, `ttctl`, `/dev/telltale`, TRUTH_LOST and its recovery, DISARM, vehicled and monitor restarts, NO_DISPLAY, the restart cap), secpol denials |
 | `scripts/bench.py`, `scripts/bench_run.py`, `scripts/bench_all.sh`, `scripts/bench_report.py`, `scripts/calibrate.py` | the bench: `bench_run.py` schedules one fresh stack per injection on the guest and turns the target's own stamps into rows; `bench.py` analyses them (per-class p50/p95/max, misses, failed rows, false positives, ablation); `bench_all.sh` reproduces everything and writes `evidence/RESULTS.md`; `bench_report.py` writes `evidence/report.html`; `calibrate.py` derives `tick_stall_ms` from a clean run |
 | `tools/fetch_comma_speed.py` | pulls only the CAN speed arrays out of a comma2k19 chunk with HTTP range reads (each zip's central directory is read too) |
 | `tools/trace_from_comma.py` | builds the real speed traces: the hero stop, the 31-min bench drive, the speed-changing-window census |
@@ -78,11 +82,16 @@ STALE needs the true speed to move, so it carries the 100 ms truth window by con
   code), and reading Screen buffers is a Screen permission, not a secpol rule. There is no `screen_t`: Screen is started
   before the runtime policy push (the push is immutable until reboot).
 - `tick_stall_ms=151` is calibrated from one clean run on QEMU (TCG) (the Mac's load1 was about 25-70 during that run, noted in `scripts/target/telltale.conf`, i.e. heavier than during the fault runs, which only makes the threshold more conservative); `W_ms=100` and `restart_timeout_ms=4000` were kept, not tuned.
-- Not asserted by a test yet: the restart cap (TT-GIVEUP, applied at both kill sites), the kill after an UNKNOWN-cause stall
+- Not asserted by a test yet: the restart cap on the no-window kill path (the test covers the main kill path: a renderer
+  blank on every start is killed 3 times, then TT-GIVEUP, then rearm -> NORMAL), the kill after an UNKNOWN-cause stall
   (counted from when the cause became UNKNOWN, so one mixed state sample in a long STARVE cannot kill), the restart when a
   live renderer's window stays unreadable during SAFE-HOLD, and a renderer that is starved first and then hangs. `DCMD_VEH_GET_SINCE`
   (the monitor's truth path) and the ionotify pulses (the renderer's data path) run in every recorded run but have no
   separate assertion.
+- **The monitor is not supervised:** nothing restarts `telltale` if it dies (the display keeps whatever the renderer draws);
+  a restarted monitor relearns the renderer and arms again (asserted by `core_items.sh`). The monitor holds the
+  `xprocess_debug` ability (`secpol/telltale.pol`) to read the renderer's thread states through `/proc` for the
+  hung-vs-starved decision.
 - The fault banner shows the monitor's verdict (`VALUE_MISMATCH`, `TICK_STALL`, ...), not the injected fault class: the
   monitor cannot know what was injected.
 
