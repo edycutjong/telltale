@@ -1,0 +1,45 @@
+PASS monitor armed on the parked car (state NORMAL)
+PASS cat /dev/vehicle prints seq, speed, gear and lamps
+PASS ttctl status = the /dev/telltale status line
+PASS ttctl disarm -> armed=0
+PASS ttctl arm -> armed=1
+PASS ttctl period 40 -> period_ms=40 (the knob)
+PASS ttctl period 3 refused (EINVAL, range 5..100)
+PASS ttctl period 500 refused (EINVAL: the 4-bit tick aliases past 266 ms)
+PASS ttctl period 20 -> period_ms=20
+PASS ttctl rearm + debug off accepted
+PASS cat /dev/telltale-events starts with the incident CSV header
+PASS status reports capture_errors=0 (every composed read succeeded)
+PASS feeder killed -> state TRUTH-LOST
+PASS cat /dev/telltale shows the incident in progress (open=TT-TRL-*)
+PASS feeder back -> verified hand-back, state NORMAL
+PASS TRUTH_LOST incident closed: last=TT-TRL-* verdict=TRUTH_LOST recovered=yes in /dev/telltale
+PASS the TRUTH_LOST row is in /dev/telltale-events
+PASS the TRUTH_LOST incident is in slog2 (slog2info, buffer set telltale)
+PASS period knob kept the configured tick_stall_ms=151 (telltale.conf, not the 57 ms rule floor)
+PASS disarm during TRUTH-LOST -> armed=0, observe-only NORMAL
+PASS the open incident is recorded with cause=disarmed
+PASS disarmed: no kill, same renderer pid 56311835, still NORMAL
+PASS arm again -> armed=1 NORMAL
+PASS vehicled gone -> TRUTH-LOST
+PASS stale renderer on the dead truth connection killed + respawned (pid 56311835 -> 57946147), NORMAL
+PASS its incident names the kill (TRUTH_LOST, cause live-wrong, restarts >= 1)
+PASS the monitor reconnected to /dev/vehicle (truth window reset)
+PASS renderer gone and not restarted -> state NO-DISPLAY (safe layer keeps the truth up)
+PASS renderer gone, no respawn: the safe layer is read back true on glass before any respawn
+PASS no renderer window, safe layer off: the hidden incident card is not composed (card rect != its fill)
+PASS no feeder at startup -> TRUTH-LOST after arm_grace_ms (not WAIT forever)
+PASS feeder starts -> verified frame, NORMAL
+PASS renderer wrong on every start -> TT-GIVEUP (the restart cap holds)
+PASS exactly max_restarts=3 kills before TT-GIVEUP (restarts 0 -> 3)
+PASS the TT-GIVEUP incident is in /dev/telltale-events at once, restarts=3
+PASS the correction was verified on glass during it (t_safe_true_ns set: safe layer read back = truth)
+PASS cat /dev/telltale keeps the unrecovered incident open (cause=TT-GIVEUP)
+PASS fault removed + rearm -> renderer restarted, verified hand-back, NORMAL
+PASS one record per incident: TT-BLK-0001 appears once in /dev/telltale-events after the recovery
+PASS the TT-GIVEUP record carries its exposure (last verified frame -> truth verified on glass > 0 ms)
+PASS renderer blank from boot -> NO-DISPLAY -> SAFE-HOLD -> restarts -> TT-GIVEUP (not NO-DISPLAY forever)
+PASS blank-from-boot fault removed + rearm -> NORMAL
+PASS crash after earlier incidents -> a NEW incident, BLANK (no stale safe layer exposed), restarted, NORMAL
+PASS monitor restarted -> relearns the renderer, arms again (NORMAL)
+core: 44/44 passed

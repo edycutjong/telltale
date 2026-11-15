@@ -1,0 +1,53 @@
+telltale: conf period_ms=20
+telltale: conf W_ms=100
+telltale: conf tick_stall_ms=151
+telltale: conf truth_lost_ms=200
+telltale: conf restart_timeout_ms=4000
+telltale: conf mismatch_n=3
+telltale: conf truth_ok_n=5
+telltale: pid=56287254 uid=0 type=untyped prio=60
+telltale: period_ms=20 W_ms=100 tick_stall_ms=151 h_max=615 mismatch_n=3 unknown_kill_ms=755 restart_timeout_ms=4000 policy=none (uid/pid checks) slog2=telltale/incidents
+telltale: display 1280x768, tier G1-FULL (screen_read_display, display-manager context)
+telltale: BANNER x=371 w=538 mode=driver text="DISPLAY FAULT · SHOWING TRUE SPEED"
+telltale: renderer registered pid=56311835 draw_tid=3 window=tt-cluster-56311835
+telltale: window tt-cluster-56311835 found at 0,24
+telltale: ARMED renderer pid=56311835 (window tt-cluster-56311835)
+telltale: WAIT -> NORMAL
+telltale: DETECT TT-TRL-0001 TRUTH_LOST shown=52 truth=52 lamps_shown=0x10 lamps_truth=0x10 caught_ms=20.2
+telltale: BANNER x=400 w=479 mode=driver text="DISPLAY FAULT · SPEED DATA LOST"
+telltale: NORMAL -> TRUTH-LOST
+telltale: TRUTH-LOST -> SAFE-HOLD
+telltale: BANNER x=371 w=538 mode=driver text="DISPLAY FAULT · SHOWING TRUE SPEED"
+telltale: cause unknown cleared (tick moving again)
+telltale: INCIDENT TT-TRL-0001,TRUTH_LOST,-,52,52,1568669038558,1568689198798,20.2,1568710769154,0,0,1569111778668,0,442.7,56311835,0,0x10,0x10,0
+telltale: SAFE-HOLD -> NORMAL
+telltale: DETECT TT-TRL-0002 TRUTH_LOST shown=52 truth=52 lamps_shown=0x10 lamps_truth=0x10 caught_ms=20.1
+telltale: BANNER x=400 w=479 mode=driver text="DISPLAY FAULT · SPEED DATA LOST"
+telltale: NORMAL -> TRUTH-LOST
+telltale: INCIDENT TT-TRL-0002,TRUTH_LOST,disarmed,52,52,1570148703055,1570168841262,20.1,1570197027541,0,0,0,0,-1.0,56311835,0,0x10,0x10,0
+telltale: disarmed in TRUTH-LOST -> NORMAL
+telltale: /dev/vehicle: Bad file descriptor -- reconnecting
+telltale: DETECT TT-TRL-0003 TRUTH_LOST shown=52 truth=52 lamps_shown=0x10 lamps_truth=0x10 caught_ms=19.8
+telltale: NORMAL -> TRUTH-LOST
+telltale: reconnected to /dev/vehicle (truth window reset)
+telltale: TRUTH-LOST -> SAFE-HOLD
+telltale: BANNER x=371 w=538 mode=driver text="DISPLAY FAULT · SHOWING TRUE SPEED"
+telltale: cause unknown cleared (tick moving again)
+telltale: SAFE verified on glass TT-TRL-0003 (363.5 ms after detect, composed check)
+telltale: SIGKILL renderer pid 56311835 (live-wrong)
+telltale: SAFE-HOLD -> RESTARTING
+telltale: renderer registered pid=57946147 draw_tid=3 window=tt-cluster-57946147
+telltale: window tt-cluster-57946147 found at 0,24
+telltale: INCIDENT TT-TRL-0003,TRUTH_LOST,live-wrong,52,52,1574619905859,1574639684527,19.8,1574669507261,1575026843265,1575217484226,1575241132699,1,383.3,56311835,57946147,0x10,0x10,1575003204807
+telltale: RESTARTING -> NORMAL
+telltale: DETECT TT-BLK-0004 BLANK shown=-1 truth=0 lamps_shown=0x00 lamps_truth=0x00 caught_ms=18.5
+telltale: NORMAL -> SAFE-HOLD
+telltale: SAFE verified on glass TT-BLK-0004 (22.4 ms after detect, composed check)
+telltale: screen_read_window: Invalid argument
+telltale: renderer pid 57946147 is gone (crash)
+telltale: restart timeout (pid 57946147 did not register)
+telltale: RESTARTING -> NO-DISPLAY
+telltale: INCIDENT TT-BLK-0004,BLANK,disarmed,-1,0,1575799302954,1575817776665,18.5,1575840138207,0,0,0,0,40.8,57946147,0,0x00,0x00,1575840138207
+telltale: disarmed in NO-DISPLAY -> WAIT
+telltale: NO_DISPLAY
+telltale: WAIT -> NO-DISPLAY
