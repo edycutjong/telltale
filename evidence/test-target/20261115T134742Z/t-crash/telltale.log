@@ -1,0 +1,22 @@
+telltale: conf period_ms=20
+telltale: conf W_ms=100
+telltale: conf tick_stall_ms=150
+telltale: conf truth_lost_ms=200
+telltale: conf restart_timeout_ms=4000
+telltale: conf mismatch_n=3
+telltale: conf truth_ok_n=5
+telltale: pid=4419609 uid=0 type=untyped prio=60
+telltale: period_ms=20 W_ms=100 tick_stall_ms=150 h_max=615 mismatch_n=3 unknown_kill_ms=750 restart_timeout_ms=4000 policy=none (uid/pid checks)
+telltale: display 1280x768, tier G1-FULL (screen_read_display, display-manager context)
+telltale: renderer registered pid=4444190 draw_tid=3 window=tt-cluster-4444190
+telltale: window tt-cluster-4444190 found at 0,24
+telltale: ARMED renderer pid=4444190 (window tt-cluster-4444190)
+telltale: WAIT -> NORMAL
+telltale: DETECT TT-BLK-0001 BLANK shown=-1 truth=47 lamps_shown=0x00 lamps_truth=0x01 caught_ms=28.9
+telltale: NORMAL -> SAFE-HOLD
+telltale: screen_read_window: Invalid argument
+telltale: renderer pid 4444190 is gone (crash)
+telltale: renderer registered pid=4603932 draw_tid=3 window=tt-cluster-4603932
+telltale: window tt-cluster-4603932 found at 0,24
+telltale: INCIDENT TT-BLK-0001,BLANK,crash,-1,47,214436477125,214465399940,28.9,214677101812,0,214671477625,214696316949,0,0.0,4444190,4603932,0x00,0x01
+telltale: RESTARTING -> NORMAL
