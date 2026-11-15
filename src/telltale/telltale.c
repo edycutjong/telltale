@@ -47,6 +47,7 @@ static struct {
     int card_ms;               /* engineering mode: how long the incident card stays up after recovery */
 } cfg = {20, 100, 0, GLYPH_H_MAX_DEFAULT, 200, 5000, 3000, 3, 60, 3, 0, 0, 5, 500, 0x3F, 5000};
 
+static int conf_tick_stall_ms, conf_unknown_kill_ms, conf_screen_stall_ms;   /* as configured (0 = derive) */
 static void cfg_derive(void)
 {
     int rule = 2 * cfg.period_ms + 17;                 /* tick_stall_ms(p) = max(calibrated, 2p + 1 frame) */
@@ -514,6 +515,7 @@ static enum verdict judge(const struct shot *s, uint64_t t_lo, uint64_t t_hi, in
 int main(void)
 {
     cfg_load(getenv("TT_CONF"));
+    conf_tick_stall_ms = cfg.tick_stall_ms; conf_unknown_kill_ms = cfg.unknown_kill_ms; conf_screen_stall_ms = cfg.screen_stall_ms;
     cfg_derive();
     tt_enter("telltale", SCHED_FIFO, 60);
     pthread_setname_np(0, "check");
@@ -602,8 +604,8 @@ int main(void)
     screen_window_t rwin = NULL;
     int rpos[2] = {L_WIN_X, L_WIN_Y};
     enum state st = ST_WAIT;
-    uint64_t t0 = tt_now_ns(), t_last_verified = 0, t_tick_change = 0, t_prev_loop = 0, t_state = t0, t_reg_seen = 0;
-    int last_tick = -1, tick_moves_since_reg = 0, mismatch_cnt = 0, fresh_cnt = 0, killed_pid = 0;
+    uint64_t t0 = tt_now_ns(), t_last_verified = 0, t_tick_change = 0, t_tick_real = 0, t_prev_loop = 0, t_state = t0, t_reg_seen = 0;
+    int last_tick = -1, tick_moves_since_reg = 0, mismatch_cnt = 0, nowin_cnt = 0, fresh_cnt = 0, killed_pid = 0;
     int cstates[16], ncs = 0;
     uint64_t kills[8] = {0}; int nkills = 0;
     struct incident inc; int inc_open = 0, armed = 1, seq_inc = 0;
@@ -623,7 +625,10 @@ int main(void)
         int newreg = g.reg_new; struct tt_register reg = g.reg; g.reg_new = 0;
         if (g.rearm) { g.rearm = 0; nkills = 0; if (st == ST_GIVEUP) { st = ST_HOLD; t_state = now; } }
         if (g.new_period) {
-            cfg.period_ms = g.new_period; g.new_period = 0; cfg.tick_stall_ms = 0; cfg.unknown_kill_ms = 0; cfg.screen_stall_ms = 0; cfg_derive();
+            /* re-derive from the CONFIGURED values (telltale.conf), never below them: the rule only raises a floor */
+            cfg.period_ms = g.new_period; g.new_period = 0;
+            cfg.tick_stall_ms = conf_tick_stall_ms; cfg.unknown_kill_ms = conf_unknown_kill_ms; cfg.screen_stall_ms = conf_screen_stall_ms;
+            cfg_derive();
             struct itimerspec ni = {{0, cfg.period_ms * 1000000L}, {0, cfg.period_ms * 1000000L}};
             timer_settime(tid, 0, &ni, NULL);
         }
@@ -637,17 +642,38 @@ int main(void)
         }
         if (rend.pid && !rwin) {
             rwin = find_window(rend.win_id, rpos);
-            if (rwin) { printf("telltale: window %s found at %d,%d\n", rend.win_id, rpos[0], rpos[1]); fflush(stdout); }
+            if (rwin) { nowin_cnt = 0; printf("telltale: window %s found at %d,%d\n", rend.win_id, rpos[0], rpos[1]); fflush(stdout); }
         }
         drain_truth();
         if (!rwin) {   /* no renderer window to read: boot wait or after a kill */
             const struct veh_state *lt = truth_latest(&T);
+            enum state prev_nw = st;
             if (st == ST_WAIT && armed && now - t0 > (uint64_t)cfg.arm_grace_ms * MS && lt) { st = ST_NODISPLAY; t_state = now; printf("telltale: NO_DISPLAY\n"); }
             if ((st == ST_NODISPLAY || st == ST_RESTART) && lt) safe_show(lt, lt->t_ns < now && now - lt->t_ns > (uint64_t)cfg.truth_lost_ms * MS, rpos);
+            /* SAFE-HOLD but the live renderer's window is gone or unreadable: keep the truth up, and after mismatch_n
+             * periods restart it (cause no-window) rather than hold forever */
+            if (st == ST_HOLD && rend.pid) {
+                if (lt) safe_show(lt, lt->t_ns < now && now - lt->t_ns > (uint64_t)cfg.truth_lost_ms * MS, rpos);
+                if (kill(rend.pid, 0) == -1 && errno == ESRCH) {   /* the renderer died with its window already gone */
+                    if (inc_open && !strcmp(inc.cause, "-")) snprintf(inc.cause, sizeof inc.cause, "crash");
+                    killed_pid = rend.pid; st = ST_RESTART; t_state = now; nowin_cnt = 0;
+                    printf("telltale: renderer pid %d is gone (crash, no window)\n", rend.pid); fflush(stdout);
+                } else if (++nowin_cnt >= cfg.mismatch_n) {
+                    if (inc_open && !strcmp(inc.cause, "-")) snprintf(inc.cause, sizeof inc.cause, "no-window");
+                    kills[nkills++ % 8] = now; if (nkills > 8) nkills = 8;
+                    killed_pid = rend.pid; if (inc_open) inc.t_kill = tt_now_ns();
+                    kill(rend.pid, SIGKILL);
+                    pthread_mutex_lock(&g_mtx); g.restarts_total++; pthread_mutex_unlock(&g_mtx);
+                    printf("telltale: SIGKILL renderer pid %d (no-window)\n", rend.pid); fflush(stdout);
+                    st = ST_RESTART; t_state = now; nowin_cnt = 0;
+                }
+            }
             if (st == ST_RESTART && now - t_state > (uint64_t)cfg.restart_timeout_ms * MS) {
                 printf("telltale: restart timeout (pid %d did not register)\n", killed_pid); fflush(stdout);
                 st = ST_NODISPLAY; t_state = now;
             }
+            if (st != prev_nw) { printf("telltale: %s -> %s\n", ST[prev_nw], ST[st]); fflush(stdout); }
+            pthread_mutex_lock(&g_mtx); g.checks++; g.st = st; pthread_mutex_unlock(&g_mtx);   /* status stays truthful without a window */
             atomic_store(&hb_start, 0);
             continue;
         }
@@ -669,11 +695,14 @@ int main(void)
         cs.marker = tt_marker_ok(pb + (long)(L_MARK_Y - L_BLOCK_Y) * sb + (L_MARK_X - L_BLOCK_X), sb);
 
         if (late) { last_tick = cs.tick; t_tick_change = t_cap_end; }
-        else if (cs.tick != last_tick) { last_tick = cs.tick; t_tick_change = t_cap_end; tick_moves_since_reg++; }
+        else if (cs.tick != last_tick) { last_tick = cs.tick; t_tick_change = t_tick_real = t_cap_end; tick_moves_since_reg++; }   /* t_tick_real: a genuine change, never a lateness reset */
         int stalled = t_tick_change && t_cap_end - t_tick_change > (uint64_t)cfg.tick_stall_ms * MS;
         if (!t_tick_change) t_tick_change = t_cap_end;
         /* cause samples: while the tick has not moved for more than one period */
-        if (t_cap_end - t_tick_change > (uint64_t)cfg.period_ms * MS) { if (ncs < 16) cstates[ncs++] = thread_state(rend.pid, rend.draw_tid); }
+        if (t_cap_end - t_tick_change > (uint64_t)cfg.period_ms * MS) {   /* rolling: the latest 16 draw-thread states of this stall */
+            if (ncs == 16) { memmove(cstates, cstates + 1, 15 * sizeof cstates[0]); ncs = 15; }
+            cstates[ncs++] = thread_state(rend.pid, rend.draw_tid);
+        }
         else ncs = 0;
 
         const struct veh_state *lt = truth_latest(&T);
@@ -700,6 +729,7 @@ int main(void)
             } else {
                 printf("telltale: screen_read_window: %s\n", strerror(errno)); fflush(stdout);
                 rwin = NULL;
+                if (st == ST_HOLD) wv = V_UNREADABLE;   /* the renderer's frame cannot be verified: counts towards the kill */
                 if (st == ST_HOLD && kill(rend.pid, 0) == -1 && errno == ESRCH) {   /* the renderer died on its own */
                     if (inc_open && !strcmp(inc.cause, "-")) snprintf(inc.cause, sizeof inc.cause, "crash");
                     killed_pid = rend.pid; st = ST_RESTART; t_state = now;
@@ -744,8 +774,11 @@ int main(void)
             safe_show(lt, 0, rpos);
             /* classify on any stall during the hold, whatever opened the incident: a renderer frozen while the
              * speed changes is first seen as VALUE_MISMATCH, then its tick stops */
-            if (stalled && cause == C_NONE && ncs >= 3) {
-                cause = classify(cstates + ncs - 3, 3);
+            /* re-classified on every stalled check (latest 3 states), so a renderer that is starved first and then
+             * really hangs (or the reverse) gets the action for what it is now, never a cause frozen at first sight */
+            enum cause nc = stalled && ncs >= 3 ? classify(cstates + ncs - 3, 3) : cause;
+            if (nc != cause) {
+                cause = nc;
                 snprintf(inc.cause, sizeof inc.cause, "%s", CN[cause]);
                 printf("telltale: cause %s (draw thread states %d,%d,%d)\n", CN[cause], cstates[ncs - 3], cstates[ncs - 2], cstates[ncs - 1]); fflush(stdout);
             }
@@ -757,7 +790,8 @@ int main(void)
              * live and drawing wrong ("live-wrong"). A frozen or starved renderer also shows a stale value while the speed
              * moves, but its tick has stopped: wait for the stall and its cause (hung -> kill, starved -> no kill) instead
              * of racing it. Blank / unreadable frames are a lie whatever the tick does. */
-            if ((wv == V_MISMATCH && t_tick_change > inc.t_detect) || wv == V_BLANK || wv == V_UNREADABLE) {
+            if ((wv == V_MISMATCH && t_tick_real > inc.t_detect && cause != C_STARVED && cause != C_SCREEN) ||
+                wv == V_BLANK || wv == V_UNREADABLE) {
                 if (++mismatch_cnt >= cfg.mismatch_n) kill_now = 1;
             }
             if (stalled && cause == C_HUNG) kill_now = 1;
