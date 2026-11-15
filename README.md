@@ -37,7 +37,7 @@ STALE needs the true speed to move, so it carries the 100 ms truth window by con
 - **Monitor-off ablation** (40 runs, 10 per class, 30 s window, `ttctl disarm`: the monitor still reads but never acts): median 29.9 s of the window wrong (minimum 29.09 s; target: median >= 25 s, 0 runs below), still wrong at the end of all 40. A disarmed monitor cannot recover, so this is a control showing what the glass does without it, not a detection result.
 - **30-minute clean replay (the first 1800 s of the same drive, 1820.8 s measured): 0 false positives** (target <= 1) in 91,029 armed checks (121 pre-arm warm-up rows are excluded and counted in the CSV header); the three-region read-back costs p50 / p95 5.7 / 6.3 ms per check.
 - Also measured: 50 renderer crashes (detect p50 14 ms, 0 missed); 10 MISDRAW (the renderer intends the right value and draws another; 10/10 caught). Computed offline from the renderer's own intent log (within 1 km/h), a self-report check (intended value vs truth) would have passed all 50 BLANK and 10 MISDRAW runs; the pixel read caught every one. No self-report baseline is scored for FREEZE, STALE or STARVE.
-- Conditions: the bench driver runs on the Mac and the stamps are written on the target; the runmask column reads `0xf` for every row although STARVE runs pin the renderer and the hog to one CPU; host load1 during the fault, ablation, crash and period runs was 1.8-35.9 and is logged per row.
+- Conditions: the bench driver runs on the Mac and the stamps are written on the target; the runmask column reads `0xf` for every row although STARVE runs pin the renderer and the hog to one CPU; host load1 during the fault, ablation, crash and period runs was 1.8-35.9 and is logged per row. Every bench run had no security policy loaded (`TT_POLICY` unset: processes untyped, uid checks in code); the policy is exercised by `make test-target` (a FREEZE run with every process in its secpol type, plus the denial checks). The rows' `exposure_ms` column reads 0.0 because the monitor version that produced them (each row's `git_sha`) did not compute it; later versions write last verified frame -> truth on glass.
 - Not run: the B7 holdout variants other than MISDRAW (external SIGSTOP of the renderer or Screen, random-time and steady-cruise injections, an independent fixture renderer) and monitor CPU % per period.
 
 ## What is here today
@@ -71,6 +71,8 @@ STALE needs the true speed to move, so it carries the 100 ms truth window by con
   **"STARVE (renderer CPU only)"**: renderer + hog pinned to one CPU, Screen and monitor free
   ([`evidence/runs/p1b-130644-starve/`](evidence/runs/p1b-130644-starve/)). No priority-inheritance claim is made.
 - **Gear** is drawn but not verified. Speed digits, the 6 lamps and the liveness tick are verified.
+- **Fixed-position cluster:** the monitor reads the renderer window's position once, when it finds the window (by id and
+  owner pid), and composes its read rectangles from it; a renderer that moves its window afterwards is not followed.
 - **secpol** restricts who writes `/dev/vehicle`, who controls and registers with the monitor, channel connects and the
   hog's priority; the monitor's `signal` ability is not target-scoped by the policy (targeting the renderer is enforced in
   code), and reading Screen buffers is a Screen permission, not a secpol rule. There is no `screen_t`: Screen is started
