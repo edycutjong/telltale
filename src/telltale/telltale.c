@@ -633,7 +633,9 @@ int main(void)
         case ST_HOLD:
             if (!truth_fresh) { st = ST_TRUTHLOST; fresh_cnt = 0; safe_show(lt, 1, rpos); break; }
             safe_show(lt, 0, rpos);
-            if (inc.v == V_TICK_STALL && cause == C_NONE && ncs >= 3) {
+            /* classify on any stall during the hold, whatever opened the incident: a renderer frozen while the
+             * speed changes is first seen as VALUE_MISMATCH, then its tick stops */
+            if (stalled && cause == C_NONE && ncs >= 3) {
                 cause = classify(cstates + ncs - 3, 3);
                 snprintf(inc.cause, sizeof inc.cause, "%s", CN[cause]);
                 printf("telltale: cause %s (draw thread states %d,%d,%d)\n", CN[cause], cstates[ncs - 3], cstates[ncs - 2], cstates[ncs - 1]); fflush(stdout);
@@ -643,7 +645,7 @@ int main(void)
             }
             int kill_now = 0;
             if (wv == V_MISMATCH || wv == V_BLANK || wv == V_UNREADABLE) { if (++mismatch_cnt >= cfg.mismatch_n) kill_now = 1; }
-            if (inc.v == V_TICK_STALL && cause == C_HUNG) kill_now = 1;
+            if (stalled && cause == C_HUNG) kill_now = 1;
             if (stalled && (cause == C_UNKNOWN) && now - inc.t_detect > (uint64_t)cfg.unknown_kill_ms * MS) kill_now = 1;
             if (kill_now) {
                 int recent = 0;

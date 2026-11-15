@@ -10,6 +10,8 @@
 #include <fcntl.h>
 #include <unistd.h>
 #include <devctl.h>
+#include <pthread.h>
+#include <sched.h>
 #include <sys/neutrino.h>
 #include "../common/ttproto.h"
 #include "../common/ttsec.h"
@@ -38,7 +40,11 @@ int main(int argc, char **argv)
         printf("trace_s=%.3f speed_kmh=%.2f\n", s.trace_s, s.speed_kmh);
         if (vfd >= 0) close(vfd);
     }
-    tt_enter("hog", SCHED_FIFO, prio);
+    /* type first, priority second: under the policy hog_t holds priority:1-40 only, so a higher request fails */
+    tt_enter("hog", 0, 0);
+    struct sched_param sp = {.sched_priority = prio};
+    int rc = pthread_setschedparam(pthread_self(), SCHED_FIFO, &sp);
+    if (rc) { fprintf(stderr, "hog: setschedparam(%d) as %s: %s\n", prio, tt_type_name(), strerror(rc)); return 2; }
     uint64_t t0 = tt_now_ns(), end = t0 + ms * 1000000ull;
     printf("t_hog_start_ns=%llu prio=%d ms=%llu cpu=%d\n", (unsigned long long)t0, prio, (unsigned long long)ms, cpu); fflush(stdout);
     volatile unsigned long spin = 0;

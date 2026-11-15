@@ -1,0 +1,1 @@
+run t class=none inject=none heal_at=- conf_extra=- at=0 accel=QEMU(TCG) policy=0 cpu=any scope=all sup=script

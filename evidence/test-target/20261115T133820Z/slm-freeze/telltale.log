@@ -1,0 +1,29 @@
+telltale: conf period_ms=20
+telltale: conf W_ms=100
+telltale: conf tick_stall_ms=150
+telltale: conf truth_lost_ms=200
+telltale: conf restart_timeout_ms=4000
+telltale: conf mismatch_n=3
+telltale: conf truth_ok_n=5
+telltale: pid=11624469 uid=0 type=untyped prio=60
+telltale: period_ms=20 W_ms=100 tick_stall_ms=150 h_max=615 mismatch_n=3 unknown_kill_ms=750 restart_timeout_ms=4000 policy=none (uid/pid checks)
+telltale: display 1280x768, tier G1-FULL (screen_read_display, display-manager context)
+telltale: renderer registered pid=11661338 draw_tid=3 window=tt-cluster-11661338
+telltale: window tt-cluster-11661338 found at 0,24
+telltale: ARMED renderer pid=11661338 (window tt-cluster-11661338)
+telltale: WAIT -> NORMAL
+telltale: DETECT TT-FRZ-0001 TICK_STALL shown=48 truth=47 lamps_shown=0x01 lamps_truth=0x00 caught_ms=14.3
+telltale: NORMAL -> SAFE-HOLD
+telltale: cause hung (draw thread states 13,13,13)
+telltale: SIGKILL renderer pid 11661338 (hung)
+telltale: SAFE-HOLD -> RESTARTING
+telltale: renderer registered pid=11796506 draw_tid=3 window=tt-cluster-11796506
+telltale: window tt-cluster-11796506 found at 0,24
+telltale: INCIDENT TT-FRZ-0001,TICK_STALL,hung,48,47,453966786787,453981128128,14.3,454035573574,454067023023,454109820821,454122042042,1,0.0,11661338,11796506,0x01,0x00
+telltale: RESTARTING -> NORMAL
+telltale: SCREEN_STALL check started 62 ms ago
+telltale: SCREEN_STALL check started 71 ms ago
+telltale: DETECT TT-FRZ-0002 TICK_STALL shown=0 truth=0 lamps_shown=0x04 lamps_truth=0x04 caught_ms=72.2
+telltale: NORMAL -> SAFE-HOLD
+telltale: INCIDENT TT-FRZ-0002,TICK_STALL,-,0,0,463495460460,463567706707,72.2,463618659660,0,0,463618659660,1,0.0,11796506,0,0x04,0x04
+telltale: SAFE-HOLD -> NORMAL

@@ -3,6 +3,7 @@
 #   make lint        ruff over the host-side Python
 #   make target      QNX 8.0 binaries via qcc (+ the compiled spike policy) into out/$(QNX_ARCH)/;
 #                    uses qcc from PATH (sourced qnxsdp-env.sh) or else scripts/qcc.sh (Docker host-tools image)
+#   make test-target the on-target suite on the running QEMU guest (scripts/test_target.sh; needs make target + deploy)
 #   make spike       run the P1a gate spikes (G1-G4) on the running QEMU target -> evidence/spike/
 
 CC      ?= cc
@@ -19,7 +20,7 @@ TT_BINS  := $(QOUT)/vehicled $(QOUT)/vehfeed $(QOUT)/cluster $(QOUT)/telltale $(
 QCOMMON  := src/common/ttsec.c src/common/disp.c
 QHDRS    := $(wildcard src/common/*.h)
 
-.PHONY: all test-host test-host-c test-host-py lint target target-sdp spike clean
+.PHONY: all test-host test-host-c test-host-py lint target target-sdp spike clean test-target
 
 all: test-host
 
@@ -42,6 +43,9 @@ test-host-py:
 	$(PYTHON) -m unittest discover -s tests/host -p 'test_*.py' -v
 
 test-host: test-host-c test-host-py
+
+test-target:
+	scripts/test_target.sh
 
 lint:
 	ruff check scripts tests tools

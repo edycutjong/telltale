@@ -1,0 +1,13 @@
+<!-- Telltale: the renderer under the QNX System Launch and Monitor (slm), the S-SLM path.
+     tt_up.sh starts `slm -b 0 telltale-slm.xml` with the renderer's environment (TT_UID, and TT_TYPE/TT_POL under
+     the policy); the component inherits it. A SIGKILLed cluster terminates abnormally, so slm restarts it
+     (repair=restart, back-off 0 s). -->
+<SLM:system>
+  <SLM:component name="cluster">
+    <SLM:command>/tmp/tt/cluster</SLM:command>
+    <SLM:cd>/tmp/tt</SLM:cd>
+    <SLM:stdout iomode="a">/tmp/tt/log/cluster.log</SLM:stdout>
+    <SLM:stderr iomode="a">/tmp/tt/log/cluster.log</SLM:stderr>
+    <SLM:repair>restart</SLM:repair>
+  </SLM:component>
+</SLM:system>

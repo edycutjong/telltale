@@ -4,15 +4,16 @@
 #                                              process in its secpol type; cpu=N: pin every process to CPU N
 #                                              (`on -C N`; the STARVE runs pin Screen there too, scripts/guest_screen.sh)
 #   5th arg scope: all (default) | renderer = pin only the cluster ("STARVE (renderer CPU only)")
+#   6th arg supervisor: script (default: a shell respawn loop, "restarted by script") | slm (telltale-slm.xml)
 # Order: vehicled -> telltale (monitor) -> cluster under a respawn loop -> vehfeed.
-# The respawn loop stands in for slm until slm is wired in: a killed renderer is "restarted by script".
+# Default supervisor = a shell respawn loop ("restarted by script"); 6th arg slm = the QNX slm (telltale-slm.xml).
 cd /tmp/tt || exit 1
-TRACE=${1:-trace-hero.csv}; HOLD=${2:-5}; POL=${3:-0}; CPU=${4:-}; SCOPE=${5:-all}
+TRACE=${1:-trace-hero.csv}; HOLD=${2:-5}; POL=${3:-0}; CPU=${4:-}; SCOPE=${5:-all}; SUP=${6:-script}
 [ "$CPU" = - ] && CPU=
 PIN=; [ -n "$CPU" ] && PIN="on -C $CPU"
 RPIN=$PIN; [ "$SCOPE" = renderer ] && PIN=
 mkdir -p ev log
-touch stop; slay -f -Q telltale cluster vehfeed vehicled hog >/dev/null 2>&1; sleep 1; rm -f stop
+touch stop; [ -f slm.pid ] && kill -9 $(cat slm.pid) 2>/dev/null; rm -f slm.pid; slay -f -Q telltale cluster vehfeed vehicled hog >/dev/null 2>&1; sleep 1; rm -f stop
 rm -f ev/*.csv log/*.log log/checks.csv
 if [ "$POL" = 1 ]; then
   secpol -Q | grep -q 'policy id:0' && secpolpush /tmp/tt/telltale.bin
@@ -24,12 +25,18 @@ else
 fi
 $PIN $V ./vehicled > log/vehicled.log 2>&1 < /dev/null &
 waitfor /dev/vehicle 5 || { echo "vehicled did not come up"; cat log/vehicled.log; exit 1; }
-$PIN $M TT_CONF=/tmp/tt/telltale.conf TT_CHECKLOG=/tmp/tt/log/checks.csv ./telltale > log/telltale.log 2>&1 < /dev/null &
+CONF=/tmp/tt/telltale.conf; [ -f /tmp/tt/telltale-run.conf ] && CONF=/tmp/tt/telltale-run.conf
+$PIN $M TT_CONF=$CONF TT_CHECKLOG=/tmp/tt/log/checks.csv ./telltale > log/telltale.log 2>&1 < /dev/null &
 waitfor /dev/telltale 5 || { echo "telltale did not come up"; cat log/telltale.log; exit 1; }
 chmod 1777 /tmp/tt/ev /tmp/tt/log
-( while [ ! -f /tmp/tt/stop ]; do $RPIN $R ./cluster >> log/cluster.log 2>&1; echo "respawn $(date +%T)" >> log/super.log; sleep 0.1; done ) > /dev/null 2>&1 < /dev/null &
+if [ "$SUP" = slm ]; then
+  $RPIN $R slm -b 0 /tmp/tt/telltale-slm.xml > log/super.log 2>&1 < /dev/null &
+  echo $! > slm.pid   # only our slm is ever stopped (the image may run its own)
+else
+  ( while [ ! -f /tmp/tt/stop ]; do $RPIN $R ./cluster >> log/cluster.log 2>&1; echo "respawn $(date +%T)" >> log/super.log; sleep 0.1; done ) > /dev/null 2>&1 < /dev/null &
+fi
 sleep 2
 SC=; [ "$TRACE" = trace-hero.csv ] && [ -f scenario-hero.csv ] && SC="--scenario scenario-hero.csv"
 $PIN $F ./vehfeed "$TRACE" --hold "$HOLD" $SC > log/vehfeed.log 2>&1 < /dev/null &
 sleep 1
-pidin -F '%a %b %N %p %J %B %i' | grep -E 'vehicled|vehfeed|telltale|cluster' | grep -v grep
+pidin -F '%a %b %N %p %J %B %i' | grep -E 'vehicled|vehfeed|telltale|cluster|slm' | grep -v grep

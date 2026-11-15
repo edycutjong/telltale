@@ -1,0 +1,9 @@
+cluster: pid=1228834 uid=0 type=untyped prio=15
+cluster: now uid=1000
+cluster: window tt-cluster-1228834 1280x720 at 0,24 z=10 perm=0x14544477
+cluster: registered with the monitor (pid 1228834, draw tid 3, window tt-cluster-1228834)
+cluster: fault command class=1 arg=0 run=1794749906
+cluster: pid=1388561 uid=0 type=untyped prio=15
+cluster: now uid=1000
+cluster: window tt-cluster-1388561 1280x720 at 0,24 z=10 perm=0x14544477
+cluster: registered with the monitor (pid 1388561, draw tid 3, window tt-cluster-1388561)
