@@ -43,10 +43,10 @@ static int io_read(resmgr_context_t *ctp, io_read_t *msg, iofunc_ocb_t *ocb)
     if ((msg->i.xtype & _IO_XTYPE_MASK) != _IO_XTYPE_NONE) return ENOSYS;
     char line[192];
     const struct veh_state *s = latest();
-    int n = s ? snprintf(line, sizeof line, "seq=%llu t_ns=%llu trace_s=%.3f speed_kmh=%.2f gear=%c lamps=0x%02x\n",
+    int n = s ? snprintf(line, sizeof line, "seq=%llu t_ns=%llu trace_s=%.3f speed_kmh=%.2f gear=%c lamps=0x%02x denied=%lu\n",
                          (unsigned long long)s->seq, (unsigned long long)s->t_ns, s->trace_s, s->speed_kmh,
-                         GEARS[s->gear & 3], s->lamps)
-              : snprintf(line, sizeof line, "seq=0 (no sample yet)\n");
+                         GEARS[s->gear & 3], s->lamps, denied)   /* denied: writes refused (policy / uid / range) */
+              : snprintf(line, sizeof line, "seq=0 (no sample yet) denied=%lu\n", denied);
     size_t off = (size_t)ocb->offset, nb = 0;
     if (off < (size_t)n) { nb = (size_t)n - off; if (nb > msg->i.nbytes) nb = msg->i.nbytes; }
     ocb->offset += nb;

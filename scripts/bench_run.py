@@ -4,7 +4,8 @@
 
   bench_run.py windows                        list the speed-changing windows of data/trace-bench.csv (the K of the census)
   bench_run.py faults  [--n 50] ...           B1: <n> injections per class (FREEZE BLANK STALE STARVE), seed 42, shuffled
-  bench_run.py crash|misdraw|period|ablation  B6 / B7e / B4 / B2 (see --help)
+  bench_run.py faults --classes CRASH|MISDRAW  B6 / B7e; faults --classes FREEZE --conf-extra period_ms=N: B4
+  bench_run.py ablation [--n 10]              B2 (monitor disarmed: observe-only)
   bench_run.py clean   [--seconds 1800]       B3: clean replay, per-check CSV (also gives B5 read-back cost)
 
 Design (one run = one fresh stack, so a run can never inherit state from the one before):
@@ -14,7 +15,7 @@ Design (one run = one fresh stack, so a run can never inherit state from the one
     (cluster-bench.csv, or the hog's first busy-loop stamp for STARVE) -- never by this script;
   * rows are appended as they finish and the run resumes where it stopped (`--out` file is the state).
 Rows carry git_sha: the bench refuses to start on a dirty build/ tree, on an out/ older than the sources, or when the
-guest's binaries / policy / conf are not byte-identical to out/ (POSIX cksum both sides; written to <evroot>/manifest.txt).
+guest's binaries / policy / conf / start script are not byte-identical to out/ (POSIX cksum both sides; written to <evroot>/manifest.txt).
 """
 from __future__ import annotations
 
@@ -108,7 +109,11 @@ def verify_deployed(evroot: Path | None) -> None:
     qout = f"out/{os.environ.get('QNX_ARCH', 'x86_64')}"
     if sh(["make", "-q", "target-sdp"], check=False).returncode != 0:
         sys.exit("bench_run: out/ is older than the sources -- run `make target` and `scripts/deploy.sh` first")
-    files = {n: f"{qout}/{n}" for n in DEPLOYED} | {"telltale.conf": "scripts/target/telltale.conf"}
+    files = {n: f"{qout}/{n}" for n in DEPLOYED} | {
+        "telltale.conf": "scripts/target/telltale.conf",
+        "tt_up.sh": "scripts/target/tt_up.sh",                  # pinning (STARVE scope), supervisor, uids, policy
+        "telltale-slm.xml": "scripts/target/telltale-slm.xml",  # the slm supervisor config
+    }
     host = {n: sh(["cksum", path]).stdout.split()[:2] for n, path in files.items()}
     r = sh(["scripts/guest.sh", "run", "cd /tmp/tt && cksum " + " ".join(files)], check=False)
     guest = {f[2]: f[:2] for f in (line.split() for line in r.stdout.splitlines()) if len(f) >= 3}
