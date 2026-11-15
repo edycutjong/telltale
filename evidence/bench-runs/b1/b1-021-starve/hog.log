@@ -1,0 +1,3 @@
+trace_s=3.200 speed_kmh=2.64
+hog: pid=32153635 uid=0 type=untyped prio=0
+t_hog_start_ns=1498998346512 prio=40 ms=3000 cpu=3

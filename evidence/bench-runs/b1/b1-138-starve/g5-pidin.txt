@@ -1,0 +1,57 @@
+--- snapshot 1
+  897053   1 screen              10r SIGWAITINFO                                
+  897053   2 screen              15r CONDVAR        (0x5b234df438)              
+  897053   3 screen              10r NANOSLEEP                                  
+  897053   4 screen              16r RECEIVE        1                           
+  897053   5 screen              10r RECEIVE        1                           
+  897053   6 screen              10r RECEIVE        1                           
+  897053   7 screen              60r RECEIVE        1                           
+  897053   8 screen              60r RUNNING                                    
+  897053   9 screen              16r RECEIVE        1                           
+  897053  10 screen              10r REPLY          184339                      
+135323670   1 telltale            60f REPLY          897053                      
+135323670   2 telltale            15f RECEIVE        1                           
+135323670   3 telltale            61f NANOSLEEP                                  
+135348252   1 cluster             15r RECEIVE        1                           
+135348252   2 cluster             10r READY                                      
+135348252   3 cluster             20r READY                                      
+135348252   4 cluster             15r DEAD                                       
+135471139   1 hog                 40f READY                                      
+--- snapshot 2
+  897053   1 screen              10r SIGWAITINFO                                
+  897053   2 screen              15r CONDVAR        (0x5b234df438)              
+  897053   3 screen              10r NANOSLEEP                                  
+  897053   4 screen              16r RECEIVE        1                           
+  897053   5 screen              10r RECEIVE        1                           
+  897053   6 screen              10r RECEIVE        1                           
+  897053   7 screen              60r RECEIVE        1                           
+  897053   8 screen              60r RUNNING                                    
+  897053   9 screen              16r RECEIVE        1                           
+  897053  10 screen              10r REPLY          184339                      
+135323670   1 telltale            60f RUNNING                                    
+135323670   2 telltale            15f RECEIVE        1                           
+135323670   3 telltale            61f NANOSLEEP                                  
+135348252   1 cluster             15r RECEIVE        1                           
+135348252   2 cluster             10r READY                                      
+135348252   3 cluster             20r READY                                      
+135348252   4 cluster             15r DEAD                                       
+135471139   1 hog                 40f RUNNING                                    
+--- snapshot 3
+  897053   1 screen              10r SIGWAITINFO                                
+  897053   2 screen              15r CONDVAR        (0x5b234df438)              
+  897053   3 screen              10r NANOSLEEP                                  
+  897053   4 screen              16r RECEIVE        1                           
+  897053   5 screen              10r RECEIVE        1                           
+  897053   6 screen              10r RECEIVE        1                           
+  897053   7 screen              60r RECEIVE        1                           
+  897053   8 screen              60r RUNNING                                    
+  897053   9 screen              60r RECEIVE        1                           
+  897053  10 screen              10r REPLY          184339                      
+135323670   1 telltale            60f REPLY          897053                      
+135323670   2 telltale            15f RECEIVE        1                           
+135323670   3 telltale            61f NANOSLEEP                                  
+135348252   1 cluster             15r RECEIVE        1                           
+135348252   2 cluster             10r READY                                      
+135348252   3 cluster             20r READY                                      
+135348252   4 cluster             15r DEAD                                       
+135471139   1 hog                 40f RUNNING                                    
