@@ -32,10 +32,11 @@ run_case t none 0 56                                          # whole hero drive
 run_case t accept "$AT" 10 TT_INJECT=stale TT_HEAL_AT=14.0 TT_CONF_EXTRA=mismatch_n=1000
 run_case t debug "$AT" 14 TT_INJECT=stale TT_HEAL_AT=14.0 TT_CONF_EXTRA=mismatch_n=1000 TT_DEBUG=1   # engineering banner + incident card, read back
 run_case slm freeze "$AT" 12 TT_SUP=slm                     # S-SLM: slm (not the script loop) restarts the renderer
-# Core items the fault runs do not assert: /dev/vehicle, ttctl, /dev/telltale, TRUTH_LOST + recovery, NO_DISPLAY
+# Core items the fault runs do not assert: /dev/vehicle, ttctl, /dev/telltale, TRUTH_LOST + recovery, disarm mid-incident,
+# vehicled restart, NO_DISPLAY, startup without truth, the restart cap (TT-GIVEUP) + rearm
 out=$(scripts/guest.sh sudo 'sh /tmp/tt/core_items.sh' 2>&1)
 echo "$out" | tee "$TT_EVROOT/core.txt" | tee -a "$SUM"
-mkdir -p "$TT_EVROOT/core"; for f in telltale.log core-telltale.txt core-up.txt; do scripts/guest.sh get "/tmp/tt/log/$f" "$TT_EVROOT/core/" 2>/dev/null || true; done
+mkdir -p "$TT_EVROOT/core"; for f in telltale.log core-telltale.txt core-telltale-a.log core-up.txt core-up2.txt; do scripts/guest.sh get "/tmp/tt/log/$f" "$TT_EVROOT/core/" 2>/dev/null || true; done
 pass=$((pass + $(echo "$out" | grep -c '^PASS'))); fail=$((fail + $(echo "$out" | grep -c '^FAIL')))
 if [ "${1:-}" != --no-policy ]; then
   run_case pol freeze "$AT" 12 TT_POLICY=1

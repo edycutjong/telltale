@@ -5,10 +5,11 @@
 #                                              (`on -C N`; the STARVE runs pin Screen there too, scripts/guest_screen.sh)
 #   5th arg scope: all (default) | renderer = pin only the cluster ("STARVE (renderer CPU only)")
 #   6th arg supervisor: script (default: a shell respawn loop, "restarted by script") | slm (telltale-slm.xml)
+#   7th arg feed: 1 (default) starts vehfeed | 0 = no feeder (vehicled has no sample: the startup-without-truth check)
 # Order: vehicled -> telltale (monitor) -> cluster under a respawn loop -> vehfeed.
 # Default supervisor = a shell respawn loop ("restarted by script"); 6th arg slm = the QNX slm (telltale-slm.xml).
 cd /tmp/tt || exit 1
-TRACE=${1:-trace-hero.csv}; HOLD=${2:-5}; POL=${3:-0}; CPU=${4:-}; SCOPE=${5:-all}; SUP=${6:-script}
+TRACE=${1:-trace-hero.csv}; HOLD=${2:-5}; POL=${3:-0}; CPU=${4:-}; SCOPE=${5:-all}; SUP=${6:-script}; FEED=${7:-1}
 [ "$CPU" = - ] && CPU=
 PIN=; [ -n "$CPU" ] && PIN="on -C $CPU"
 RPIN=$PIN; [ "$SCOPE" = renderer ] && PIN=
@@ -37,6 +38,6 @@ else
 fi
 sleep 2
 SC=; [ "$TRACE" = trace-hero.csv ] && [ -f scenario-hero.csv ] && SC="--scenario scenario-hero.csv"
-$PIN $F ./vehfeed "$TRACE" --hold "$HOLD" $SC > log/vehfeed.log 2>&1 < /dev/null &
+[ "$FEED" = 1 ] && $PIN $F ./vehfeed "$TRACE" --hold "$HOLD" $SC > log/vehfeed.log 2>&1 < /dev/null &
 sleep 1
 pidin -F '%a %b %N %p %J %B %i' | grep -E 'vehicled|vehfeed|telltale|cluster|slm' | grep -v grep
