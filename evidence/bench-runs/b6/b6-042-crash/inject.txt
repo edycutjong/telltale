@@ -1,0 +1,3 @@
+ttinject: pid=278868002 uid=0 type=untyped prio=0
+trace_s=3.200 speed_kmh=43.38
+t_command_ns=10749619008107 class=crash arg=0 run=1794769364

@@ -147,5 +147,21 @@ class CleanFile(unittest.TestCase):
             self.assertTrue((Path(tmp) / "checks.csv.gz").exists())
 
 
+
+class SelfReport(unittest.TestCase):
+    def test_blank_run_is_a_self_report_pass_and_a_pixel_detection(self):
+        sys.path.insert(0, str(ROOT / "scripts"))
+        import selfreport_table as sr
+        with tempfile.TemporaryDirectory() as tmp:
+            d = Path(tmp) / "b1-001-blank"
+            d.mkdir()
+            (d / "cluster-bench.csv").write_text("1,2,BLANK,1000000000,48,-1\n")
+            (d / "incidents.csv").write_text(INC.format(last=0, det=1_020_000_000, safe=0, kill=0, reg=0, true=0).replace(",45,45,", ",-1,48,"))
+            rows = sr.cases(Path(tmp))
+            self.assertEqual(len(rows), 1)
+            self.assertTrue(rows[0]["self_ok"])
+            self.assertAlmostEqual(rows[0]["detect_ms"], 20.0)
+
+
 if __name__ == "__main__":
     unittest.main()

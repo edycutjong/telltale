@@ -33,6 +33,8 @@ if rows: print(bench.render_faults(bench.analyze_faults(rows), False))
 PY
       done
     fi
+    echo; echo "## What a renderer self-report cannot see (BLANK, MISDRAW)"; echo
+    python3 scripts/selfreport_table.py || true
     [ -f evidence/bench-ablation.csv ] && { echo; echo "## B2 ablation (monitor off) — evidence/bench-ablation.csv"; echo; python3 scripts/bench.py ablation evidence/bench-ablation.csv; }
     [ -f evidence/bench-clean.csv ] && { echo; echo "## B3 clean run (false positives) + B5 read-back cost — evidence/bench-clean.csv"; echo; python3 scripts/bench.py clean evidence/bench-clean.csv; }
   } > evidence/RESULTS.md

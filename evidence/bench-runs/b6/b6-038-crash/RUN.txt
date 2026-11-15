@@ -1,0 +1,1 @@
+run b6-038 class=crash inject=crash heal_at=- conf_extra=- at=3.2 accel=QEMU(TCG) policy=0 debug=0 cpu=any scope=all sup=script
