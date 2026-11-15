@@ -1,0 +1,12 @@
+# G3 spike policy (minimal): monitor_t may connect to vehicle_t channels only (read the vehicle state);
+# render_t may connect to vehicle_t too; nothing may connect to render_t (default deny).
+type monitor_t;
+type vehicle_t;
+type render_t;
+allow monitor_t vehicle_t:channel connect;
+allow render_t vehicle_t:channel connect;
+allow_attach vehicle_t /dev/tt-vehicle;
+# each type may drop to its service uid (1000 in this spike) and nothing else
+allow monitor_t self:ability { setuid:1000 setgid:1000 };
+allow vehicle_t self:ability { setuid:1000 setgid:1000 };
+allow render_t self:ability { setuid:1000 setgid:1000 };
