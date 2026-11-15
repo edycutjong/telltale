@@ -77,7 +77,7 @@ def header(glyphs):
         "#define GLYPH_BLANK 11",
         f"#define GLYPH_MIN_HAMMING {dmin}",
         f"#define GLYPH_H_MAX_DEFAULT {dmin // 4}",
-        f"static const uint8_t glyph_bits[GLYPH_N][GLYPH_H * GLYPH_ROW_BYTES] = {{",
+        "static const uint8_t glyph_bits[GLYPH_N][GLYPH_H * GLYPH_ROW_BYTES] = {",
     ]
     for i, p in enumerate(packed):
         lines.append(f"  /* {CHARS[i] if i < len(CHARS) else 'blank'} */ {{")
