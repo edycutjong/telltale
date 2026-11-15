@@ -51,5 +51,13 @@ static const struct { int x; unsigned rgb; } L_LAMP[L_LAMP_N] = {
 /* fault banner (driver mode) */
 #define L_BANNER_Y 600
 #define L_BANNER_H 64
+/* incident card (engineering mode, monitor-owned window): right of the digit block (which ends at x 865), below the
+ * lamp row, clear of every monitored rect; 6 rows of 22-px text */
+#define L_CARD_X 868
+#define L_CARD_Y 120
+#define L_CARD_W 404
+#define L_CARD_H 188
+#define L_CARD_PAD 12
+#define L_CARD_PITCH 28
 
 #endif

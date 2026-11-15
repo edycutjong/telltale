@@ -34,6 +34,7 @@
 #include "../common/glyphs.h"
 #include "../common/truth.h"
 #include "../common/disp.h"
+#include "../common/text.h"
 
 #define CK(x, m) do { if ((x) != 0) { fprintf(stderr, "telltale: %s: %s\n", m, strerror(errno)); exit(2); } } while (0)
 #define MS 1000000ull
@@ -43,7 +44,8 @@ static struct {
     int period_ms, W_ms, tick_stall_ms, h_max, truth_lost_ms, arm_grace_ms, restart_timeout_ms;
     int max_restarts, restart_window_s, mismatch_n, unknown_kill_ms, screen_stall_ms, truth_ok_n;
     int lamp_thr, lamp_mask;   /* lamp lit iff permille of lit-colour pixels >= lamp_thr; lamps checked = lamp_mask bits */
-} cfg = {20, 100, 0, GLYPH_H_MAX_DEFAULT, 200, 5000, 3000, 3, 60, 3, 0, 0, 5, 500, 0x3F};
+    int card_ms;               /* engineering mode: how long the incident card stays up after recovery */
+} cfg = {20, 100, 0, GLYPH_H_MAX_DEFAULT, 200, 5000, 3000, 3, 60, 3, 0, 0, 5, 500, 0x3F, 5000};
 
 static void cfg_derive(void)
 {
@@ -62,7 +64,7 @@ static void cfg_load(const char *path)
         if (line[0] == '#' || sscanf(line, " %63[^= ]=%d", k, &v) != 2) continue;
 #define K(n) if (!strcmp(k, #n)) cfg.n = v;
         K(period_ms) K(W_ms) K(tick_stall_ms) K(h_max) K(truth_lost_ms) K(arm_grace_ms) K(restart_timeout_ms)
-        K(max_restarts) K(mismatch_n) K(unknown_kill_ms) K(screen_stall_ms) K(truth_ok_n) K(lamp_thr) K(lamp_mask)
+        K(max_restarts) K(mismatch_n) K(unknown_kill_ms) K(screen_stall_ms) K(truth_ok_n) K(lamp_thr) K(lamp_mask) K(card_ms)
 #undef K
         printf("telltale: conf %s=%d\n", k, v);
     }
@@ -294,6 +296,36 @@ static screen_window_t find_window(const char *want, int pos[2])
 #define SAFE_Z_UP 100
 #define SAFE_Z_DOWN 1     /* below the cluster (z 10), which covers it completely */
 static uint32_t *safe_px; static int safe_st; static screen_buffer_t safe_buf;
+
+/* fault banner text. Driver mode: no metrics on the driver's glass. Engineering mode (ttctl debug on): the class and
+ * this incident's measured caught time, labelled "ENGINEERING VIEW". Repainted only when the text changes. */
+static int dbg_on;                          /* g.debug, copied once per period by the check loop */
+static const struct incident *banner_inc;   /* the open incident (NULL when none) */
+static char banner_cur[128];
+static int banner_update(int lost)          /* returns 1 if the banner pixels changed */
+{
+    char t[128];
+    const char *E = "ENGINEERING VIEW " TT_MIDDOT " ";
+    if (dbg_on && banner_inc && lost)
+        snprintf(t, sizeof t, "%sSPEED DATA LOST " TT_MIDDOT " %s", E, banner_inc->id);
+    else if (dbg_on && banner_inc)
+        snprintf(t, sizeof t, "%sDISPLAY FAULT CAUGHT " TT_MIDDOT " %s " TT_MIDDOT " %.0f ms", E, VN[banner_inc->v],
+                 (banner_inc->t_detect - banner_inc->t_last_verified) / 1e6);
+    else if (dbg_on)
+        snprintf(t, sizeof t, "%sNO RENDERER FRAME " TT_MIDDOT " %s", E, lost ? "SPEED DATA LOST" : "SHOWING TRUE SPEED");
+    else
+        snprintf(t, sizeof t, "DISPLAY FAULT " TT_MIDDOT " %s", lost ? "SPEED DATA LOST" : "SHOWING TRUE SPEED");
+    if (!strcmp(t, banner_cur)) return 0;
+    snprintf(banner_cur, sizeof banner_cur, "%s", t);
+    const struct tt_font *f = &tt_font_banner;
+    uint32_t *row = safe_px + (long)L_BANNER_Y * safe_st;
+    tt_fill(row, safe_st, L_SAFE_W, L_BANNER_H, PAL_AMBER);
+    int w = tt_text_width(f, t), x = (L_SAFE_W - w) / 2;
+    tt_text_draw(row, safe_st, L_SAFE_W, L_BANNER_H, x, (L_BANNER_H - f->h) / 2, f, t, 0xFF000000u | PAL_GLASS, 0xFF000000u | PAL_AMBER);
+    printf("telltale: BANNER x=%d w=%d mode=%s text=\"%s\"\n", x, w, dbg_on ? "engineering" : "driver", t); fflush(stdout);
+    return 1;
+}
+
 static void safe_init(void)
 {
     screen_buffer_t rb[1];
@@ -303,7 +335,7 @@ static void safe_init(void)
     CK(screen_get_buffer_property_iv(rb[0], SCREEN_PROPERTY_STRIDE, &stride), "safe stride");
     safe_buf = rb[0]; safe_px = p; safe_st = stride / 4;
     tt_fill(safe_px, safe_st, L_SAFE_W, L_SAFE_H, PAL_GLASS);
-    tt_fill(safe_px + (long)L_BANNER_Y * safe_st, safe_st, L_SAFE_W, L_BANNER_H, PAL_AMBER);
+    banner_update(0);
     for (int y = 0; y < L_MARK_S; y++)
         for (int x = 0; x < L_MARK_S; x++) safe_px[(long)(L_MARK_Y + y) * safe_st + L_MARK_X + x] = 0xFF000000u | tt_marker_px(x, y);
 }
@@ -322,7 +354,8 @@ static void safe_show_(const struct veh_state *s, int lost, int pos[2])
     uint32_t *px = safe_px; int st = safe_st;
     int c[3], v = lost || !s ? -1 : disp_kmh(s->speed_kmh), lamps = s && !lost ? s->lamps : 0;
     /* Screen's software composition of a post costs ~35 ms on QEMU TCG: post only when the content changes */
-    if (safe_visible && v == safe_last_v && lamps == safe_last_lamps) return;
+    int bchg = banner_update(v < 0);
+    if (safe_visible && v == safe_last_v && lamps == safe_last_lamps && !bchg) return;
     safe_last_v = v; safe_last_lamps = lamps;
     tt_cells_for(v, c);
     for (int i = 0; i < L_DIGIT_N; i++)
@@ -330,7 +363,7 @@ static void safe_show_(const struct veh_state *s, int lost, int pos[2])
     for (int i = 0; i < L_LAMP_N; i++)
         tt_fill(px + (long)L_LAMP_Y * st + L_LAMP[i].x, st, L_LAMP_S, L_LAMP_S, s && !lost && ((s->lamps >> i) & 1) ? L_LAMP[i].rgb : PAL_GLASS);
     int full[4] = {0, 0, L_SAFE_W, L_SAFE_H};
-    int dirty[8] = {L_DIGIT_X0, L_DIGIT_Y, L_DIGIT_N * GLYPH_W, GLYPH_H, 0, L_LAMP_Y, L_LAMP_W, L_LAMP_H};
+    int dirty[12] = {L_DIGIT_X0, L_DIGIT_Y, L_DIGIT_N * GLYPH_W, GLYPH_H, 0, L_LAMP_Y, L_LAMP_W, L_LAMP_H, 0, L_BANNER_Y, L_SAFE_W, L_BANNER_H};
     if (!safe_visible) {            /* raise: always VISIBLE, hidden by sitting under the opaque cluster window */
         int z = SAFE_Z_UP;
         screen_set_window_property_iv(safe_win, SCREEN_PROPERTY_POSITION, pos);
@@ -338,7 +371,7 @@ static void safe_show_(const struct veh_state *s, int lost, int pos[2])
         safe_visible = 1;
         screen_post_window(safe_win, safe_buf, 1, full, 0);
         screen_flush_context(ctx_app, 0);
-    } else screen_post_window(safe_win, safe_buf, 2, dirty, 0);
+    } else screen_post_window(safe_win, safe_buf, bchg ? 3 : 2, dirty, 0);
 }
 
 static void safe_hide(void)
@@ -348,6 +381,64 @@ static void safe_hide(void)
     screen_set_window_property_iv(safe_win, SCREEN_PROPERTY_ZORDER, &z);
     screen_flush_context(ctx_app, 0);
     safe_visible = 0;
+}
+
+/* ---------- incident card (engineering mode): monitor-owned top-z window, ui.md S4 ----------
+ * Shown for card_ms after an incident closes (the renderer is verified true again), right of the digit block and clear
+ * of every monitored rect, so the monitored frame never carries it. Hidden the same way as the safe layer (z under the
+ * opaque cluster). Every value on it is the closed incident's. */
+#define CARD_Z_UP 110
+static screen_window_t card_win; static screen_buffer_t card_buf; static uint32_t *card_px; static int card_st;
+static int card_up; static uint64_t card_until; static char card_id[16];
+static void card_init(void)
+{
+    screen_buffer_t rb[1]; void *p; int stride;
+    CK(screen_get_window_property_pv(card_win, SCREEN_PROPERTY_RENDER_BUFFERS, (void **)rb), "card render buffer");
+    CK(screen_get_buffer_property_pv(rb[0], SCREEN_PROPERTY_POINTER, &p), "card ptr");
+    CK(screen_get_buffer_property_iv(rb[0], SCREEN_PROPERTY_STRIDE, &stride), "card stride");
+    card_buf = rb[0]; card_px = p; card_st = stride / 4;
+    tt_fill(card_px, card_st, L_CARD_W, L_CARD_H, PAL_CARD);
+}
+static void card_show(const struct incident *in, const int wpos[2])
+{
+    char r[6][96];
+    double caught = (in->t_detect - in->t_last_verified) / 1e6, restored = (in->t_true - in->t_last_verified) / 1e6;
+    snprintf(r[0], sizeof r[0], "INCIDENT %s", in->id);
+    if (strcmp(in->cause, "-")) snprintf(r[1], sizeof r[1], "%s " TT_MIDDOT " %s", VN[in->v], in->cause);
+    else snprintf(r[1], sizeof r[1], "%s", VN[in->v]);     /* no cause classified (no stall seen) */
+    if (in->shown == in->truth && in->lamps_shown != in->lamps_truth)
+        snprintf(r[2], sizeof r[2], "lamps shown %02x " TT_MIDDOT " truth %02x", in->lamps_shown, in->lamps_truth);
+    else if (in->shown >= 0) snprintf(r[2], sizeof r[2], "shown %d " TT_MIDDOT " truth %d km/h", in->shown, in->truth);
+    else snprintf(r[2], sizeof r[2], "shown -- " TT_MIDDOT " truth %d km/h", in->truth);
+    snprintf(r[3], sizeof r[3], "caught %.0f ms " TT_MIDDOT " restored %.0f ms", caught, restored);
+    if (in->t_kill) snprintf(r[4], sizeof r[4], "restarted: pid %d -> %d", in->old_pid, in->new_pid);
+    else snprintf(r[4], sizeof r[4], "handed back, no restart");
+    snprintf(r[5], sizeof r[5], "service: cat /dev/telltale");
+    const struct tt_font *f = &tt_font_card;
+    const uint32_t bg = 0xFF000000u | PAL_CARD, fg[6] = {PAL_AMBER, PAL_LIT, PAL_LIT, PAL_LIT, PAL_LIT, PAL_MUTED};
+    tt_fill(card_px, card_st, L_CARD_W, L_CARD_H, PAL_CARD);
+    tt_fill(card_px, card_st, L_CARD_W, 4, PAL_AMBER);
+    for (int i = 0; i < 6; i++)
+        tt_text_draw(card_px, card_st, L_CARD_W, L_CARD_H, L_CARD_PAD, L_CARD_PAD + i * L_CARD_PITCH, f, r[i], 0xFF000000u | fg[i], bg);
+    int full[4] = {0, 0, L_CARD_W, L_CARD_H}, pos[2] = {wpos[0] + L_CARD_X, wpos[1] + L_CARD_Y}, z = CARD_Z_UP;
+    screen_set_window_property_iv(card_win, SCREEN_PROPERTY_POSITION, pos);
+    screen_set_window_property_iv(card_win, SCREEN_PROPERTY_ZORDER, &z);
+    screen_post_window(card_win, card_buf, 1, full, 0);
+    screen_flush_context(ctx_app, 0);
+    card_up = 1; card_until = tt_now_ns() + (uint64_t)cfg.card_ms * MS;
+    snprintf(card_id, sizeof card_id, "%s", in->id);
+    printf("telltale: CARD shown %s at %d,%d %dx%d rows=\"%s|%s|%s|%s|%s|%s\"\n", in->id, pos[0], pos[1], L_CARD_W, L_CARD_H,
+           r[0], r[1], r[2], r[3], r[4], r[5]);
+    fflush(stdout);
+}
+static void card_hide(const char *why)
+{
+    if (!card_up) return;
+    int z = SAFE_Z_DOWN;
+    screen_set_window_property_iv(card_win, SCREEN_PROPERTY_ZORDER, &z);
+    screen_flush_context(ctx_app, 0);
+    card_up = 0;
+    printf("telltale: CARD hidden %s (%s)\n", card_id, why); fflush(stdout);
 }
 
 /* ---------- cause check: the renderer's draw-thread state ---------- */
@@ -478,6 +569,23 @@ int main(void)
         int full[4] = {0, 0, L_SAFE_W, L_SAFE_H};
         screen_post_window(safe_win, safe_buf, 1, full, 0);
     }
+    CK(screen_create_window(&card_win, ctx_app), "card window");
+    {
+        int usage = SCREEN_USAGE_WRITE | SCREEN_USAGE_NATIVE, fmt = SCREEN_FORMAT_RGBA8888, sz[2] = {L_CARD_W, L_CARD_H};
+        int z = SAFE_Z_DOWN, vis = 1, pos[2] = {L_WIN_X + L_CARD_X, L_WIN_Y + L_CARD_Y};
+        CK(screen_set_window_property_iv(card_win, SCREEN_PROPERTY_USAGE, &usage), "card usage");
+        CK(screen_set_window_property_iv(card_win, SCREEN_PROPERTY_FORMAT, &fmt), "card format");
+        CK(screen_set_window_property_iv(card_win, SCREEN_PROPERTY_BUFFER_SIZE, sz), "card bufsize");
+        CK(screen_set_window_property_iv(card_win, SCREEN_PROPERTY_SIZE, sz), "card size");
+        CK(screen_set_window_property_iv(card_win, SCREEN_PROPERTY_POSITION, pos), "card pos");
+        CK(screen_set_window_property_iv(card_win, SCREEN_PROPERTY_ZORDER, &z), "card z");
+        CK(screen_set_window_property_iv(card_win, SCREEN_PROPERTY_VISIBLE, &vis), "card visible");
+        CK(screen_set_window_property_cv(card_win, SCREEN_PROPERTY_ID_STRING, 16, "tt-incident-card"), "card id");
+        CK(screen_create_window_buffers(card_win, 1), "card buffers");
+        card_init();
+        int full[4] = {0, 0, L_CARD_W, L_CARD_H};
+        screen_post_window(card_win, card_buf, 1, full, 0);
+    }
 
     pthread_t th;
     pthread_create(&th, NULL, resmgr_thread, NULL);
@@ -511,7 +619,7 @@ int main(void)
         drain_events();
 
         pthread_mutex_lock(&g_mtx);
-        armed = g.armed;
+        armed = g.armed; dbg_on = g.debug;
         int newreg = g.reg_new; struct tt_register reg = g.reg; g.reg_new = 0;
         if (g.rearm) { g.rearm = 0; nkills = 0; if (st == ST_GIVEUP) { st = ST_HOLD; t_state = now; } }
         if (g.new_period) {
@@ -608,10 +716,11 @@ int main(void)
         int truth_disp = lt ? disp_kmh(lt->speed_kmh) : -1;
 #define OPEN(V) do { memset(&inc, 0, sizeof inc); inc.v = (V); inc.shown = cs.kind == SPD_VALUE ? cs.value : -1; inc.truth = truth_disp; inc.lamps_shown = cs.lamps; inc.lamps_truth = lt ? lt->lamps : 0; \
             inc.t_last_verified = since_last_verified ? since_last_verified : t0; inc.t_detect = t_cap_end; inc.old_pid = rend.pid; \
-            snprintf(inc.id, sizeof inc.id, "TT-%s-%04d", VCODE[V], ++seq_inc); snprintf(inc.cause, sizeof inc.cause, "-"); inc_open = 1; \
+            snprintf(inc.id, sizeof inc.id, "TT-%s-%04d", VCODE[V], ++seq_inc); snprintf(inc.cause, sizeof inc.cause, "-"); inc_open = 1; banner_inc = &inc; card_hide("new incident"); \
             pthread_mutex_lock(&g_mtx); g.faults++; pthread_mutex_unlock(&g_mtx); \
             printf("telltale: DETECT %s %s shown=%d truth=%d lamps_shown=0x%02x lamps_truth=0x%02x caught_ms=%.1f\n", inc.id, VN[V], inc.shown, inc.truth, cs.lamps, lt ? lt->lamps : 0, (inc.t_detect - inc.t_last_verified) / 1e6); fflush(stdout); } while (0)
-#define CLOSE() do { if (inc_open) { inc.t_true = t_cap_end; inc.restarts = nkills; ev_append(&inc); inc_open = 0; } } while (0)
+#define CLOSE() do { if (inc_open) { inc.t_true = t_cap_end; inc.restarts = nkills; ev_append(&inc); inc_open = 0; banner_inc = NULL; \
+            if (dbg_on) card_show(&inc, rpos); } } while (0)
 
         enum state prev = st;
         switch (st) {
@@ -644,7 +753,13 @@ int main(void)
                 safe_hide(); st = ST_NORMAL; t_last_verified = t_cap_end; CLOSE(); break;
             }
             int kill_now = 0;
-            if (wv == V_MISMATCH || wv == V_BLANK || wv == V_UNREADABLE) { if (++mismatch_cnt >= cfg.mismatch_n) kill_now = 1; }
+            /* a wrong VALUE only counts towards a kill once the renderer's tick has moved since detection, i.e. it is
+             * live and drawing wrong ("live-wrong"). A frozen or starved renderer also shows a stale value while the speed
+             * moves, but its tick has stopped: wait for the stall and its cause (hung -> kill, starved -> no kill) instead
+             * of racing it. Blank / unreadable frames are a lie whatever the tick does. */
+            if ((wv == V_MISMATCH && t_tick_change > inc.t_detect) || wv == V_BLANK || wv == V_UNREADABLE) {
+                if (++mismatch_cnt >= cfg.mismatch_n) kill_now = 1;
+            }
             if (stalled && cause == C_HUNG) kill_now = 1;
             if (stalled && (cause == C_UNKNOWN) && now - inc.t_detect > (uint64_t)cfg.unknown_kill_ms * MS) kill_now = 1;
             if (kill_now) {
@@ -673,6 +788,7 @@ int main(void)
             safe_show(lt, !truth_fresh, rpos);
             break;
         }
+        if (card_up && tt_now_ns() > card_until) card_hide("timeout");
         if (st != prev) {
             t_state = now;
             printf("telltale: %s -> %s\n", ST[prev], ST[st]); fflush(stdout);

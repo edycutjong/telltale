@@ -10,6 +10,7 @@
 #define PAL_AMBER 0xF2A900u
 #define PAL_GREEN 0x2FB34Au
 #define PAL_BLUE  0x2F6FE0u
+#define PAL_CARD  0x1A1916u   /* incident card background */
 /* tick square: R,G fixed, B = 0x08 + (frame & 0x0F); invisible on the glass, exact to the read-back */
 #define PAL_TICK_BASE 0x0E0D08u
 #endif
