@@ -66,5 +66,7 @@ if [ "${TT_DEBUG:-0}" = 1 ]; then
   done
 fi
 $G get '/tmp/tt/ev/*.csv' "$EV/" 2>/dev/null || true
-echo "run $RID class=$CLS inject=${TT_INJECT:-$CLS} heal_at=${TT_HEAL_AT:--} conf_extra=${TT_CONF_EXTRA:--} at=$AT accel=QEMU(TCG) policy=${TT_POLICY:-0} debug=${TT_DEBUG:-0} cpu=${TT_CPU:-any} scope=${TT_SCOPE:-all} sup=${TT_SUP:-script}$([ "$CLS" = starve ] && echo " hog_prio=$HP hog_ms=${TT_HOG_MS:-3000}")" > "$EV/RUN.txt"
-cat "$EV/inject.txt" 2>/dev/null; grep -E 'DETECT|cause|SIGKILL|INCIDENT|->|gone|safe' "$EV/telltale.log" || true
+KPOL=$($G sudo 'secpol -Q | head -1' 2>/dev/null | tr ' ' '_' || true)   # the kernel's policy state, not just the requested mode
+echo "run $RID class=$CLS inject=${TT_INJECT:-$CLS} heal_at=${TT_HEAL_AT:--} conf_extra=${TT_CONF_EXTRA:--} at=$AT accel=QEMU(TCG) policy=${TT_POLICY:-0} debug=${TT_DEBUG:-0} cpu=${TT_CPU:-any} scope=${TT_SCOPE:-all} sup=${TT_SUP:-script} kernel_policy=${KPOL:-unknown}$([ "$CLS" = starve ] && echo " hog_prio=$HP hog_ms=${TT_HOG_MS:-3000}")" > "$EV/RUN.txt"
+cat "$EV/inject.txt" 2>/dev/null || true   # STARVE runs have no inject.txt (set -e would exit 1 here)
+grep -E 'DETECT|cause|SIGKILL|INCIDENT|->|gone|safe' "$EV/telltale.log" || true

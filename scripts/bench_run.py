@@ -172,11 +172,6 @@ def write_slice(path: Path, trace: list[tuple[float, float]], t0: float, t1: flo
             f.write(f"{t:.3f},{v:.4f}\n")
 
 
-def trace_kmh_at(rows: list[tuple[float, float]], t: float) -> float:
-    best = min(rows, key=lambda r: abs(r[0] - t))
-    return best[1] * 3.6
-
-
 def first_int(path: Path, key: str) -> int | None:
     import re
     if path.exists():
