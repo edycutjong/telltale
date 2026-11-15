@@ -54,6 +54,13 @@ for pr in vehicled:vehicle_t telltale:monitor_t cluster:renderer_t vehfeed:feede
   n=${pr%%:*}; t=${pr##*:}
   grep -q "$n: .*type=$t" log/$n.log 2>/dev/null && ok "$n runs as $t" || bad "$n not in $t"
 done
+# 5. under the policy the fault-on-start file hook is ignored: /dev/cluster-ctl (cluster:fault) stays the only fault door
+R0=$(grep -c respawn log/super.log 2>/dev/null); C0=$(grep -c "fault-on-start blank" log/cluster.log 2>/dev/null)
+echo blank > fault-on-start; slay -f -Q cluster > /dev/null 2>&1; sleep 4
+R1=$(grep -c respawn log/super.log 2>/dev/null); C1=$(grep -c "fault-on-start blank" log/cluster.log 2>/dev/null)
+if [ "${R1:-0}" -gt "${R0:-0}" ] && [ "${C1:-0}" -eq "${C0:-0}" ]; then ok "fault-on-start file ignored under the policy (renderer respawned, not blank)"
+else bad "fault-on-start under the policy: respawns ${R0:-?}->${R1:-?}, blank-hook lines ${C0:-?}->${C1:-?}"; fi
+rm -f fault-on-start
 rm -f one.csv
 echo "secpol: $P/$N passed"
 [ "$P" = "$N" ]

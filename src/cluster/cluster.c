@@ -2,7 +2,7 @@
  * double-buffered, full redraw every frame, software blits from the shared D-DIN digit atlas.
  *   data thread (SCHED_RR 21): ionotify pulse from /dev/vehicle -> DCMD_VEH_GET -> shared state (mutex A)
  *   draw thread (SCHED_RR 20): ~60 fps; copies the state, draws digits, gear strip, lamps, tick; posts
- *   main thread: /dev/cluster-ctl -- DCMD_CL_FAULT test hooks (documented as such; the injector's only door):
+ *   main thread: /dev/cluster-ctl -- DCMD_CL_FAULT test hooks (documented as such; the injector's door, cluster:fault):
  *     FREEZE   a real lock-order inversion between the draw and data threads (barrier-forced)
  *     BLANK    posts a cleared frame (arg 1: hides the window instead)
  *     STALE    the data thread stops applying samples; drawing (and the tick) continue
@@ -21,6 +21,7 @@
 #include <stdlib.h>
 #include <string.h>
 #include <unistd.h>
+#include <sys/stat.h>
 #include <devctl.h>
 #include <sys/iofunc.h>
 #include <sys/dispatch.h>
@@ -243,10 +244,19 @@ int main(void)
     char path[256]; snprintf(path, sizeof path, "%s/cluster-bench.csv", evdir);
     evfd = open(path, O_WRONLY | O_APPEND | O_CREAT, 0644);
     pthread_barrier_init(&freeze_bar, NULL, 2);
-    {   /* test hook for the restart-cap check (tests/target/core_items.sh): a renderer that is wrong on EVERY start */
+    {   /* second test hook, for the restart-cap checks (tests/target/core_items.sh, run WITHOUT a policy): a renderer that is
+         * wrong on EVERY start. Honoured only with no policy loaded and only from a root-owned file no one else may write;
+         * under the policy /dev/cluster-ctl (cluster:fault, injector_t only) stays the only fault door. */
         const char *ff = getenv("TT_FAULT_FILE") ? getenv("TT_FAULT_FILE") : "/tmp/tt/fault-on-start";
-        FILE *f = fopen(ff, "r"); char w[16] = "";
-        if (f) { if (!fgets(w, sizeof w, f)) w[0] = 0; fclose(f); }
+        char w[16] = "";
+        int ffd = tt_policy_loaded() ? -1 : open(ff, O_RDONLY);
+        if (ffd >= 0) {
+            struct stat fs;
+            if (fstat(ffd, &fs) == 0 && fs.st_uid == 0 && !(fs.st_mode & (S_IWGRP | S_IWOTH))) {
+                ssize_t r = read(ffd, w, sizeof w - 1); w[r > 0 ? r : 0] = 0;
+            } else { fprintf(stderr, "cluster: %s ignored (not root-owned, or writable by group/others)\n", ff); }
+            close(ffd);
+        }
         if (!strncmp(w, "blank", 5)) { atomic_store(&f_blank, 1); printf("cluster: fault-on-start blank (test hook %s)\n", ff); fflush(stdout); }
     }
 
