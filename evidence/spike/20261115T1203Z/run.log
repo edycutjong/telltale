@@ -1,0 +1,19 @@
+== run 20261115T1203Z accel=QEMU(TCG) target=QSTI x86_64
+QNX qnxqemu 8.0.0 2026/06/05-16:26:03EDT x86pc x86_64
+CPU:X86_64 Release:8.0.0  FreeMem:2843MB/3071MB BootTime:Nov 15 12:02:37 UTC 2026
+Processes: 4, Threads: 4
+Processor1: 686 AMD 686 F6M6S3 999MHz FPU 
+== G2: qcc-built binary runs on the target
+TT-G2 hello from QNX 8.0.0 2026/06/05-16:26:03EDT x86pc, cpu=4, clock_res_ns=1000000
+== Screen: software virtual display (graphics-virtual-display.conf), no window manager, no demolauncher
+screen-ready
+== G1: renderer (uid 1000) + reader (root, WM|DM context): routes 1 (display) and 2 (window)
+== G1: top-z cover over the right half (composition proof) + covered-window read (S-OCC)
+== G1: S-UID - non-root reads with an application context (same uid 1000, other uid 1001)
+== G4: 5000 x 20 ms timer pulses (SCHED_FIFO 60) + 500 checks x 3 screen_read_display rects
+clock period 1000000 ns
+sched FIFO 60: ok
+SUMMARY n=5000 period_ms=20 prio=60 tick_ns=1000000 abs_err_p50_us=1277.1 p95_us=4597.5 max_us=20992.1
+== G3: runtime secpolpush of spike/g3_spike.pol, typed channel connects under uid 1000
+== collect
+== done: evidence/spike/20261115T1203Z

@@ -1,0 +1,16 @@
+policy id:0
+policy id:e61229a5 (immutable)
+server pid=1753120 uid=1000 type=vehicle_t(id 2) chid=1
+server pid=1761313 uid=1000 type=render_t(id 3) chid=1
+server pid=1773603 uid=0 type=default(id 0) chid=1
+-- monitor_t
+client uid=1000 type=monitor_t(id 1) -> /tmp/tt/v.chan: ConnectAttach OK, MsgSend rc=0 reply='ok'
+client uid=1000 type=monitor_t(id 1) -> /tmp/tt/r.chan: ConnectAttach DENIED errno=1 (Operation not permitted)
+client uid=1000 type=monitor_t(id 1) -> /tmp/tt/d.chan: ConnectAttach OK, MsgSend rc=0 reply='ok'
+-- render_t
+client uid=1000 type=render_t(id 3) -> /tmp/tt/v.chan: ConnectAttach OK, MsgSend rc=0 reply='ok'
+client uid=1000 type=render_t(id 3) -> /tmp/tt/r.chan: ConnectAttach DENIED errno=1 (Operation not permitted)
+-- untyped uid 1000
+client uid=1000 type=default(id 0) -> /tmp/tt/v.chan: ConnectAttach DENIED errno=1 (Operation not permitted)
+client uid=1000 type=default(id 0) -> /tmp/tt/r.chan: ConnectAttach DENIED errno=1 (Operation not permitted)
+client uid=1000 type=default(id 0) -> /tmp/tt/d.chan: ConnectAttach OK, MsgSend rc=0 reply='ok'

@@ -1,0 +1,1 @@
+TT-G2 hello from QNX 8.0.0 2026/06/05-16:26:03EDT x86pc, cpu=4, clock_res_ns=1000000
