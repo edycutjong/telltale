@@ -1,0 +1,8 @@
+# accel=tcg
+# QEMU (TCG) x86_64 guest on an Apple-silicon Mac: QEMU timing, not hardware timing. t_diverge_ns is derived offline from the replayed trace; every other stamp is written on the target (CLOCK_MONOTONIC).
+run_id,git_sha,accel,tier,smp,runmask,period_ms,seed,class,t_command_ns,t_inject_ns,t_diverge_ns,t_detect_ns,reason,cause,t_safe_visible_ns,t_restart_ns,t_true_ns,shown,truth,missed,hog_prio,exposure_ms,tick_stall_ms,incidents,pre_inject_incidents,window_onset_s,host_load1
+r03regress-001,b896938,tcg,G1-FULL,4,0xf,20,42,CRASH,1312416280164,1312417635927,,1312435475118,BLANK,crash,1312657854210,1312652451187,1312677299489,-1,3,0,,242.1,151,1,0,32.7,4.41
+r03regress-002,b896938,tcg,G1-FULL,4,0xf,20,42,CRASH,1334415856614,1334418830480,,1334436392310,BLANK,crash,1334660795034,1334655314909,1334680864123,-1,0,0,,242.3,151,1,0,80.3,3.82
+r03regress-003,b896938,tcg,G1-FULL,4,0xf,20,42,CRASH,1356222572344,1356224579954,,1356243412436,BLANK,crash,1356448327826,1356442768599,1356467012116,-1,3,0,,223.2,151,1,0,106.9,3.43
+r03regress-004,b896938,tcg,G1-FULL,4,0xf,20,42,CRASH,1377833735857,1377842709522,,1377857956343,BLANK,crash,1378042174827,1378036416341,1378061082407,-1,45,0,,203.9,151,1,0,145.1,3.50
+r03regress-005,b896938,tcg,G1-FULL,4,0xf,20,42,CRASH,1399732850706,1399741258636,,1399754248523,BLANK,crash,1399987343547,1399973544608,1399998635226,-1,0,0,,251.8,151,1,0,149.5,4.38

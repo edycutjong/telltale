@@ -1,0 +1,57 @@
+--- snapshot 1
+35192862   1 screen              10r SIGWAITINFO                                
+35192862   2 screen              15r CONDVAR        (0x2f23805438)              
+35192862   3 screen              10r NANOSLEEP                                  
+35192862   4 screen              16r RECEIVE        1                           
+35192862   5 screen              10r RECEIVE        1                           
+35192862   6 screen              10r RECEIVE        1                           
+35192862   7 screen              10r RECEIVE        1                           
+35192862   8 screen              60r RECEIVE        1                           
+35192862   9 screen              16r RECEIVE        1                           
+35192862  10 screen              10r REPLY          180247                      
+45912088   1 telltale            60f RECEIVE        1                           
+45912088   2 telltale            15f RECEIVE        2                           
+45912088   3 telltale            61f NANOSLEEP                                  
+45936669   1 cluster             15r RECEIVE        1                           
+45936669   2 cluster             10r READY                                      
+45936669   3 cluster             20r READY                                      
+45936669   4 cluster             15r NANOSLEEP                                  
+46059556   1 hog                 40f RUNNING                                    
+--- snapshot 2
+35192862   1 screen              10r SIGWAITINFO                                
+35192862   2 screen              15r CONDVAR        (0x2f23805438)              
+35192862   3 screen              10r NANOSLEEP                                  
+35192862   4 screen              16r RECEIVE        1                           
+35192862   5 screen              10r RECEIVE        1                           
+35192862   6 screen              10r RECEIVE        1                           
+35192862   7 screen              10r RECEIVE        1                           
+35192862   8 screen              60r RUNNING                                    
+35192862   9 screen              60r RECEIVE        1                           
+35192862  10 screen              10r REPLY          180247                      
+45912088   1 telltale            60f REPLY          35192862                    
+45912088   2 telltale            15f RECEIVE        2                           
+45912088   3 telltale            61f NANOSLEEP                                  
+45936669   1 cluster             15r RECEIVE        1                           
+45936669   2 cluster             10r READY                                      
+45936669   3 cluster             20r READY                                      
+45936669   4 cluster             15r READY                                      
+46059556   1 hog                 40f RUNNING                                    
+--- snapshot 3
+35192862   1 screen              10r SIGWAITINFO                                
+35192862   2 screen              15r CONDVAR        (0x2f23805438)              
+35192862   3 screen              10r NANOSLEEP                                  
+35192862   4 screen              16r RECEIVE        1                           
+35192862   5 screen              10r RECEIVE        1                           
+35192862   6 screen              10r RECEIVE        1                           
+35192862   7 screen              10r RECEIVE        1                           
+35192862   8 screen              16r RECEIVE        1                           
+35192862   9 screen              60r RECEIVE        1                           
+35192862  10 screen              10r REPLY          180247                      
+45912088   1 telltale            60f RECEIVE        1                           
+45912088   2 telltale            15f RECEIVE        2                           
+45912088   3 telltale            61f NANOSLEEP                                  
+45936669   1 cluster             15r RECEIVE        1                           
+45936669   2 cluster             10r READY                                      
+45936669   3 cluster             20r READY                                      
+45936669   4 cluster             15r READY                                      
+46059556   1 hog                 40f RUNNING                                    

@@ -1,0 +1,11 @@
+git b896938687ffedc7ffcad8d2a861849ae756eee9
+cluster cksum=2069557866 bytes=79432
+hog cksum=1670513021 bytes=19088
+telltale cksum=608030250 bytes=247072
+telltale.bin cksum=2269092339 bytes=1584
+telltale.conf cksum=1213493339 bytes=1166
+ttctl cksum=4210009898 bytes=14824
+ttinject cksum=2661498232 bytes=19136
+ttshot cksum=525309229 bytes=19504
+vehfeed cksum=295737284 bytes=19424
+vehicled cksum=2125181187 bytes=19944
