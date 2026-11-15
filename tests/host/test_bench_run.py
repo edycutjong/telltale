@@ -163,5 +163,23 @@ class SelfReport(unittest.TestCase):
             self.assertAlmostEqual(rows[0]["detect_ms"], 20.0)
 
 
+
+class DisplayRuleParity(unittest.TestCase):
+    """bench_run.disp_kmh must equal src/common/disp.c disp_kmh() -- the same cases as tests/host/test_disp.c."""
+
+    def test_same_cases_as_the_c_test(self):
+        cases = [(48.0, 48), (47.5, 48), (47.49, 47), (48.49, 48), (0.4, 0), (0.5, 1), (0.0, 0), (-3.0, 0),
+                 (1200.0, 999), (float("nan"), -1)]
+        for kmh, want in cases:
+            self.assertEqual(br.disp_kmh(kmh), want, kmh)
+        self.assertEqual(br.mps_to_disp(13.3333), 48)
+        self.assertEqual(br.mps_to_disp(0.0), 0)
+
+    def test_half_up_not_python_round(self):
+        # Python's round() is half-to-even (round(48.5) == 48); the renderer shows 49
+        self.assertEqual(br.disp_kmh(48.5), 49)
+        self.assertEqual(br.disp_kmh(49.5), 50)
+
+
 if __name__ == "__main__":
     unittest.main()

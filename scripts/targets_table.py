@@ -19,7 +19,7 @@ import bench  # noqa: E402
 
 def main() -> int:
     ev = ROOT / "evidence"
-    rows = [r for r in csv.DictReader(l for l in (ev / "bench-faults.csv").read_text().splitlines() if not l.startswith("#"))]
+    rows = [r for r in csv.DictReader(ln for ln in (ev / "bench-faults.csv").read_text().splitlines() if not ln.startswith("#"))]
     clean = bench.load([str(ev / "bench-clean.csv")], bench.CHECK_COLUMNS)
     rb = bench.analyze_clean(clean.rows, "tcg")["readback_check_us"]["p95"] / 1000.0
     tick, period, w = float(rows[0]["tick_stall_ms"]), float(rows[0]["period_ms"]), 100.0

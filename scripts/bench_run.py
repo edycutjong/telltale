@@ -13,15 +13,17 @@ Design (one run = one fresh stack, so a run can never inherit state from the one
   * the fault time `t_inject` is stamped on the target by the component where the fault takes effect
     (cluster-bench.csv, or the hog's first busy-loop stamp for STARVE) -- never by this script;
   * rows are appended as they finish and the run resumes where it stopped (`--out` file is the state).
-Rows carry git_sha: the bench refuses to start on a dirty build/ tree (the SHA must name the code that ran).
+Rows carry git_sha: the bench refuses to start on a dirty build/ tree, on an out/ older than the sources, or when the
+guest's binaries / policy / conf are not byte-identical to out/ (POSIX cksum both sides; written to <evroot>/manifest.txt).
 """
 from __future__ import annotations
 
 import argparse
 import csv
+import math
 import os
 import random
-import shutil
+import struct
 import subprocess
 import sys
 import time
@@ -96,11 +98,52 @@ def sh(cmd: list[str], env: dict | None = None, check: bool = True) -> subproces
     return subprocess.run(cmd, cwd=ROOT, env=e, capture_output=True, text=True, check=check)
 
 
-def git_sha() -> str:
+DEPLOYED = ["vehicled", "vehfeed", "cluster", "telltale", "ttinject", "ttctl", "hog", "ttshot", "telltale.bin"]
+
+
+def verify_deployed(evroot: Path | None) -> None:
+    """The SHA names the code that ran only if out/ is HEAD's build and the guest runs exactly out/: check both."""
+    if os.environ.get("TT_BENCH_DIRTY_OK"):
+        return
+    qout = f"out/{os.environ.get('QNX_ARCH', 'x86_64')}"
+    if sh(["make", "-q", "target-sdp"], check=False).returncode != 0:
+        sys.exit("bench_run: out/ is older than the sources -- run `make target` and `scripts/deploy.sh` first")
+    files = {n: f"{qout}/{n}" for n in DEPLOYED} | {"telltale.conf": "scripts/target/telltale.conf"}
+    host = {n: sh(["cksum", path]).stdout.split()[:2] for n, path in files.items()}
+    r = sh(["scripts/guest.sh", "run", "cd /tmp/tt && cksum " + " ".join(files)], check=False)
+    guest = {f[2]: f[:2] for f in (line.split() for line in r.stdout.splitlines()) if len(f) >= 3}
+    bad = [n for n in files if guest.get(n) != host[n]]
+    if bad:
+        sys.exit("bench_run: the guest's copies differ from out/ (" + ", ".join(bad) + ") -- run scripts/deploy.sh")
+    if evroot is not None:
+        evroot.mkdir(parents=True, exist_ok=True)
+        head = sh(["git", "rev-parse", "HEAD"]).stdout.strip()
+        (evroot / "manifest.txt").write_text(f"git {head}\n" + "".join(f"{n} cksum={c[0]} bytes={c[1]}\n" for n, c in sorted(host.items())))
+
+
+def git_sha(evroot: Path | None = None) -> str:
     dirty = sh(["git", "status", "--porcelain", "--", ".", ":!evidence"], check=False).stdout.strip()
     if dirty and not os.environ.get("TT_BENCH_DIRTY_OK"):
         sys.exit("bench_run: build/ has uncommitted changes outside evidence/ -- commit first (rows name the code that ran)\n" + dirty)
+    verify_deployed(evroot)
     return sh(["git", "rev-parse", "--short", "HEAD"]).stdout.strip()
+
+
+def disp_kmh(kmh: float) -> int:
+    """src/common/disp.c disp_kmh(), exactly: float32 input, round half UP (Python's round() is half-to-even),
+    clamp to [0, 999], NaN -> -1. Every offline display value goes through this one rule."""
+    f = struct.unpack("f", struct.pack("f", kmh))[0]
+    if f != f:
+        return -1
+    if f <= 0.0:
+        return 0
+    return min(999, int(math.floor(f + 0.5)))
+
+
+def mps_to_disp(mps: float) -> int:
+    """disp_kmh(mps_to_kmh(v)) as the renderer computes it: the m/s -> km/h product in float32 too."""
+    f = struct.unpack("f", struct.pack("f", mps))[0]
+    return disp_kmh(struct.unpack("f", struct.pack("f", f * struct.unpack("f", struct.pack("f", 3.6))[0]))[0])
 
 
 def load1() -> str:
@@ -205,7 +248,7 @@ def make_row(run: Path, run_id: str, cls: str, meta: dict) -> dict:
         if m:
             t_tr, shown = float(m.group(1)), float(m.group(2))
             for t, v in tr:
-                if t >= t_tr and round(v * 3.6) != round(shown):
+                if t >= t_tr and mps_to_disp(v) != disp_kmh(shown):
                     row["t_diverge_ns"] = t_inj + round((t - t_tr) * 1e9)   # derived offline from the trace
                     break
     return row
@@ -225,7 +268,7 @@ def append_row(out: Path, row: dict) -> None:
 def done_ids(out: Path) -> set[str]:
     if not out.exists():
         return set()
-    return {r["run_id"] for r in csv.DictReader(l for l in out.read_text().splitlines() if not l.startswith("#"))}
+    return {r["run_id"] for r in csv.DictReader(ln for ln in out.read_text().splitlines() if not ln.startswith("#"))}
 
 
 def keep_small(run: Path) -> None:
@@ -249,7 +292,12 @@ def one_fault_run(tag: str, cls: str, onset: float, meta: dict, evroot: Path, ex
         env["TT_INJECT"] = inject_name
     r = sh(["scripts/scenario.sh", cls.lower() if cls in ("FREEZE", "BLANK", "STALE", "STARVE", "CRASH", "MISDRAW") else cls,
             f"{AT_S}", str(settle)], env=env, check=False)
-    return evroot / f"{tag}-{cls.lower()}"
+    run = evroot / f"{tag}-{cls.lower()}"
+    if run.is_dir():   # a harness failure stays distinguishable from a valid run that missed (the row still says missed=1)
+        (run / "scenario.rc").write_text(f"{r.returncode}\n" + (r.stderr[-1500:] if r.returncode else ""))
+    if r.returncode:
+        print(f"{tag} {cls}: scenario.sh exited {r.returncode} (kept in scenario.rc)", flush=True)
+    return run
 
 
 def cmd_windows(a) -> None:
@@ -260,7 +308,7 @@ def cmd_windows(a) -> None:
 def cmd_faults(a) -> None:
     trace = read_trace()
     onsets = [t for t in windows(trace, 1.0) if t > PRE_S + 1 and t < trace[-1][0] - POST_S - 1]
-    sha = git_sha()
+    sha = git_sha(Path(a.evroot))
     classes = a.classes.split(",")
     sched = [c for c in classes for _ in range(a.n)]
     random.Random(a.seed).shuffle(sched)
@@ -326,7 +374,7 @@ def cmd_ablation(a) -> None:
     import re
     trace = read_trace()
     stops = [r for r in csv.DictReader(open(STOPS))]
-    sha = git_sha()
+    sha = git_sha(Path(a.evroot))
     sched = [c for c in CLASSES for _ in range(a.n)]
     rng = random.Random(a.seed)
     rng.shuffle(sched)
@@ -369,13 +417,13 @@ def cmd_ablation(a) -> None:
             m = re.search(r"trace_s=([\d.]+)", (run / "inject.txt").read_text()) if (run / "inject.txt").exists() else None
             t_cmd = first_int(run / "inject.txt", "t_command_ns") or first_int(run / "hog.log", "t_hog_start_ns")
             tr0 = float(m.group(1)) if m else AT_S
-            sl_rows = [(t - t0, v * 3.6) for t, v in trace if t0 <= t <= t1]
+            sl_rows = [(t - t0, v) for t, v in trace if t0 <= t <= t1]   # m/s; displayed via mps_to_disp()
 
             def truth_fn(t_ns, sl_rows=sl_rows, tr0=tr0, t_cmd=t_cmd):
                 ts = tr0 + (t_ns - t_cmd) / 1e9           # trace second of this check (t_command = trace second tr0)
-                win = [round(v) for t, v in sl_rows if ts - 0.1 <= t <= ts] or [round(sl_rows[-1][1])]   # parked: last row held
+                win = [mps_to_disp(v) for t, v in sl_rows if ts - 0.1 <= t <= ts] or [mps_to_disp(sl_rows[-1][1])]   # parked: last row held
                 if ts > sl_rows[-1][0]:
-                    win = [round(sl_rows[-1][1])]
+                    win = [mps_to_disp(sl_rows[-1][1])]
                 return min(win), max(win)
             sw, n, last = seconds_wrong(checks, t_inj, a.window, truth_fn if t_cmd else None)
             row.update(t_inject_ns=t_inj, seconds_wrong=f"{sw:.3f}", checks_in_window=n, wrong_at_end=last,
@@ -400,10 +448,10 @@ def live_checks(raw: Path, out: Path, accel: str = "tcg") -> tuple[int, int]:
     WAIT warm-up (no renderer window yet) and are counted in a header comment, never silently dropped (the raw file is kept gzipped)."""
     import gzip
     lines = raw.read_text().splitlines()
-    header, body = lines[0], [l for l in lines[1:] if l.count(",") >= 10]    # a truncated last row is not a check
+    header, body = lines[0], [ln for ln in lines[1:] if ln.count(",") >= 10]    # a truncated last row is not a check
     cols = header.split(",")
     si = cols.index("state")
-    first = next((i for i, l in enumerate(body) if l.split(",")[si] != "WAIT"), len(body))
+    first = next((i for i, ln in enumerate(body) if ln.split(",")[si] != "WAIT"), len(body))
     with open(out, "w") as f:
         f.write(f"# accel={accel}\n# B3 clean replay, monitor armed, no faults. warmup_rows_excluded={first} (state WAIT before the monitor armed); "
                 f"raw per-check log: {raw.parent.name}/checks.csv.gz\n")
@@ -416,7 +464,7 @@ def live_checks(raw: Path, out: Path, accel: str = "tcg") -> tuple[int, int]:
 
 def cmd_clean(a) -> None:
     trace = read_trace()
-    sha = git_sha()
+    sha = git_sha(Path(a.evroot))
     sl = Path("/tmp/tt-bench/clean.csv")
     sl.parent.mkdir(exist_ok=True)
     write_slice(sl, trace, 0.0, a.seconds)
@@ -435,7 +483,9 @@ def cmd_clean(a) -> None:
 def main() -> None:
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     sub = ap.add_subparsers(dest="cmd", required=True)
-    p = sub.add_parser("windows"); p.add_argument("--threshold", type=float, default=1.0); p.set_defaults(f=cmd_windows)
+    p = sub.add_parser("windows")
+    p.add_argument("--threshold", type=float, default=1.0)
+    p.set_defaults(f=cmd_windows)
     p = sub.add_parser("faults")
     p.add_argument("--n", type=int, default=50, help="injections per class")
     p.add_argument("--classes", default=",".join(CLASSES))

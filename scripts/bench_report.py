@@ -26,7 +26,7 @@ def rows_of(name: str) -> list[dict]:
     p = EV / name
     if not p.exists():
         return []
-    return list(csv.DictReader(l for l in p.read_text().splitlines() if not l.startswith("#")))
+    return list(csv.DictReader(ln for ln in p.read_text().splitlines() if not ln.startswith("#")))
 
 
 def detect_ms(rows: list[dict]) -> dict[str, list[float]]:
@@ -45,7 +45,8 @@ def strip_plot(data: dict[str, list[float]], title: str, bound: float | None = N
     xmax = max(xmax, (bound or 0) * 1.05, 50)
     w, left, rowh = 760, 90, 34
     h = rowh * len(data) + 52
-    sx = lambda v: left + (w - left - 20) * v / xmax
+    def sx(v):
+        return left + (w - left - 20) * v / xmax
     s = [f'<svg viewBox="0 0 {w} {h}" role="img" aria-label="{html.escape(title)}" class="plot"><title>{html.escape(title)}</title>']
     for i, (cls, vs) in enumerate(sorted(data.items())):
         y = 26 + i * rowh
@@ -99,7 +100,6 @@ def main() -> int:
     ap.add_argument("--out", default=str(EV / "report.html"))
     a = ap.parse_args()
     parts = []
-    clean_rows = []
     cp = EV / "bench-clean.csv"
     if cp.exists():
         t = bench.load([str(cp)], bench.CHECK_COLUMNS)

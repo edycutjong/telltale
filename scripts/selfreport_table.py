@@ -23,8 +23,8 @@ def cases(root: Path) -> list[dict]:
         cb, inc = d / "cluster-bench.csv", d / "incidents.csv"
         if not (cb.exists() and inc.exists()):
             continue
-        fault = next((l.split(",") for l in cb.read_text().splitlines() if len(l.split(",")) >= 6 and l.split(",")[2] in ("BLANK", "MISDRAW")), None)
-        rows = [l.split(",") for l in inc.read_text().splitlines() if l and not l.startswith("id,")]
+        fault = next((ln.split(",") for ln in cb.read_text().splitlines() if len(ln.split(",")) >= 6 and ln.split(",")[2] in ("BLANK", "MISDRAW")), None)
+        rows = [ln.split(",") for ln in inc.read_text().splitlines() if ln and not ln.startswith("id,")]
         if not fault or not rows:
             continue
         r = rows[0]
