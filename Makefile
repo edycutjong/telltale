@@ -26,8 +26,14 @@ $(HOSTBIN):
 $(HOSTBIN)/test_disp: tests/host/test_disp.c src/common/disp.c src/common/disp.h | $(HOSTBIN)
 	$(CC) $(CFLAGS) -o $@ tests/host/test_disp.c src/common/disp.c -lm
 
-test-host-c: $(HOSTBIN)/test_disp
+COMMON_SRC := src/common/decode.c src/common/truth.c src/common/disp.c
+
+$(HOSTBIN)/test_decode: tests/host/test_decode.c $(COMMON_SRC) src/common/*.h | $(HOSTBIN)
+	$(CC) $(CFLAGS) -o $@ tests/host/test_decode.c $(COMMON_SRC) -lm
+
+test-host-c: $(HOSTBIN)/test_disp $(HOSTBIN)/test_decode
 	$(HOSTBIN)/test_disp
+	$(HOSTBIN)/test_decode
 
 test-host-py:
 	$(PYTHON) -m unittest discover -s tests/host -p 'test_*.py' -v
