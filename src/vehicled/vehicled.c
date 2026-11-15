@@ -62,11 +62,13 @@ static int io_devctl(resmgr_context_t *ctp, io_devctl_t *msg, iofunc_ocb_t *ocb)
     size_t nbytes = 0;
     switch (msg->i.dcmd) {
     case DCMD_VEH_GET: {
+        if (msg->i.nbytes < sizeof(struct veh_state)) return EINVAL;   /* the reply must fit the client's buffer */
         const struct veh_state *s = latest();
         if (!s) return EAGAIN;
         memcpy(data, s, sizeof *s); nbytes = sizeof *s; break;
     }
     case DCMD_VEH_GET_SINCE: {
+        if (msg->i.nbytes < sizeof(struct veh_since)) return EINVAL;   /* request + reply share the client's buffer */
         struct veh_since *q = data;
         uint64_t after = q->after_seq, first = seq > VEH_RING ? seq - VEH_RING + 1 : 1;
         if (after + 1 > first) first = after + 1;
@@ -78,6 +80,7 @@ static int io_devctl(resmgr_context_t *ctp, io_devctl_t *msg, iofunc_ocb_t *ocb)
     }
     case DCMD_VEH_SET: {
         if (!may_write(ctp)) { denied++; return EPERM; }
+        if (msg->i.nbytes < sizeof(struct veh_state)) return EINVAL;   /* never read past the client's payload */
         struct veh_state in;
         memcpy(&in, data, sizeof in);
         in.seq = ++seq;

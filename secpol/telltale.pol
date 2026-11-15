@@ -2,10 +2,11 @@
 # Least privilege for the monitor: it may read the vehicle state, register/serve its own paths and hold the
 # signal ability (secpol cannot scope it to the renderer's type; the monitor targets only the registered renderer
 # pid in code); it may not write /dev/vehicle (only feeder_t holds vehicle:write), and nothing but
-# renderer_t may register as the monitored renderer. Reading Screen buffers is a Screen permission (the
+# renderer_t may register as the monitored renderer; only injector_t may use the renderer's fault test hook (cluster:fault). Reading Screen buffers is a Screen permission (the
 # window owner's grant, or root + display-manager context), not a secpol rule.
 class vehicle { read write };
 class telltale { register control };
+class cluster { fault };
 
 type vehicle_t;
 type feeder_t;
@@ -28,12 +29,13 @@ allow renderer_t monitor_t:channel connect;
 allow injector_t monitor_t:channel connect;
 allow injector_t renderer_t:channel connect;
 
-# custom permissions checked in code (vehicled, telltale) with secpol_check_permission()
+# custom permissions checked in code (vehicled, telltale, cluster) with secpol_check_permission()
 allow feeder_t   vehicle_t:vehicle write;
 allow renderer_t vehicle_t:vehicle read;
 allow monitor_t  vehicle_t:vehicle read;
 allow renderer_t monitor_t:telltale register;
 allow injector_t monitor_t:telltale control;
+allow injector_t renderer_t:cluster fault;
 
 # abilities: serve a path, create public channels, and the monitor's renderer-facing rights
 allow vehicle_t  self:ability { pathspace public_channel };

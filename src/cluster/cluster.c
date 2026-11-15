@@ -26,6 +26,7 @@
 #include <sys/dispatch.h>
 #include <sys/neutrino.h>
 #include <screen/screen.h>
+#include <secpol/secpol.h>
 #include "../common/ttproto.h"
 #include "../common/ttsec.h"
 #include "../common/layout.h"
@@ -47,6 +48,8 @@ static screen_context_t ctx;
 static screen_window_t win;
 static int evfd = -1;
 static unsigned long frames;
+static secpol_permission_t *perm_fault;   /* cluster:fault (injector_t only) when a policy is loaded */
+static uint32_t self_type;
 
 static void bench_log(const char *cls, uint64_t t, int intended, int drawn)
 {
@@ -54,7 +57,9 @@ static void bench_log(const char *cls, uint64_t t, int intended, int drawn)
     char line[160];
     int n = snprintf(line, sizeof line, "%llu,%d,%s,%llu,%d,%d\n", (unsigned long long)atomic_load(&run_id), getpid(), cls,
                      (unsigned long long)t, intended, drawn);
-    if (write(evfd, line, (size_t)n) < 0) perror("cluster: bench log");
+    if (n < 0) return;
+    if ((size_t)n >= sizeof line) n = (int)sizeof line - 1;
+    if (tt_write_all(evfd, line, (size_t)n) < 0) perror("cluster: bench log");
 }
 
 static void *data_thread(void *arg)
@@ -174,6 +179,9 @@ static int io_devctl(resmgr_context_t *ctp, io_devctl_t *msg, iofunc_ocb_t *ocb)
     int st = iofunc_devctl_default(ctp, msg, ocb);
     if (st != _RESMGR_DEFAULT) return st;
     if (msg->i.dcmd != DCMD_CL_FAULT) return ENOSYS;
+    /* test hook: with a policy, only a type granted cluster:fault (injector_t); without one, root only */
+    if (perm_fault ? secpol_check_permission(&ctp->info, self_type, perm_fault) != 0 : tt_client_euid(ctp->info.scoid) != 0) return EPERM;
+    if (msg->i.nbytes < sizeof(struct cl_fault_cmd)) return EINVAL;
     struct cl_fault_cmd c;
     memcpy(&c, _DEVCTL_DATA(msg->i), sizeof c);
     atomic_store(&run_id, c.run_id);
@@ -225,11 +233,19 @@ int main(void)
     static iofunc_attr_t attr;
     iofunc_attr_init(&attr, S_IFCHR | 0666, NULL, NULL);
     if (resmgr_attach(dpp, &rattr, PATH_CLCTL, _FTYPE_ANY, 0, &cf, &iof, &attr) == -1) perror("cluster: attach " PATH_CLCTL);
+    perm_fault = tt_policy_loaded() ? secpol_get_permission(tt_policy_handle(), "cluster", "fault", 0) : NULL;
+    self_type = secpol_type_id();
     tt_drop_uid("cluster");
     const char *evdir = getenv("TT_EVDIR") ? getenv("TT_EVDIR") : "/tmp/tt/ev";
     char path[256]; snprintf(path, sizeof path, "%s/cluster-bench.csv", evdir);
     evfd = open(path, O_WRONLY | O_APPEND | O_CREAT, 0644);
     pthread_barrier_init(&freeze_bar, NULL, 2);
+    {   /* test hook for the restart-cap check (tests/target/core_items.sh): a renderer that is wrong on EVERY start */
+        const char *ff = getenv("TT_FAULT_FILE") ? getenv("TT_FAULT_FILE") : "/tmp/tt/fault-on-start";
+        FILE *f = fopen(ff, "r"); char w[16] = "";
+        if (f) { if (!fgets(w, sizeof w, f)) w[0] = 0; fclose(f); }
+        if (!strncmp(w, "blank", 5)) { atomic_store(&f_blank, 1); printf("cluster: fault-on-start blank (test hook %s)\n", ff); fflush(stdout); }
+    }
 
     CK(screen_create_context(&ctx, SCREEN_APPLICATION_CONTEXT), "create_context");
     CK(screen_create_window(&win, ctx), "create_window");
@@ -259,5 +275,9 @@ int main(void)
     snprintf(g_wid, sizeof g_wid, "%s", wid);
     pthread_t tr; pthread_create(&tr, NULL, register_thread, NULL);
     dispatch_context_t *dctp = dispatch_context_alloc(dpp);
-    for (;;) { if ((dctp = dispatch_block(dctp))) dispatch_handler(dctp); }
+    for (;;) {
+        dispatch_context_t *c = dispatch_block(dctp);
+        if (c) { dctp = c; dispatch_handler(dctp); }
+        else if (errno != EINTR) { perror("cluster: dispatch_block"); usleep(100000); }   /* never a busy loop */
+    }
 }

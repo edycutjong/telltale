@@ -37,6 +37,14 @@ done
 out=$(./ttctl period 20 2>&1); echo "$out" | grep -Eq 'ttctl period: (Operation not permitted|Permission denied)' && ok "monitor control denied for untyped root" || bad "monitor control NOT denied for untyped root: $out"
 out=$(env TT_TYPE=injector_t ./ttctl period 20 2>&1); case "$out" in *ok*) ok "injector_t controls the monitor";; *) bad "injector_t control failed: $out";; esac
 
+# 2b. only injector_t may use the renderer's fault test hook (cluster:fault checked in cluster); `heal` is harmless
+FDENY='DCMD_CL_FAULT: (Operation not permitted|Permission denied)|/dev/cluster-ctl: (Permission denied|Operation not permitted)'
+for t in renderer_t feeder_t monitor_t; do
+  out=$(env TT_TYPE=$t ./ttinject heal 2>&1); echo "$out" | grep -Eq "$FDENY" && ok "fault hook denied for $t" || bad "fault hook NOT denied for $t: $out"
+done
+out=$(./ttinject heal 2>&1); echo "$out" | grep -Eq "$FDENY" && ok "fault hook denied for untyped root" || bad "fault hook NOT denied for untyped root: $out"
+out=$(env TT_TYPE=injector_t ./ttinject heal 2>&1); case "$out" in *t_command_ns=*) ok "injector_t may use the fault hook";; *) bad "injector_t fault hook failed: $out";; esac
+
 # 3. hog_t is capped at priority 40
 out=$(env TT_TYPE=hog_t ./hog 10 50 2>&1); echo "$out" | grep -q 'setschedparam(50) as hog_t' && ok "hog_t refused prio 50" || bad "hog_t not refused at prio 50: $(echo "$out" | tail -1)"
 out=$(env TT_TYPE=hog_t ./hog 10 40 2>&1); case "$out" in *t_hog_start*) ok "hog_t runs at prio 40";; *) bad "hog_t could not run at 40: $out";; esac

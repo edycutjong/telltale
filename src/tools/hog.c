@@ -29,6 +29,7 @@ int main(int argc, char **argv)
     uint64_t ms = strtoull(argv[pos[0]], NULL, 0);
     int prio = np > 1 ? atoi(argv[pos[1]]) : 40;
     int cpu = np > 2 ? atoi(argv[pos[2]]) : -1;
+    if (cpu >= 32) { fprintf(stderr, "hog: cpu %d out of range (0..31)\n", cpu); return 2; }
     if (cpu >= 0) {
         unsigned mask = 1u << cpu;
         if (ThreadCtl(_NTO_TCTL_RUNMASK, (void *)(uintptr_t)mask) == -1) perror("hog: runmask");

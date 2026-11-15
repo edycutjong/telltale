@@ -29,9 +29,11 @@ $G sudo "cd /tmp/tt; cp telltale.conf telltale-run.conf; printf '%b\\n' '${TT_CO
 [ "$CLS" = starve ] && TT_CPU=${TT_CPU:-3}
 $G sudo "sh /tmp/tt/tt_up.sh $TRACE ${TT_HOLD:-8} ${TT_POLICY:-0} ${TT_CPU:--} ${TT_SCOPE:-all} ${TT_SUP:-script}" > "$EV/up.txt" 2>&1
 HP=${TT_HOG_PRIO:-40}
-[ "${TT_DISARM:-0}" = 1 ] && $G sudo "cd /tmp/tt; ./ttctl disarm" > "$EV/disarm.txt" 2>&1
+# with the policy loaded the control and fault tools run in their own type (injector_t: telltale:control, cluster:fault)
+IJ=; [ "${TT_POLICY:-0}" = 1 ] && IJ="env TT_TYPE=injector_t"
+[ "${TT_DISARM:-0}" = 1 ] && $G sudo "cd /tmp/tt; $IJ ./ttctl disarm" > "$EV/disarm.txt" 2>&1
 if [ "${TT_DEBUG:-0}" = 1 ]; then
-  $G sudo "cd /tmp/tt; rm -f log/*.ppm log/shot-*.txt; ./ttctl debug on
+  $G sudo "cd /tmp/tt; rm -f log/*.ppm log/shot-*.txt; $IJ ./ttctl debug on
     ( (n=0; while ! grep -q 'mode=engineering' log/telltale.log && [ \$n -lt 600 ]; do sleep 0.05; n=\$((n+1)); done; sleep 0.3; ./ttshot log/banner.ppm) > log/shot-banner.txt 2>&1 < /dev/null & )
     ( (n=0; while ! grep -q 'CARD shown' log/telltale.log && [ \$n -lt 900 ]; do sleep 0.05; n=\$((n+1)); done; sleep 0.5; ./ttshot log/card.ppm) > log/shot-card.txt 2>&1 < /dev/null & )
     ( (n=0; while ! grep -q 'CARD hidden' log/telltale.log && [ \$n -lt 1200 ]; do sleep 0.05; n=\$((n+1)); done; sleep 0.3; ./ttshot log/card-hidden.ppm) > log/shot-card-hidden.txt 2>&1 < /dev/null & )" > "$EV/debug.txt" 2>&1
@@ -43,10 +45,10 @@ if [ "$CLS" = starve ]; then
     for i in 1 2 3; do echo \"--- snapshot \$i\"; pidin -F '%a %b %N %p %J %B' | grep -E 'screen|telltale|cluster|hog' | grep -v grep; sleep 0.4; done" > "$EV/g5-pidin.txt" 2>&1
   $G get /tmp/tt/log/hog.log "$EV/" 2>/dev/null || true
 elif [ "$CLS" != none ]; then
-  $G sudo "cd /tmp/tt; ./ttinject ${TT_INJECT:-$CLS} --at $AT --run $(date +%s)" > "$EV/inject.txt" 2>&1
+  $G sudo "cd /tmp/tt; $IJ ./ttinject ${TT_INJECT:-$CLS} --at $AT --run $(date +%s)" > "$EV/inject.txt" 2>&1
 fi
 if [ -n "${TT_HEAL_AT:-}" ]; then
-  $G sudo "cd /tmp/tt; ./ttinject heal --at $TT_HEAL_AT" > "$EV/heal.txt" 2>&1
+  $G sudo "cd /tmp/tt; $IJ ./ttinject heal --at $TT_HEAL_AT" > "$EV/heal.txt" 2>&1
 fi
 sleep "$SETTLE"
 $G sudo 'cd /tmp/tt; ./ttctl status; echo; cat /dev/telltale-events; echo; cat /dev/vehicle' > "$EV/status.txt" 2>&1
