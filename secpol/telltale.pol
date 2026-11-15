@@ -1,6 +1,7 @@
 # Telltale security policy (QNX 8.0 secpol). Compiled with secpolcompile, loaded with secpolpush.
-# Least privilege for the monitor: it may read the vehicle state, register/serve its own paths and signal
-# (kill) the renderer; it may not write /dev/vehicle (only feeder_t holds vehicle:write), and nothing but
+# Least privilege for the monitor: it may read the vehicle state, register/serve its own paths and hold the
+# signal ability (secpol cannot scope it to the renderer's type; the monitor targets only the registered renderer
+# pid in code); it may not write /dev/vehicle (only feeder_t holds vehicle:write), and nothing but
 # renderer_t may register as the monitored renderer. Reading Screen buffers is a Screen permission (the
 # window owner's grant, or root + display-manager context), not a secpol rule.
 class vehicle { read write };

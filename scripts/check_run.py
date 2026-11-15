@@ -31,6 +31,8 @@ EXPECT = {
 
 
 WARNINGS: list[str] = []
+MISS_NS = 2_000_000_000     # spec: missed = no detection within 2 s
+SETTLE_NS = 2_000_000_000   # a post-hand-back settle stall must start within 2 s of the hand-back
 
 
 def read_incidents(run: Path) -> list[dict[str, str]]:
@@ -66,14 +68,15 @@ def check(run: Path, cls: str) -> list[tuple[bool, str]]:
         out.append((False, "0 incidents (want 1)"))
         return out
     r = inc[0]
-    # extra incidents: a TICK_STALL that resolved by itself (verified-true frame again, no kill) is a spurious stall on
-    # QEMU (TCG) -- reported as WARN and counted by the false-positive bench (B3), not a test failure here; anything
-    # else (a kill, another verdict, never resolved) is flapping and fails
+    # extra incidents: at most one TICK_STALL within 2 s of the hand-back that resolved by itself (no kill) is the
+    # post-recovery Screen settle on QEMU (TCG) -- WARN, counted by the bench (B3); anything else is flapping and fails
     t_true0 = int(r["t_true_ns"])
     extra = inc[1:]
-    settle = [x for x in extra if x["verdict"] == "TICK_STALL" and int(x["t_kill_ns"]) == 0 and int(x["t_true_ns"]) > 0]
-    out.append((len(extra) == len(settle), f"{len(inc)} incident(s): 1 fault + {len(settle)} self-resolved spurious stall(s)"
-                f" + {len(extra) - len(settle)} other (want 0 other: no flapping)"))
+    settle = [x for x in extra if x["verdict"] == "TICK_STALL" and int(x["t_kill_ns"]) == 0 and int(x["t_true_ns"]) > 0
+              and t_true0 > 0 and 0 <= int(x["t_detect_ns"]) - t_true0 < SETTLE_NS]
+    out.append((len(extra) == len(settle) and len(settle) <= 1,
+                f"{len(inc)} incident(s): 1 fault + {len(settle)} self-resolved stall(s) within 2 s of hand-back"
+                f" + {len(extra) - len(settle)} other (want <= 1 settle stall, 0 other: no flapping)"))
     for x in settle:
         WARNINGS.append(f"spurious stall (QEMU TCG, counted in B3) {x['id']} {float(x['caught_ms']):.0f} ms after the last verified frame, "
                         f"{(int(x['t_detect_ns']) - t_true0) / 1e6:.0f} ms after hand-back, no kill")
@@ -83,6 +86,8 @@ def check(run: Path, cls: str) -> list[tuple[bool, str]]:
     t_fault = fault_time_ns(run)
     t_detect = int(r["t_detect_ns"])
     out.append((t_fault is not None and t_detect > t_fault, f"detected after the fault command (t_detect {t_detect} > {t_fault})"))
+    if t_fault is not None:   # the spec's "missed" bound: no detection within 2 s of the fault
+        out.append((t_detect - t_fault < MISS_NS, f"detected {(t_detect - t_fault) / 1e6:.0f} ms after the fault command (< 2000 ms)"))
     out.append((int(r["t_safe_visible_ns"]) > t_detect, "safe layer read back visible after detection"))
     killed = int(r["t_kill_ns"]) > 0
     if kill is True:
@@ -96,6 +101,8 @@ def check(run: Path, cls: str) -> list[tuple[bool, str]]:
         t_heal = int(m.group(1)) if m else None
         out.append((t_heal is not None and t_detect < t_heal < int(r["t_true_ns"]),
                     f"heal sent during the hold, before the hand-back (t_heal {t_heal})"))
+    if cls == "crash":
+        out.append((int(r["new_pid"]) > 0 and r["new_pid"] != r["renderer_pid"], f"a new renderer registered (pid {r['renderer_pid']} -> {r['new_pid']})"))
     if cls == "misdraw":
         out.append((r["shown"] != r["truth"], f"shown {r['shown']} != truth {r['truth']}"))
     if cls == "lampdrop":
