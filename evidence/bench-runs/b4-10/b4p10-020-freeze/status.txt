@@ -1,0 +1,7 @@
+armed=1 state=NORMAL period_ms=10 W_ms=100 tick_stall_ms=151 checks=1699 faults=1 restarts=1 late=0 screen_stalls=0 renderer_pid=303980572
+last=TT-FRZ-0001 verdict=TICK_STALL cause=hung shown=3 truth=3 caught_ms=9.2 (since last verified frame) recovered=yes
+
+id,verdict,cause,shown,truth,t_last_verified_ns,t_detect_ns,caught_ms,t_safe_visible_ns,t_kill_ns,t_register_ns,t_true_ns,restarts,exposure_ms,renderer_pid,new_pid,lamps_shown,lamps_truth
+TT-FRZ-0001,TICK_STALL,hung,3,3,11572579472525,11572588630768,9.2,11572613189871,11572628331498,11572814613152,11572829851867,1,0.0,303820828,303980572,0x00,0x00
+
+seq=301 t_ns=11581249529577 trace_s=12.000 speed_kmh=57.67 gear=D lamps=0x00

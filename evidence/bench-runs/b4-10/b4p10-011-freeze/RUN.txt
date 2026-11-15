@@ -1,0 +1,1 @@
+run b4p10-011 class=freeze inject=freeze heal_at=- conf_extra=period_ms=10 at=3.2 accel=QEMU(TCG) policy=0 debug=0 cpu=any scope=all sup=script
