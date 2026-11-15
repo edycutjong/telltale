@@ -130,5 +130,22 @@ class StaleRule(unittest.TestCase):
         self.assertTrue(br.stale_observable(tr, 2.0))
 
 
+
+class CleanFile(unittest.TestCase):
+    def test_warmup_rows_are_counted_not_hidden(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            raw = Path(tmp) / "checks.csv"
+            hdr = "t_cap_start_ns,t_cap_end_ns,check_us,state,armed,verdict,decoded,truth_min,truth_max,tick,marker"
+            rows = ["1,2,3,WAIT,1,TRUTH_LOST,0,-1,-1,0,0"] * 3 + ["5,6,7,NORMAL,1,PASS,45,44,46,1,0"] * 4 + ["9,9"]
+            raw.write_text("\n".join([hdr] + rows) + "\n")
+            out = Path(tmp) / "clean.csv"
+            self.assertEqual(br.live_checks(raw, out), (3, 4))
+            t = bench.read_table(out.read_text(), bench.CHECK_COLUMNS)
+            self.assertEqual(t.meta["accel"], "tcg")
+            res = bench.analyze_clean(t.rows, "tcg")
+            self.assertEqual((res["checks"], res["false_positives"]), (4, 0))
+            self.assertTrue((Path(tmp) / "checks.csv.gz").exists())
+
+
 if __name__ == "__main__":
     unittest.main()

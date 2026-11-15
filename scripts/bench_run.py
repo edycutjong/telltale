@@ -395,6 +395,25 @@ def cmd_ablation(a) -> None:
         print(f"{tag} {cls} stop={t_stop} before={before} wrong_s={row['seconds_wrong']} acted={row['monitor_acted']} load1={l1}", flush=True)
 
 
+def live_checks(raw: Path, out: Path, accel: str = "tcg") -> tuple[int, int]:
+    """Write the B3 file: every check from the first NORMAL (armed, true frame seen) row on; rows before it are the boot
+    WAIT warm-up (no renderer window yet) and are counted in a header comment, never silently dropped (the raw file is kept gzipped)."""
+    import gzip
+    lines = raw.read_text().splitlines()
+    header, body = lines[0], [l for l in lines[1:] if l.count(",") >= 10]    # a truncated last row is not a check
+    cols = header.split(",")
+    si = cols.index("state")
+    first = next((i for i, l in enumerate(body) if l.split(",")[si] != "WAIT"), len(body))
+    with open(out, "w") as f:
+        f.write(f"# accel={accel}\n# B3 clean replay, monitor armed, no faults. warmup_rows_excluded={first} (state WAIT before the monitor armed); "
+                f"raw per-check log: {raw.parent.name}/checks.csv.gz\n")
+        f.write(header + "\n" + "\n".join(body[first:]) + "\n")
+    with gzip.open(str(raw) + ".gz", "wt") as g:
+        g.write("\n".join(lines) + "\n")
+    raw.unlink()
+    return first, len(body) - first
+
+
 def cmd_clean(a) -> None:
     trace = read_trace()
     sha = git_sha()
@@ -405,7 +424,12 @@ def cmd_clean(a) -> None:
     env = {"TT_TRACE": str(sl), "TT_HOLD": "3", "TT_EVROOT": str(evroot), "TT_RUN_ID": a.tag, "TT_CONF_EXTRA": a.conf_extra}
     l0 = load1()
     sh(["scripts/scenario.sh", "none", "0", str(a.seconds + 15)], env=env, check=False)
-    print(f"clean run {a.tag}: sha {sha} load1 start {l0} end {load1()}")
+    raw = evroot / f"{a.tag}-none" / "checks.csv"
+    if raw.exists():
+        warm, live = live_checks(raw, Path(a.out))
+        print(f"clean run {a.tag}: sha {sha} load1 start {l0} end {load1()} warmup {warm} live checks {live} -> {a.out}")
+    else:
+        print("clean run: no checks.csv collected", file=sys.stderr)
 
 
 def main() -> None:
@@ -434,6 +458,7 @@ def main() -> None:
     p = sub.add_parser("clean")
     p.add_argument("--seconds", type=int, default=1800)
     p.add_argument("--tag", default="b3")
+    p.add_argument("--out", default="evidence/bench-clean.csv")
     p.add_argument("--evroot", default="evidence/bench-runs/b3")
     p.add_argument("--conf-extra", default="")
     p.set_defaults(f=cmd_clean)
