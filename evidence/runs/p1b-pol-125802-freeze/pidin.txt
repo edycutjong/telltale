@@ -1,0 +1,9 @@
+ 1138718   1 vehicled            10f RECEIVE        1                           
+ 1155103   1 telltale            60f REPLY          725021                      
+ 1155103   2 telltale            10f RECEIVE        1                           
+ 1155103   3 telltale            61f NANOSLEEP                                  
+ 1196065   1 vehfeed             45f NANOSLEEP                                  
+ 1339408   1 cluster             15r RECEIVE        1                           
+ 1339408   2 cluster             10r RECEIVE        2                           
+ 1339408   3 cluster             20r REPLY          725021                      
+ 1339408   4 cluster             15r DEAD                                       

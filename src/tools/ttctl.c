@@ -15,6 +15,7 @@
 int main(int argc, char **argv)
 {
     const char *cmd = argc > 1 ? argv[1] : "status";
+    if (strcmp(cmd, "status")) tt_enter("ttctl", 0, 0);   /* control commands run in $TT_TYPE (injector_t) */
     int fd = open(PATH_TELLTALE, O_RDWR);
     if (fd < 0) { perror(PATH_TELLTALE); return 2; }
     if (!strcmp(cmd, "status")) {

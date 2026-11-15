@@ -36,6 +36,6 @@ allow injector_t monitor_t:telltale control;
 
 # abilities: serve a path, create public channels, and the monitor's renderer-facing rights
 allow vehicle_t  self:ability { pathspace public_channel };
-allow renderer_t self:ability { pathspace public_channel };
+allow renderer_t self:ability { pathspace public_channel setuid:1000 setgid:1000 };
 allow monitor_t  self:ability { pathspace public_channel xprocess_query xprocess_debug signal };
 allow hog_t      self:ability { priority:1-40 };

@@ -1,0 +1,10 @@
+policy id:9184d8fa (immutable)
+ 1138718   1 vehicled            60f RECEIVE        1                           
+ 1155103   1 telltale            60f RECEIVE        2                           
+ 1155103   2 telltale            15f RECEIVE        1                           
+ 1155103   3 telltale            61f NANOSLEEP                                  
+ 1179682   1 cluster             15r RECEIVE        1                           
+ 1179682   2 cluster             10r RECEIVE        2                           
+ 1179682   3 cluster             20r REPLY          725021                      
+ 1179682   4 cluster             15r DEAD                                       
+ 1196065   1 vehfeed             45f NANOSLEEP                                  
