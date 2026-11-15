@@ -6,6 +6,7 @@
 #include "../../src/common/glyphs.h"
 #include "../../src/common/palette.h"
 #include "../../src/common/truth.h"
+#include "../../src/common/layout.h"
 #include "../../src/common/disp.h"
 
 static int fails, runs;
@@ -82,6 +83,39 @@ int main(void)
     truth_push(&t, &skip); T(t.gaps == 1, "seq gap counted");
     T(truth_latest(&t)->seq == 8, "latest");
 
+    /* lamps: decode the lamp row by lit-colour pixel fraction (renderer art = solid 64x64 squares) */
+    {
+        static uint32_t row[L_LAMP_H * L_LAMP_W];
+        for (unsigned bits = 0; bits < 64; bits += 5) {
+            tt_fill(row, L_LAMP_W, L_LAMP_W, L_LAMP_H, PAL_GLASS);
+            for (int i = 0; i < L_LAMP_N; i++)
+                tt_fill(row + L_LAMP[i].x, L_LAMP_W, L_LAMP_S, L_LAMP_S, (bits >> i) & 1 ? L_LAMP[i].rgb : PAL_UNLIT);
+            T(tt_lamps_decode(row, L_LAMP_W, 500) == bits, "lamp row round trip");
+        }
+        tt_fill(row, L_LAMP_W, L_LAMP_W, L_LAMP_H, PAL_GLASS);
+        T(tt_lamps_decode(row, L_LAMP_W, 500) == 0, "glass row = no lamp");
+        tt_fill(row + L_LAMP[2].x, L_LAMP_W, L_LAMP_S, L_LAMP_S / 4, L_LAMP[2].rgb);   /* a quarter-lit lamp is unlit */
+        T(tt_lamp_permille(row + L_LAMP[2].x, L_LAMP_W, L_LAMP_S, L_LAMP_S, L_LAMP[2].rgb, 24) == 250, "quarter = 250 permille");
+        T(tt_lamps_decode(row, L_LAMP_W, 500) == 0, "below threshold = unlit");
+        tt_fill(row + L_LAMP[2].x, L_LAMP_W, L_LAMP_S, L_LAMP_S, L_LAMP[2].rgb + 0x101010u);  /* small colour drift */
+        T(tt_lamps_decode(row, L_LAMP_W, 500) == (1u << 2), "colour within tolerance = lit");
+        tt_fill(row + L_LAMP[2].x, L_LAMP_W, L_LAMP_S, L_LAMP_S, L_LAMP[3].rgb);  /* amber where red belongs */
+        T(tt_lamps_decode(row, L_LAMP_W, 500) == 0, "wrong colour = unlit");
+    }
+    /* truth_match_lamps: same window rule as the speed */
+    {
+        struct truth tl; truth_init(&tl);
+        unsigned lb[4] = {0x00, 0x01, 0x05, 0x04};
+        for (int i = 0; i < 4; i++) {
+            struct veh_state s = {.seq = (uint64_t)i + 1, .t_ns = (uint64_t)(i + 1) * 100000000ull, .lamps = (uint8_t)lb[i]};
+            truth_push(&tl, &s);
+        }
+        T(truth_match_lamps(&tl, 0x04, 0x3F, 350000000ull, 450000000ull), "latest lamps match");
+        T(truth_match_lamps(&tl, 0x05, 0x3F, 350000000ull, 450000000ull), "lamps current at t_lo match");
+        T(!truth_match_lamps(&tl, 0x01, 0x3F, 350000000ull, 450000000ull), "older lamps outside the window fail");
+        T(!truth_match_lamps(&tl, 0x00, 0x3F, 450000000ull, 500000000ull), "missing brake lamp fails");
+        T(truth_match_lamps(&tl, 0x00, 0x3B, 450000000ull, 500000000ull), "unchecked bit ignored by the mask");
+    }
     printf("test_decode: %d/%d passed\n", runs - fails, runs);
     return fails != 0;
 }

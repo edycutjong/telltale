@@ -1,0 +1,9 @@
+10047518   1 vehicled            60f RECEIVE        1                           
+10063903   1 telltale            60f RECEIVE        2                           
+10063903   2 telltale            10f RECEIVE        1                           
+10063903   3 telltale            61f NANOSLEEP                                  
+10088482   1 cluster             15r RECEIVE        1                           
+10088482   2 cluster             10r RECEIVE        2                           
+10088482   3 cluster             20r REPLY          5480477                     
+10088482   4 cluster             15r DEAD                                       
+10104865   1 vehfeed             45f NANOSLEEP                                  

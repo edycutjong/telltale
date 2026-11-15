@@ -25,6 +25,12 @@
 #define L_LAMP_Y 40
 #define L_LAMP_W 1280
 #define L_LAMP_H 64
+/* the 6 lamps in the lamp row: x offset (64x64 each, y = L_LAMP_Y) and lit colour, bit i of veh_state.lamps
+ * (turn L, turn R, brake, ABS, seat belt, high beam); renderer, safe layer and decoder share this table */
+#define L_LAMP_N 6
+#define L_LAMP_S 64
+static const struct { int x; unsigned rgb; } L_LAMP[L_LAMP_N] = {
+    {80, 0x2FB34Au}, {1136, 0x2FB34Au}, {400, 0xE5322Du}, {520, 0xF2A900u}, {696, 0xE5322Du}, {816, 0x2F6FE0u}};
 #define L_TICK_X 1264   /* liveness square, 4-bit frame counter in blue */
 #define L_TICK_Y 704
 #define L_TICK_S 8

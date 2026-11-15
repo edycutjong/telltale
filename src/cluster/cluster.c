@@ -7,7 +7,8 @@
  *     BLANK    posts a cleared frame (arg 1: hides the window instead)
  *     STALE    the data thread stops applying samples; drawing (and the tick) continue
  *     MISDRAW  intends v, draws v with its digits reversed (48 -> 84); the tick continues
- *     CRASH    SIGSEGV in the draw thread       HEAL  clears BLANK / STALE / MISDRAW
+ *     CRASH    SIGSEGV in the draw thread       HEAL  clears BLANK / STALE / MISDRAW / LAMPDROP
+ *     LAMPDROP the brake lamp (bit 2) is never drawn although the truth has it on; the tick continues
  * Registers {pid, draw tid, window id} with the monitor at start (DCMD_TT_REGISTER).
  * Effective fault times go to $TT_EVDIR/cluster-bench.csv (O_APPEND) before the fault takes effect.
  * SPDX-License-Identifier: Apache-2.0 */
@@ -39,7 +40,7 @@ static pthread_mutex_t mtx_state = PTHREAD_MUTEX_INITIALIZER;  /* A: vehicle sta
 static pthread_mutex_t mtx_frame = PTHREAD_MUTEX_INITIALIZER;  /* B: frame buffers */
 static pthread_barrier_t freeze_bar;
 static struct veh_state cur;
-static atomic_int f_freeze, f_blank, f_stale, f_misdraw, f_crash, blank_arg;
+static atomic_int f_freeze, f_blank, f_stale, f_misdraw, f_crash, f_lampdrop, blank_arg;
 static atomic_ullong run_id;
 static atomic_int draw_tid;
 static screen_context_t ctx;
@@ -108,10 +109,10 @@ static void draw_frame(uint32_t *px, int st, const struct veh_state *s, int blan
     for (int g = 0; g < 4; g++)
         tt_fill(px + (long)L_GEAR_Y * st + L_GEAR_X + g * L_GEAR_W + 4, st, L_GEAR_W - 8, L_GEAR_H,
                 g == s->gear ? PAL_LIT : PAL_UNLIT);
-    static const struct { int x; uint32_t c; } lamp[6] = {{80, PAL_GREEN}, {1136, PAL_GREEN}, {400, PAL_RED},
-                                                         {520, PAL_AMBER}, {696, PAL_RED}, {816, PAL_BLUE}};
-    for (int i = 0; i < 6; i++)
-        tt_fill(px + (long)L_LAMP_Y * st + lamp[i].x, st, 64, 64, (s->lamps >> i) & 1 ? lamp[i].c : PAL_UNLIT);
+    unsigned lamps = s->lamps;
+    if (atomic_load(&f_lampdrop)) lamps &= ~(1u << 2);   /* LAMPDROP: the brake lamp is not drawn; tick alive */
+    for (int i = 0; i < L_LAMP_N; i++)
+        tt_fill(px + (long)L_LAMP_Y * st + L_LAMP[i].x, st, L_LAMP_S, L_LAMP_S, (lamps >> i) & 1 ? L_LAMP[i].rgb : PAL_UNLIT);
 }
 
 static void *draw_thread(void *arg)
@@ -183,7 +184,8 @@ static int io_devctl(resmgr_context_t *ctp, io_devctl_t *msg, iofunc_ocb_t *ocb)
     case CL_STALE:   atomic_store(&f_stale, 1); break;
     case CL_MISDRAW: atomic_store(&f_misdraw, 1); break;
     case CL_CRASH:   atomic_store(&f_crash, 1); break;
-    case CL_HEAL:    atomic_store(&f_blank, 0); atomic_store(&f_stale, 0); atomic_store(&f_misdraw, 0); break;
+    case CL_LAMPDROP: bench_log("LAMPDROP", tt_now_ns(), -1, -1); atomic_store(&f_lampdrop, 1); break;
+    case CL_HEAL:    atomic_store(&f_blank, 0); atomic_store(&f_stale, 0); atomic_store(&f_misdraw, 0); atomic_store(&f_lampdrop, 0); break;
     default: return EINVAL;
     }
     memset(&msg->o, 0, sizeof msg->o);

@@ -8,6 +8,7 @@
 # The respawn loop stands in for slm until slm is wired in: a killed renderer is "restarted by script".
 cd /tmp/tt || exit 1
 TRACE=${1:-trace-hero.csv}; HOLD=${2:-5}; POL=${3:-0}; CPU=${4:-}; SCOPE=${5:-all}
+[ "$CPU" = - ] && CPU=
 PIN=; [ -n "$CPU" ] && PIN="on -C $CPU"
 RPIN=$PIN; [ "$SCOPE" = renderer ] && PIN=
 mkdir -p ev log
@@ -28,6 +29,7 @@ waitfor /dev/telltale 5 || { echo "telltale did not come up"; cat log/telltale.l
 chmod 1777 /tmp/tt/ev /tmp/tt/log
 ( while [ ! -f /tmp/tt/stop ]; do $RPIN $R ./cluster >> log/cluster.log 2>&1; echo "respawn $(date +%T)" >> log/super.log; sleep 0.1; done ) > /dev/null 2>&1 < /dev/null &
 sleep 2
-$PIN $F ./vehfeed "$TRACE" --hold "$HOLD" > log/vehfeed.log 2>&1 < /dev/null &
+SC=; [ "$TRACE" = trace-hero.csv ] && [ -f scenario-hero.csv ] && SC="--scenario scenario-hero.csv"
+$PIN $F ./vehfeed "$TRACE" --hold "$HOLD" $SC > log/vehfeed.log 2>&1 < /dev/null &
 sleep 1
 pidin -F '%a %b %N %p %J %B %i' | grep -E 'vehicled|vehfeed|telltale|cluster' | grep -v grep

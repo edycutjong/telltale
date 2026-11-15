@@ -42,7 +42,7 @@ struct tt_register {           /* DCMD_TT_REGISTER: the renderer announces itsel
 #define DCMD_TT_REARM      __DION(_DCMD_MISC, 0x65)  /* reset the restart cap / leave GIVEUP */
 #define DCMD_TT_DEBUG      __DIOT(_DCMD_MISC, 0x66, int32_t)
 
-enum cl_fault { CL_NONE = 0, CL_FREEZE = 1, CL_BLANK = 2, CL_STALE = 3, CL_MISDRAW = 4, CL_CRASH = 5, CL_HEAL = 6 };
+enum cl_fault { CL_NONE = 0, CL_FREEZE = 1, CL_BLANK = 2, CL_STALE = 3, CL_MISDRAW = 4, CL_CRASH = 5, CL_HEAL = 6, CL_LAMPDROP = 7 };
 struct cl_fault_cmd { int32_t cls; int32_t arg; uint64_t run_id; };
 #define DCMD_CL_FAULT      __DIOT(_DCMD_MISC, 0x71, struct cl_fault_cmd)
 

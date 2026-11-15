@@ -38,3 +38,16 @@ int truth_match_speed(const struct truth *t, int shown, uint64_t t_lo, uint64_t 
     if (mx) *mx = hi == -(1 << 30) ? -1 : hi;
     return hit;
 }
+
+int truth_match_lamps(const struct truth *t, unsigned shown, unsigned mask, uint64_t t_lo, uint64_t t_hi)
+{
+    int have_before = 0;
+    for (unsigned k = 0; k < t->count; k++) {                    /* newest first */
+        const struct veh_state *s = &t->s[(t->head + TRUTH_N - 1 - k) % TRUTH_N];
+        if (s->t_ns > t_hi) continue;
+        if (s->t_ns < t_lo) { if (have_before) break; have_before = 1; }
+        if (((unsigned)s->lamps & mask) == (shown & mask)) return 1;
+        if (have_before) break;
+    }
+    return 0;
+}

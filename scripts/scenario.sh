@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # One recorded fault run on the QNX target (QEMU): start the stack on the hero drive, fire one fault at a
 # trace time, let detection + recovery play out, collect the raw logs into evidence/runs/<run-id>-<class>/.
-#   scripts/scenario.sh <stale|freeze|blank|misdraw|crash|starve|none> [at_trace_s] [settle_s]
+#   scripts/scenario.sh <stale|freeze|blank|misdraw|crash|lampdrop|starve|none> [at_trace_s] [settle_s]
 # Env: TT_POLICY=1 runs every process in its secpol type; TT_HOLD (default 8) steady seconds before the drive;
 #      TT_CPU=N pins the stack to CPU N (Screen must already be pinned there: scripts/guest_screen.sh '' N);
 #      TT_SCOPE=renderer pins only the cluster (+ the hog) to TT_CPU: "STARVE (renderer CPU only)";
@@ -14,7 +14,7 @@ RID="${TT_RUN_ID:-$(date -u +%Y%m%dT%H%M%SZ)}"
 EV="evidence/runs/$RID-$CLS"; mkdir -p "$EV"
 G=scripts/guest.sh
 [ "$CLS" = starve ] && TT_CPU=${TT_CPU:-3}
-$G sudo "sh /tmp/tt/tt_up.sh trace-hero.csv ${TT_HOLD:-8} ${TT_POLICY:-0} ${TT_CPU:-} ${TT_SCOPE:-all}" > "$EV/up.txt" 2>&1
+$G sudo "sh /tmp/tt/tt_up.sh trace-hero.csv ${TT_HOLD:-8} ${TT_POLICY:-0} ${TT_CPU:--} ${TT_SCOPE:-all}" > "$EV/up.txt" 2>&1
 HP=${TT_HOG_PRIO:-40}
 if [ "$CLS" = starve ]; then
   HT=; [ "${TT_POLICY:-0}" = 1 ] && HT="env TT_TYPE=hog_t"

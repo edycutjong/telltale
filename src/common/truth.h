@@ -18,4 +18,6 @@ int truth_push(struct truth *t, const struct veh_state *s);
 const struct veh_state *truth_latest(const struct truth *t);
 /* 1 if disp_kmh(speed) == shown for some sample true during [t_lo, t_hi]; mn, mx = disp range seen */
 int truth_match_speed(const struct truth *t, int shown, uint64_t t_lo, uint64_t t_hi, int *mn, int *mx);
+/* 1 if (lamps & mask) == shown for some sample true during [t_lo, t_hi] (same window rule as the speed) */
+int truth_match_lamps(const struct truth *t, unsigned shown, unsigned mask, uint64_t t_lo, uint64_t t_hi);
 #endif

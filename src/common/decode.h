@@ -26,6 +26,11 @@ int tt_tick_value(const uint32_t *base, int stride_px);
 uint32_t tt_marker_px(int x, int y);
 int tt_marker_ok(const uint32_t *base, int stride_px);
 
+/* lamps: permille of the w x h pixels within +-tol per channel of rgb */
+int tt_lamp_permille(const uint32_t *base, int stride_px, int w, int h, uint32_t rgb, int tol);
+/* decode the lamp row (base = pixel (0, L_LAMP_Y) of the layout): bit i set iff lamp i's permille >= thr */
+unsigned tt_lamps_decode(const uint32_t *row, int stride_px, int thr_permille);
+
 /* render helpers (renderer and safe layer share them, so both draw identical bits) */
 void tt_blit_glyph(uint32_t *base, int stride_px, int glyph, uint32_t fg, uint32_t bg);
 void tt_fill(uint32_t *base, int stride_px, int w, int h, uint32_t rgb);

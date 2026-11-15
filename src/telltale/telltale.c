@@ -42,7 +42,8 @@
 static struct {
     int period_ms, W_ms, tick_stall_ms, h_max, truth_lost_ms, arm_grace_ms, restart_timeout_ms;
     int max_restarts, restart_window_s, mismatch_n, unknown_kill_ms, screen_stall_ms, truth_ok_n;
-} cfg = {20, 100, 0, GLYPH_H_MAX_DEFAULT, 200, 5000, 3000, 3, 60, 3, 0, 0, 5};
+    int lamp_thr, lamp_mask;   /* lamp lit iff permille of lit-colour pixels >= lamp_thr; lamps checked = lamp_mask bits */
+} cfg = {20, 100, 0, GLYPH_H_MAX_DEFAULT, 200, 5000, 3000, 3, 60, 3, 0, 0, 5, 500, 0x3F};
 
 static void cfg_derive(void)
 {
@@ -61,7 +62,7 @@ static void cfg_load(const char *path)
         if (line[0] == '#' || sscanf(line, " %63[^= ]=%d", k, &v) != 2) continue;
 #define K(n) if (!strcmp(k, #n)) cfg.n = v;
         K(period_ms) K(W_ms) K(tick_stall_ms) K(h_max) K(truth_lost_ms) K(arm_grace_ms) K(restart_timeout_ms)
-        K(max_restarts) K(mismatch_n) K(unknown_kill_ms) K(screen_stall_ms) K(truth_ok_n)
+        K(max_restarts) K(mismatch_n) K(unknown_kill_ms) K(screen_stall_ms) K(truth_ok_n) K(lamp_thr) K(lamp_mask)
 #undef K
         printf("telltale: conf %s=%d\n", k, v);
     }
@@ -80,6 +81,7 @@ struct incident {
     enum verdict v;
     char cause[24];
     int shown, truth, restarts, old_pid, new_pid;
+    unsigned lamps_shown, lamps_truth;   /* lamp bits read back / latest truth at detection */
     uint64_t t_last_verified, t_detect, t_safe_visible, t_kill, t_register, t_true;
     double exposure_ms;
 };
@@ -101,12 +103,12 @@ static int evfd = -1;
 static void ev_append(const struct incident *in)
 {
     char row[400];
-    int n = snprintf(row, sizeof row, "%s,%s,%s,%d,%d,%llu,%llu,%.1f,%llu,%llu,%llu,%llu,%d,%.1f,%d,%d\n",
+    int n = snprintf(row, sizeof row, "%s,%s,%s,%d,%d,%llu,%llu,%.1f,%llu,%llu,%llu,%llu,%d,%.1f,%d,%d,0x%02x,0x%02x\n",
                      in->id, VN[in->v], in->cause, in->shown, in->truth, (unsigned long long)in->t_last_verified,
                      (unsigned long long)in->t_detect, (in->t_detect - in->t_last_verified) / 1e6,
                      (unsigned long long)in->t_safe_visible, (unsigned long long)in->t_kill,
                      (unsigned long long)in->t_register, (unsigned long long)in->t_true, in->restarts,
-                     in->exposure_ms, in->old_pid, in->new_pid);
+                     in->exposure_ms, in->old_pid, in->new_pid, in->lamps_shown, in->lamps_truth);
     pthread_mutex_lock(&g_mtx);
     if (g.ev_len + (size_t)n < sizeof g.ev) { memcpy(g.ev + g.ev_len, row, (size_t)n); g.ev_len += (size_t)n; }
     g.last = *in; g.have_last = 1;
@@ -114,7 +116,7 @@ static void ev_append(const struct incident *in)
     if (evfd >= 0 && write(evfd, row, (size_t)n) < 0) perror("telltale: incident log");
     printf("telltale: INCIDENT %s", row); fflush(stdout);
 }
-#define EV_HEADER "id,verdict,cause,shown,truth,t_last_verified_ns,t_detect_ns,caught_ms,t_safe_visible_ns,t_kill_ns,t_register_ns,t_true_ns,restarts,exposure_ms,renderer_pid,new_pid\n"
+#define EV_HEADER "id,verdict,cause,shown,truth,t_last_verified_ns,t_detect_ns,caught_ms,t_safe_visible_ns,t_kill_ns,t_register_ns,t_true_ns,restarts,exposure_ms,renderer_pid,new_pid,lamps_shown,lamps_truth\n"
 
 /* ---------- resource manager: /dev/telltale and /dev/telltale-events ---------- */
 static iofunc_attr_t attr_tt, attr_ev;
@@ -285,8 +287,6 @@ static screen_window_t find_window(const char *want, int pos[2])
     return found;
 }
 
-static const struct { int x; uint32_t c; } LAMP[6] = {{80, PAL_GREEN}, {1136, PAL_GREEN}, {400, PAL_RED},
-                                                     {520, PAL_AMBER}, {696, PAL_RED}, {816, PAL_BLUE}};
 
 /* the safe layer: true speed in the same cells with the same atlas, every lamp on in the truth, banner, marker.
  * One buffer: glass, banner and marker are painted once; each period redraws only the digit cells and lamps
@@ -327,8 +327,8 @@ static void safe_show_(const struct veh_state *s, int lost, int pos[2])
     tt_cells_for(v, c);
     for (int i = 0; i < L_DIGIT_N; i++)
         tt_blit_glyph(px + (long)L_DIGIT_Y * st + L_DIGIT_X0 + i * GLYPH_W, st, c[i], PAL_LIT, PAL_GLASS);
-    for (int i = 0; i < 6; i++)
-        tt_fill(px + (long)L_LAMP_Y * st + LAMP[i].x, st, 64, 64, s && !lost && ((s->lamps >> i) & 1) ? LAMP[i].c : PAL_GLASS);
+    for (int i = 0; i < L_LAMP_N; i++)
+        tt_fill(px + (long)L_LAMP_Y * st + L_LAMP[i].x, st, L_LAMP_S, L_LAMP_S, s && !lost && ((s->lamps >> i) & 1) ? L_LAMP[i].rgb : PAL_GLASS);
     int full[4] = {0, 0, L_SAFE_W, L_SAFE_H};
     int dirty[8] = {L_DIGIT_X0, L_DIGIT_Y, L_DIGIT_N * GLYPH_W, GLYPH_H, 0, L_LAMP_Y, L_LAMP_W, L_LAMP_H};
     if (!safe_visible) {            /* raise: always VISIBLE, hidden by sitting under the opaque cluster window */
@@ -386,7 +386,7 @@ static enum cause classify(const int *st, int n)
 }
 
 /* ---------- the check loop ---------- */
-struct shot { enum speed_kind kind; int value, tick, marker; };
+struct shot { enum speed_kind kind; int value, tick, marker; unsigned lamps; };
 
 static void decode_at(const uint32_t *base, int st, int dx, int dy, int tx, int ty, struct shot *o)
 {
@@ -415,7 +415,9 @@ static enum verdict judge(const struct shot *s, uint64_t t_lo, uint64_t t_hi, in
     if (stalled) return V_TICK_STALL;
     if (s->kind == SPD_BLANK) return V_BLANK;
     if (s->kind == SPD_UNREADABLE) return V_UNREADABLE;
-    return truth_match_speed(&T, s->value, t_lo, t_hi, tmin, tmax) ? V_PASS : V_MISMATCH;
+    if (!truth_match_speed(&T, s->value, t_lo, t_hi, tmin, tmax)) return V_MISMATCH;
+    /* a lamp that differs from every sample in the window is a lie too (VALUE_MISMATCH, region = lamps) */
+    return truth_match_lamps(&T, s->lamps, (unsigned)cfg.lamp_mask, t_lo, t_hi) ? V_PASS : V_MISMATCH;
 }
 
 int main(void)
@@ -433,7 +435,7 @@ int main(void)
     char path[256]; snprintf(path, sizeof path, "%s/incidents.csv", evdir);
     evfd = open(path, O_WRONLY | O_APPEND | O_CREAT, 0644);
     FILE *chk = getenv("TT_CHECKLOG") ? fopen(getenv("TT_CHECKLOG"), "w") : NULL;
-    if (chk) fprintf(chk, "t_cap_start_ns,t_cap_end_ns,check_us,state,armed,verdict,decoded,truth_min,truth_max,tick,marker,win_verdict,win_decoded,win_us,safe_us\n");
+    if (chk) fprintf(chk, "t_cap_start_ns,t_cap_end_ns,check_us,state,armed,verdict,decoded,truth_min,truth_max,tick,marker,win_verdict,win_decoded,win_us,safe_us,lamps,win_lamps\n");
     printf("telltale: period_ms=%d W_ms=%d tick_stall_ms=%d h_max=%d mismatch_n=%d unknown_kill_ms=%d restart_timeout_ms=%d policy=%s\n",
            cfg.period_ms, cfg.W_ms, cfg.tick_stall_ms, cfg.h_max, cfg.mismatch_n, cfg.unknown_kill_ms, cfg.restart_timeout_ms,
            perm_register ? "secpol" : "none (uid/pid checks)");
@@ -451,11 +453,13 @@ int main(void)
     int dsz[2] = {0, 0}; screen_get_display_property_iv(disp, SCREEN_PROPERTY_SIZE, dsz);
     printf("telltale: display %dx%d, tier G1-FULL (screen_read_display, display-manager context)\n", dsz[0], dsz[1]); fflush(stdout);
 
-    uint32_t *pb, *pt, *pw, *pwt; int sb, stt, sw, swt; screen_buffer_t bb, bt, bw, bwt;
+    uint32_t *pb, *pt, *pw, *pwt, *pl, *pwl; int sb, stt, sw, swt, sl, swl; screen_buffer_t bb, bt, bw, bwt, bl, bwl;
     mkpix(ctx_dm, L_BLOCK_W, L_BLOCK_H, &pb, &sb, &bb);   /* composed digit + gear block */
     mkpix(ctx_dm, L_TICK_S, L_TICK_S, &pt, &stt, &bt);    /* composed tick */
     mkpix(ctx_app, L_BLOCK_W, L_BLOCK_H, &pw, &sw, &bw);   /* the renderer's own window (same context as its handle): digit block ... */
     mkpix(ctx_app, L_TICK_S, L_TICK_S, &pwt, &swt, &bwt);  /* ... and tick (renderer-sourced reads) */
+    mkpix(ctx_dm, L_LAMP_W, L_LAMP_H, &pl, &sl, &bl);      /* composed lamp row */
+    mkpix(ctx_app, L_LAMP_W, L_LAMP_H, &pwl, &swl, &bwl);  /* the renderer's own lamp row */
 
     CK(screen_create_window(&safe_win, ctx_app), "safe window");
     {
@@ -544,13 +548,16 @@ int main(void)
         int rb[4] = {rpos[0] + L_BLOCK_X, rpos[1] + L_BLOCK_Y, L_BLOCK_W, L_BLOCK_H};
         int rt[4] = {rpos[0] + L_TICK_X, rpos[1] + L_TICK_Y, L_TICK_S, L_TICK_S};
         uint64_t t_cap_start = tt_now_ns();
+        int rl[4] = {rpos[0] + L_LAMP_X, rpos[1] + L_LAMP_Y, L_LAMP_W, L_LAMP_H};
         int e1 = screen_read_display(disp, bb, 1, rb, 0), e2 = screen_read_display(disp, bt, 1, rt, 0);
+        if (!e1 && !e2) e2 = screen_read_display(disp, bl, 1, rl, 0);
         uint64_t t_cap_end = tt_now_ns();
         drain_truth();                           /* samples that arrived while we sat in Screen still count */
         if (e1 || e2) { printf("telltale: screen_read_display: %s\n", strerror(errno)); fflush(stdout); atomic_store(&hb_start, 0); continue; }
         struct shot cs;
         decode_at(pb, sb, L_DIGIT_X0 - L_BLOCK_X, L_DIGIT_Y - L_BLOCK_Y, -1, 0, &cs);
         cs.tick = tt_tick_value(pt, stt);
+        cs.lamps = tt_lamps_decode(pl, sl, cfg.lamp_thr);
         cs.marker = tt_marker_ok(pb + (long)(L_MARK_Y - L_BLOCK_Y) * sb + (L_MARK_X - L_BLOCK_X), sb);
 
         if (late) { last_tick = cs.tick; t_tick_change = t_cap_end; }
@@ -570,13 +577,16 @@ int main(void)
         if (!truth_fresh) cv = V_TRUTH_LOST;
 
         /* renderer-sourced read (its own window; readable while the safe layer covers it) */
-        enum verdict wv = V_NONE; struct shot ws = {SPD_UNREADABLE, -1, -1, 0};
+        enum verdict wv = V_NONE; struct shot ws = {SPD_UNREADABLE, -1, -1, 0, 0};
         uint64_t t_win0 = tt_now_ns(), win_ns = 0; safe_ns = 0;
         if (st == ST_HOLD || st == ST_RESTART || st == ST_NODISPLAY || st == ST_TRUTHLOST || st == ST_GIVEUP) {
             int wb[4] = {L_BLOCK_X, L_BLOCK_Y, L_BLOCK_W, L_BLOCK_H}, wt[4] = {L_TICK_X, L_TICK_Y, L_TICK_S, L_TICK_S};
-            if (screen_read_window(rwin, bw, 1, wb, 0) == 0 && screen_read_window(rwin, bwt, 1, wt, 0) == 0) {
+            int wl[4] = {L_LAMP_X, L_LAMP_Y, L_LAMP_W, L_LAMP_H};
+            if (screen_read_window(rwin, bw, 1, wb, 0) == 0 && screen_read_window(rwin, bwt, 1, wt, 0) == 0 &&
+                screen_read_window(rwin, bwl, 1, wl, 0) == 0) {
                 decode_at(pw, sw, L_DIGIT_X0 - L_BLOCK_X, L_DIGIT_Y - L_BLOCK_Y, -1, 0, &ws);
                 ws.tick = tt_tick_value(pwt, swt);
+                ws.lamps = tt_lamps_decode(pwl, swl, cfg.lamp_thr);
                 int a, b;
                 wv = truth_fresh ? judge(&ws, t_lo, tt_now_ns(), stalled, &a, &b) : V_TRUTH_LOST;
             } else {
@@ -596,11 +606,11 @@ int main(void)
         if (inc_open && !inc.t_safe_visible && cs.marker) inc.t_safe_visible = t_cap_end;
         uint64_t since_last_verified = t_last_verified;
         int truth_disp = lt ? disp_kmh(lt->speed_kmh) : -1;
-#define OPEN(V) do { memset(&inc, 0, sizeof inc); inc.v = (V); inc.shown = cs.kind == SPD_VALUE ? cs.value : -1; inc.truth = truth_disp; \
+#define OPEN(V) do { memset(&inc, 0, sizeof inc); inc.v = (V); inc.shown = cs.kind == SPD_VALUE ? cs.value : -1; inc.truth = truth_disp; inc.lamps_shown = cs.lamps; inc.lamps_truth = lt ? lt->lamps : 0; \
             inc.t_last_verified = since_last_verified ? since_last_verified : t0; inc.t_detect = t_cap_end; inc.old_pid = rend.pid; \
             snprintf(inc.id, sizeof inc.id, "TT-%s-%04d", VCODE[V], ++seq_inc); snprintf(inc.cause, sizeof inc.cause, "-"); inc_open = 1; \
             pthread_mutex_lock(&g_mtx); g.faults++; pthread_mutex_unlock(&g_mtx); \
-            printf("telltale: DETECT %s %s shown=%d truth=%d caught_ms=%.1f\n", inc.id, VN[V], inc.shown, inc.truth, (inc.t_detect - inc.t_last_verified) / 1e6); fflush(stdout); } while (0)
+            printf("telltale: DETECT %s %s shown=%d truth=%d lamps_shown=0x%02x lamps_truth=0x%02x caught_ms=%.1f\n", inc.id, VN[V], inc.shown, inc.truth, cs.lamps, lt ? lt->lamps : 0, (inc.t_detect - inc.t_last_verified) / 1e6); fflush(stdout); } while (0)
 #define CLOSE() do { if (inc_open) { inc.t_true = t_cap_end; inc.restarts = nkills; ev_append(&inc); inc_open = 0; } } while (0)
 
         enum state prev = st;
@@ -668,10 +678,10 @@ int main(void)
         (void)t_reg_seen;
         uint64_t t_end = tt_now_ns();
         pthread_mutex_lock(&g_mtx); g.checks++; g.st = st; pthread_mutex_unlock(&g_mtx);
-        if (chk) fprintf(chk, "%llu,%llu,%llu,%s,%d,%s,%d,%d,%d,%d,%d,%s,%d,%llu,%llu\n", (unsigned long long)t_cap_start, (unsigned long long)t_cap_end,
+        if (chk) fprintf(chk, "%llu,%llu,%llu,%s,%d,%s,%d,%d,%d,%d,%d,%s,%d,%llu,%llu,0x%02x,0x%02x\n", (unsigned long long)t_cap_start, (unsigned long long)t_cap_end,
                          (unsigned long long)((t_end - t_cap_start) / 1000), ST[st], armed, VN[cv], cs.kind == SPD_VALUE ? cs.value : -1 - (int)cs.kind,
                          tmin, tmax, cs.tick, cs.marker, VN[wv], ws.kind == SPD_VALUE ? ws.value : -1 - (int)ws.kind,
-                         (unsigned long long)(win_ns / 1000), (unsigned long long)(safe_ns / 1000));
+                         (unsigned long long)(win_ns / 1000), (unsigned long long)(safe_ns / 1000), cs.lamps, ws.lamps);
         static unsigned flushn;
         if (chk && ++flushn % 25 == 0) fflush(chk);
         atomic_store(&hb_start, 0);

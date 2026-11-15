@@ -1,5 +1,5 @@
 /* ttinject: fire one fault into the cluster through its test-hook channel /dev/cluster-ctl.
- *   ttinject <freeze|blank|stale|misdraw|crash|heal> [arg] [--run ID] [--at TRACE_S]
+ *   ttinject <freeze|blank|stale|misdraw|crash|heal|lampdrop> [arg] [--run ID] [--at TRACE_S]
  * --at waits (polling /dev/vehicle) until the replayed trace reaches TRACE_S seconds, then fires.
  * Prints the command time (CLOCK_MONOTONIC ns); the cluster stamps the effective fault time itself.
  * SPDX-License-Identifier: Apache-2.0 */
@@ -15,11 +15,11 @@
 
 int main(int argc, char **argv)
 {
-    static const char *names[] = {"none", "freeze", "blank", "stale", "misdraw", "crash", "heal"};
-    if (argc < 2) { fprintf(stderr, "usage: ttinject <freeze|blank|stale|misdraw|crash|heal> [arg] [--run ID]\n"); return 1; }
+    static const char *names[] = {"none", "freeze", "blank", "stale", "misdraw", "crash", "heal", "lampdrop"};
+    if (argc < 2) { fprintf(stderr, "usage: ttinject <freeze|blank|stale|misdraw|crash|heal|lampdrop> [arg] [--run ID]\n"); return 1; }
     struct cl_fault_cmd c = {0};
     double at = -1;
-    for (int i = 1; i < 7; i++) if (!strcmp(argv[1], names[i])) c.cls = i;
+    for (int i = 1; i < 8; i++) if (!strcmp(argv[1], names[i])) c.cls = i;
     if (!c.cls) { fprintf(stderr, "ttinject: unknown class %s\n", argv[1]); return 1; }
     for (int i = 2; i < argc; i++) {
         if (!strcmp(argv[i], "--run") && i + 1 < argc) c.run_id = strtoull(argv[++i], NULL, 0);

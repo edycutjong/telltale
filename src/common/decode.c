@@ -1,8 +1,10 @@
 /* SPDX-License-Identifier: Apache-2.0 */
+#include <stdlib.h>
 #include <string.h>
 #include "decode.h"
 #include "glyphs.h"
 #include "palette.h"
+#include "layout.h"
 
 /* a pixel is "ink" when its mean channel value is above the glass/lit midpoint */
 static inline int ink(uint32_t p)
@@ -112,4 +114,25 @@ void tt_fill(uint32_t *base, int stride_px, int w, int h, uint32_t rgb)
         uint32_t *row = base + (long)y * stride_px;
         for (int x = 0; x < w; x++) row[x] = rgb;
     }
+}
+
+int tt_lamp_permille(const uint32_t *base, int stride_px, int w, int h, uint32_t rgb, int tol)
+{
+    long hit = 0;
+    int r = (rgb >> 16) & 0xFF, g = (rgb >> 8) & 0xFF, b = rgb & 0xFF;
+    for (int y = 0; y < h; y++)
+        for (int x = 0; x < w; x++) {
+            uint32_t p = base[(long)y * stride_px + x];
+            int pr = (p >> 16) & 0xFF, pg = (p >> 8) & 0xFF, pb = p & 0xFF;
+            if (abs(pr - r) <= tol && abs(pg - g) <= tol && abs(pb - b) <= tol) hit++;
+        }
+    return w > 0 && h > 0 ? (int)(hit * 1000 / ((long)w * h)) : 0;
+}
+
+unsigned tt_lamps_decode(const uint32_t *row, int stride_px, int thr_permille)
+{
+    unsigned bits = 0;
+    for (int i = 0; i < L_LAMP_N; i++)
+        if (tt_lamp_permille(row + L_LAMP[i].x, stride_px, L_LAMP_S, L_LAMP_S, L_LAMP[i].rgb, 24) >= thr_permille) bits |= 1u << i;
+    return bits;
 }

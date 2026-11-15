@@ -1,0 +1,22 @@
+telltale: conf period_ms=20
+telltale: conf W_ms=100
+telltale: conf tick_stall_ms=100
+telltale: conf truth_lost_ms=200
+telltale: conf restart_timeout_ms=4000
+telltale: conf mismatch_n=3
+telltale: conf truth_ok_n=5
+telltale: pid=11718687 uid=0 type=untyped prio=60
+telltale: period_ms=20 W_ms=100 tick_stall_ms=100 h_max=615 mismatch_n=3 unknown_kill_ms=500 restart_timeout_ms=4000 policy=none (uid/pid checks)
+telltale: display 1280x768, tier G1-FULL (screen_read_display, display-manager context)
+telltale: renderer registered pid=11743266 draw_tid=3 window=tt-cluster-11743266
+telltale: window tt-cluster-11743266 found at 0,24
+telltale: ARMED renderer pid=11743266 (window tt-cluster-11743266)
+telltale: WAIT -> NORMAL
+telltale: DETECT TT-VAL-0001 VALUE_MISMATCH shown=6 truth=5 lamps_shown=0x01 lamps_truth=0x05 caught_ms=19.9
+telltale: NORMAL -> SAFE-HOLD
+telltale: SIGKILL renderer pid 11743266 (live-wrong)
+telltale: SAFE-HOLD -> RESTARTING
+telltale: renderer registered pid=11902993 draw_tid=3 window=tt-cluster-11902993
+telltale: window tt-cluster-11902993 found at 0,24
+telltale: INCIDENT TT-VAL-0001,VALUE_MISMATCH,live-wrong,6,5,626878235765,626898128690,19.9,626931632142,626985956169,627305812068,627318348844,1,0.0,11743266,11902993,0x01,0x05
+telltale: RESTARTING -> NORMAL
