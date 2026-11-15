@@ -9,12 +9,12 @@ the digits and lamps, and checks them against `/dev/vehicle`. On a lie it puts a
 top, decides hung vs starved from the renderer's thread states, kills and respawns a hung or wrong renderer, verifies
 the new one, and hands the display back. 20 ms is the configured check period (`period_ms`), not a measured figure.
 Recorded runs per fault class: [`evidence/runs/`](evidence/runs/). Tests: `make test-host` = C checks (test_disp 12, test_decode 91,
-test_text 17) + 82 Python tests (2 need Pillow). `make test-target`: 111 passed, 0 failed on the QEMU (TCG) guest at
+test_text 17) + 82 Python tests (8 need Pillow). `make test-target`: 111 passed, 0 failed on the QEMU (TCG) guest at
 commit 5e1789d ([`evidence/test-target/20261115T142358Z/summary.txt`](evidence/test-target/20261115T142358Z/summary.txt)),
 including the engineering-mode case whose banner and incident card are read back from frames a separate process captured.
 The suite run before it ([`20261115T141317Z`](evidence/test-target/20261115T141317Z/summary.txt), 110 passed, 1 failed) is
 kept: it caught a race where a frozen renderer was killed as "live-wrong" before its stall was classified. A later QA round
-added `tests/target/core_items.sh` (16/16, which found two more monitor bugs, now fixed) and a third read-back frame (card
+added `tests/target/core_items.sh` (17/17, which found two more monitor bugs, now fixed) and a third read-back frame (card
 gone after `card_ms`, [`evidence/runs/p1b-151033-debug/`](evidence/runs/p1b-151033-debug/)); full-suite re-runs with those
 fixes lost single checks to spurious TICK_STALLs while the macOS host was loaded (load average 31–44, logged in the
 summary), so a quiet-host re-run is pending.
@@ -56,7 +56,9 @@ The bench (200 injected faults, ablation, false-positive run) comes next. Every 
   code), and reading Screen buffers is a Screen permission, not a secpol rule. There is no `screen_t`: Screen is started
   before the runtime policy push (the push is immutable until reboot).
 - `tick_stall_ms=150` and `restart_timeout_ms=4000` are provisional values for QEMU (TCG) until the bench calibration.
-- Not asserted by a test yet: the restart cap (TT-GIVEUP) and the kill after an UNKNOWN-cause stall. `DCMD_VEH_GET_SINCE`
+- Not asserted by a test yet: the restart cap (TT-GIVEUP, applied at both kill sites), the kill after an UNKNOWN-cause stall
+  (counted from when the cause became UNKNOWN, so one mixed state sample in a long STARVE cannot kill), the restart when a
+  live renderer's window stays unreadable during SAFE-HOLD, and a renderer that is starved first and then hangs. `DCMD_VEH_GET_SINCE`
   (the monitor's truth path) and the ionotify pulses (the renderer's data path) run in every recorded run but have no
   separate assertion.
 - The fault banner shows the monitor's verdict (`VALUE_MISMATCH`, `TICK_STALL`, ...), not the injected fault class: the

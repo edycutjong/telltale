@@ -41,6 +41,8 @@ chk "feeder back -> verified hand-back, state NORMAL" 'echo "$S" | grep -q "stat
 L=$(cat /dev/telltale | tail -1)
 chk "TRUTH_LOST incident closed: last=TT-TRL-* verdict=TRUTH_LOST recovered=yes in /dev/telltale" 'echo "$L" | grep -Eq "last=TT-TRL-[0-9]+ verdict=TRUTH_LOST .*recovered=yes"' "$L"
 chk "the TRUTH_LOST row is in /dev/telltale-events" 'cat /dev/telltale-events | grep -q ",TRUTH_LOST,"' "$(cat /dev/telltale-events | tail -1)"
+S=$(slog2info 2>/dev/null | grep "INCIDENT TT-TRL-" | tail -1)
+chk "the TRUTH_LOST incident is in slog2 (slog2info, buffer set telltale)" '[ -n "$S" ]' "$(slog2info 2>&1 | grep -i telltale | tail -2)"
 S=$(st)
 chk "period knob kept the configured tick_stall_ms=150 (not the 57 ms rule floor)" 'echo "$S" | grep -q "tick_stall_ms=150 "' "$S"
 # NO_DISPLAY: stop the respawn loop, kill the renderer; nothing registers within restart_timeout_ms

@@ -88,7 +88,7 @@ $(QOUT)/cluster: src/cluster/cluster.c src/common/decode.c $(QCOMMON) $(QHDRS) |
 	$(QCC) $(QCFLAGS) -o $@ src/cluster/cluster.c src/common/decode.c $(QCOMMON) -lscreen -lsecpol -lm
 
 $(QOUT)/telltale: src/telltale/telltale.c src/common/decode.c src/common/truth.c src/common/text.c $(QCOMMON) $(QHDRS) | $(QOUT)
-	$(QCC) $(QCFLAGS) -o $@ src/telltale/telltale.c src/common/decode.c src/common/truth.c src/common/text.c $(QCOMMON) -lscreen -lsecpol -lm
+	$(QCC) $(QCFLAGS) -o $@ src/telltale/telltale.c src/common/decode.c src/common/truth.c src/common/text.c $(QCOMMON) -lscreen -lsecpol -lslog2 -lm
 
 $(QOUT)/ttinject $(QOUT)/ttctl $(QOUT)/hog: $(QOUT)/%: src/tools/%.c $(QCOMMON) $(QHDRS) | $(QOUT)
 	$(QCC) $(QCFLAGS) -o $@ $< $(QCOMMON) -lsecpol
