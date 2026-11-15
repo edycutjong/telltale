@@ -10,6 +10,9 @@
 #      pidin snapshots of Screen + monitor threads during the hog go to g5-pidin.txt (gate G5).
 #      TT_EVROOT (default evidence/runs) where the run dir goes; TT_CONF_EXTRA extra telltale.conf lines for this
 #      run (e.g. "mismatch_n=1000"); TT_HEAL_AT=S sends `ttinject heal` when the trace reaches S seconds.
+#      TT_TRACE=path.csv replays that trace (t_s,speed_mps; copied to the guest) instead of data/trace-hero.csv
+#      (the bench cuts one slice per injection); TT_NOCOLLECT=1 skips the pidin/status/log copy-back extras.
+#      TT_DISARM=1 runs `ttctl disarm` before the fault (observe-only monitor: the B2 ablation).
 #      TT_DEBUG=1 turns on engineering mode (`ttctl debug on`) and captures two display frames with ttshot (a separate
 #      process reading what Screen composed): banner.png once the engineering banner is up, card.png once the incident
 #      card is shown, card-hidden.png once it has been hidden again.
@@ -19,11 +22,14 @@ CLS=${1:?class}; AT=${2:-12.221}; SETTLE=${3:-12}
 RID="${TT_RUN_ID:-$(date -u +%Y%m%dT%H%M%SZ)}"
 EV="${TT_EVROOT:-evidence/runs}/$RID-$CLS"; mkdir -p "$EV"
 G=scripts/guest.sh
+TRACE=trace-hero.csv
+if [ -n "${TT_TRACE:-}" ]; then $G put "$TT_TRACE"; TRACE=$(basename "$TT_TRACE"); fi
 # per-run monitor config: the deployed telltale.conf plus TT_CONF_EXTRA (tt_up.sh uses telltale-run.conf)
 $G sudo "cd /tmp/tt; cp telltale.conf telltale-run.conf; printf '%b\\n' '${TT_CONF_EXTRA:-}' >> telltale-run.conf"
 [ "$CLS" = starve ] && TT_CPU=${TT_CPU:-3}
-$G sudo "sh /tmp/tt/tt_up.sh trace-hero.csv ${TT_HOLD:-8} ${TT_POLICY:-0} ${TT_CPU:--} ${TT_SCOPE:-all} ${TT_SUP:-script}" > "$EV/up.txt" 2>&1
+$G sudo "sh /tmp/tt/tt_up.sh $TRACE ${TT_HOLD:-8} ${TT_POLICY:-0} ${TT_CPU:--} ${TT_SCOPE:-all} ${TT_SUP:-script}" > "$EV/up.txt" 2>&1
 HP=${TT_HOG_PRIO:-40}
+[ "${TT_DISARM:-0}" = 1 ] && $G sudo "cd /tmp/tt; ./ttctl disarm" > "$EV/disarm.txt" 2>&1
 if [ "${TT_DEBUG:-0}" = 1 ]; then
   $G sudo "cd /tmp/tt; rm -f log/*.ppm log/shot-*.txt; ./ttctl debug on
     ( (n=0; while ! grep -q 'mode=engineering' log/telltale.log && [ \$n -lt 600 ]; do sleep 0.05; n=\$((n+1)); done; sleep 0.3; ./ttshot log/banner.ppm) > log/shot-banner.txt 2>&1 < /dev/null & )
@@ -44,9 +50,13 @@ if [ -n "${TT_HEAL_AT:-}" ]; then
 fi
 sleep "$SETTLE"
 $G sudo 'cd /tmp/tt; ./ttctl status; echo; cat /dev/telltale-events; echo; cat /dev/vehicle' > "$EV/status.txt" 2>&1
+if [ "${TT_NOCOLLECT:-0}" = 1 ]; then   # bench: only the logs the row extractor and a reader need
+  for f in telltale cluster; do $G get "/tmp/tt/log/$f.log" "$EV/" 2>/dev/null || true; done
+else
 $G sudo 'pidin -F "%a %b %N %p %J %B" | grep -E "vehicled|vehfeed|telltale|cluster|hog|slm" | grep -v grep' > "$EV/pidin.txt" 2>&1 || true
 for f in telltale cluster vehicled vehfeed super; do $G get "/tmp/tt/log/$f.log" "$EV/" 2>/dev/null || true; done
 $G get /tmp/tt/log/checks.csv "$EV/" 2>/dev/null || true
+fi
 if [ "${TT_DEBUG:-0}" = 1 ]; then
   for f in banner card card-hidden; do
     $G get "/tmp/tt/log/shot-$f.txt" "$EV/" 2>/dev/null || true

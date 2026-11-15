@@ -1,0 +1,1 @@
+run cal1 class=none inject=none heal_at=- conf_extra=tick_stall_ms=1000 at=0 accel=QEMU(TCG) policy=0 debug=0 cpu=any scope=all sup=script
