@@ -13,9 +13,10 @@ import check_run as C  # noqa: E402
 RUNS = Path(__file__).resolve().parents[2] / "evidence" / "runs"
 GOOD = {"p1b-125318-stale": "stale", "p1b-125357-freeze": "freeze", "p1b-125428-blank": "blank",
         "p1b-125459-misdraw": "misdraw", "p1b-125530-crash": "crash", "p1b-130644-starve": "starve",
-        "p1b-131213-none": "none", "p1b-131446-lampdrop": "lampdrop"}
+        "p1b-131213-none": "none", "p1b-131446-lampdrop": "lampdrop",
+        "p1b-144540-blank-straddle": "blank"}   # first read straddled the cleared frame: VALUE_MISMATCH, cause BLANK
 # engineering-mode run from the on-target suite: banner + incident card logged and read back by ttshot
-DEBUG_RUN = Path(__file__).resolve().parents[2] / "evidence" / "test-target" / "20261115T142358Z" / "t-debug"
+DEBUG_RUN = Path(__file__).resolve().parents[2] / "evidence" / "runs" / "p1b-151033-debug"
 try:
     import PIL  # noqa: F401
     HAVE_PIL = True
@@ -67,6 +68,19 @@ class CheckRunTest(unittest.TestCase):
             img = Image.open(run / "card.png").convert("RGB")
             img.paste((14, 13, 11), (868, 144, 868 + 404, 144 + 188))   # glass where the card should be
             img.save(run / "card.png")
+        self.assertFalse(all(ok for ok, _ in self._tampered(edit)))
+
+    @unittest.skipUnless(HAVE_PIL, "Pillow not installed")
+    def test_debug_card_row_not_from_incident_fails(self):
+        def edit(run):
+            log = run / "telltale.log"
+            log.write_text(log.read_text().replace("|shown ", "|shown 1", 1))   # card row 2 no longer matches incidents.csv
+        self.assertFalse(all(ok for ok, _ in self._tampered(edit)))
+
+    @unittest.skipUnless(HAVE_PIL, "Pillow not installed")
+    def test_debug_card_never_hidden_in_frame_fails(self):
+        def edit(run):
+            shutil.copy(run / "card.png", run / "card-hidden.png")   # the card still on screen after card_ms
         self.assertFalse(all(ok for ok, _ in self._tampered(edit)))
 
     @unittest.skipUnless(HAVE_PIL, "Pillow not installed")

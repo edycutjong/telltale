@@ -12,7 +12,7 @@
 #      run (e.g. "mismatch_n=1000"); TT_HEAL_AT=S sends `ttinject heal` when the trace reaches S seconds.
 #      TT_DEBUG=1 turns on engineering mode (`ttctl debug on`) and captures two display frames with ttshot (a separate
 #      process reading what Screen composed): banner.png once the engineering banner is up, card.png once the incident
-#      card is shown.
+#      card is shown, card-hidden.png once it has been hidden again.
 set -euo pipefail
 cd "$(dirname "$0")/.."
 CLS=${1:?class}; AT=${2:-12.221}; SETTLE=${3:-12}
@@ -27,7 +27,8 @@ HP=${TT_HOG_PRIO:-40}
 if [ "${TT_DEBUG:-0}" = 1 ]; then
   $G sudo "cd /tmp/tt; rm -f log/*.ppm log/shot-*.txt; ./ttctl debug on
     ( (n=0; while ! grep -q 'mode=engineering' log/telltale.log && [ \$n -lt 600 ]; do sleep 0.05; n=\$((n+1)); done; sleep 0.3; ./ttshot log/banner.ppm) > log/shot-banner.txt 2>&1 < /dev/null & )
-    ( (n=0; while ! grep -q 'CARD shown' log/telltale.log && [ \$n -lt 900 ]; do sleep 0.05; n=\$((n+1)); done; sleep 0.5; ./ttshot log/card.ppm) > log/shot-card.txt 2>&1 < /dev/null & )" > "$EV/debug.txt" 2>&1
+    ( (n=0; while ! grep -q 'CARD shown' log/telltale.log && [ \$n -lt 900 ]; do sleep 0.05; n=\$((n+1)); done; sleep 0.5; ./ttshot log/card.ppm) > log/shot-card.txt 2>&1 < /dev/null & )
+    ( (n=0; while ! grep -q 'CARD hidden' log/telltale.log && [ \$n -lt 1200 ]; do sleep 0.05; n=\$((n+1)); done; sleep 0.3; ./ttshot log/card-hidden.ppm) > log/shot-card-hidden.txt 2>&1 < /dev/null & )" > "$EV/debug.txt" 2>&1
 fi
 if [ "$CLS" = starve ]; then
   HT=; [ "${TT_POLICY:-0}" = 1 ] && HT="env TT_TYPE=hog_t"
@@ -47,7 +48,7 @@ $G sudo 'pidin -F "%a %b %N %p %J %B" | grep -E "vehicled|vehfeed|telltale|clust
 for f in telltale cluster vehicled vehfeed super; do $G get "/tmp/tt/log/$f.log" "$EV/" 2>/dev/null || true; done
 $G get /tmp/tt/log/checks.csv "$EV/" 2>/dev/null || true
 if [ "${TT_DEBUG:-0}" = 1 ]; then
-  for f in banner card; do
+  for f in banner card card-hidden; do
     $G get "/tmp/tt/log/shot-$f.txt" "$EV/" 2>/dev/null || true
     $G get "/tmp/tt/log/$f.ppm" "$EV/" 2>/dev/null && python3 -c 'import sys; from PIL import Image; Image.open(sys.argv[1]).save(sys.argv[2], optimize=True)' "$EV/$f.ppm" "$EV/$f.png" && rm -f "$EV/$f.ppm"
   done

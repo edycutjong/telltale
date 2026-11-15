@@ -22,7 +22,9 @@ COLS = ["id", "verdict", "cause", "shown", "truth", "t_last_verified_ns", "t_det
 # class -> (verdicts allowed, causes allowed or None, kill expected: True/False/None)
 EXPECT = {
     "freeze": ({"TICK_STALL", "VALUE_MISMATCH"}, {"hung"}, True),   # mismatch first if the speed moves
-    "blank": ({"BLANK", "UNREADABLE"}, None, True),
+    # blank: the first composed read can straddle the frame change (digit block read before the cleared frame, lamp row
+    # after it) and see "lamps missing" = VALUE_MISMATCH; the renderer's own window then reads BLANK, which is the cause
+    "blank": ({"BLANK", "UNREADABLE", "VALUE_MISMATCH"}, {"BLANK", "UNREADABLE"}, True),
     "stale": ({"VALUE_MISMATCH"}, {"live-wrong"}, True),
     "misdraw": ({"VALUE_MISMATCH"}, {"live-wrong"}, True),
     "crash": ({"TICK_STALL", "BLANK", "UNREADABLE", "NO_DISPLAY", "VALUE_MISMATCH"}, {"crash"}, None),
@@ -53,9 +55,17 @@ def check_debug(run: Path, r: dict[str, str]) -> list[tuple[bool, str]]:
     out.append((m is not None and m.group(3) == want_banner, f"engineering banner logged with this incident's class + caught ms ({want_banner!r})"))
     mc = re.search(r'CARD shown (\S+) at \d+,\d+ \d+x\d+ rows="([^"]*)"', log)
     rows = mc.group(2).split("|") if mc else []
-    want_rows = {0: f"INCIDENT {r['id']}", 3: f"caught {caught} ms \u00b7 restored {restored} ms", 4: "handed back, no restart"}
+    row1 = r["verdict"] if r["cause"] == "-" else f"{r['verdict']} \u00b7 {r['cause']}"
+    if r["shown"] == r["truth"] and r.get("lamps_shown") != r.get("lamps_truth"):
+        row2 = f"lamps shown {int(r['lamps_shown'], 16):02x} \u00b7 truth {int(r['lamps_truth'], 16):02x}"
+    elif int(r["shown"]) >= 0:
+        row2 = f"shown {r['shown']} \u00b7 truth {r['truth']} km/h"
+    else:
+        row2 = f"shown -- \u00b7 truth {r['truth']} km/h"
+    want_rows = {0: f"INCIDENT {r['id']}", 1: row1, 2: row2, 3: f"caught {caught} ms \u00b7 restored {restored} ms",
+                 4: "handed back, no restart", 5: "service: cat /dev/telltale"}
     out.append((len(rows) == 6 and all(rows[i] == v for i, v in want_rows.items()),
-                f"incident card logged with this incident's id, caught/restored ms and action ({rows[:1] + rows[3:5]})"))
+                f"incident card logged, every row = this incident's incidents.csv values ({rows})"))
     out.append((f"CARD hidden {r['id']} (timeout)" in log, "card hidden after card_ms"))
     try:
         from PIL import Image
@@ -85,6 +95,16 @@ def check_debug(run: Path, r: dict[str, str]) -> list[tuple[bool, str]]:
         out.append((bg >= 0.6 and lit >= 200 and stripe, f"card read back: background {bg:.2f}, {lit} lit text px, amber top stripe {stripe}"))
     else:
         out.append((False, "card.png captured (ttshot)"))
+    hp = run / "card-hidden.png"
+    if hp.exists():
+        img = Image.open(hp).convert("RGB")
+        x0, y0, w, h = CARD
+        px = img.crop((x0, y0, x0 + w, y0 + h)).load()
+        bg = sum(near(px[x, y], CARD_BG, 6) for x in range(w) for y in range(h)) / (w * h)
+        stripe = sum(near(px[x, y], AMBER) for x in range(w) for y in range(4)) / (w * 4)
+        out.append((bg < 0.2 and stripe < 0.2, f"card gone from the frame after card_ms: background {bg:.2f}, stripe {stripe:.2f} (want < 0.2)"))
+    else:
+        out.append((False, "card-hidden.png captured (ttshot)"))
     return out
 
 
