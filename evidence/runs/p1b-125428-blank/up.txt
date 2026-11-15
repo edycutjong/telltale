@@ -1,0 +1,9 @@
+ 9519119   1 vehicled            60f RECEIVE        1                           
+ 9535510   1 telltale            60f RUNNING                                    
+ 9535510   2 telltale            15f RECEIVE        1                           
+ 9535510   3 telltale            61f NANOSLEEP                                  
+ 9560096   1 cluster             15r RECEIVE        1                           
+ 9560096   2 cluster             10r RECEIVE        2                           
+ 9560096   3 cluster             20r REPLY          966685                      
+ 9560096   4 cluster             15r DEAD                                       
+ 9576479   1 vehfeed             45f NANOSLEEP                                  

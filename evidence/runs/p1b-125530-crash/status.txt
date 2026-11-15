@@ -1,0 +1,7 @@
+armed=1 state=NORMAL period_ms=20 W_ms=100 tick_stall_ms=100 checks=1278 faults=1 restarts=0 late=0 screen_stalls=0 renderer_pid=11178012
+last=TT-BLK-0001 verdict=BLANK cause=crash shown=-1 truth=45 caught_ms=25.0 (since last verified frame) recovered=yes
+
+id,verdict,cause,shown,truth,t_last_verified_ns,t_detect_ns,caught_ms,t_safe_visible_ns,t_kill_ns,t_register_ns,t_true_ns,restarts,exposure_ms,renderer_pid,new_pid
+TT-BLK-0001,BLANK,crash,-1,45,1776480145044,1776505154546,25.0,1776741419426,0,1776733532060,1776759507852,0,0.0,11018270,11178012
+
+seq=948 t_ns=1787211654496 trace_s=15.780 speed_kmh=7.63 gear=D lamps=0x00

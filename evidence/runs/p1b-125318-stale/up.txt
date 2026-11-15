@@ -1,0 +1,9 @@
+ 7979038   1 vehicled            10f RECEIVE        1                           
+ 7995423   1 telltale            60f RECEIVE        2                           
+ 7995423   2 telltale            15f RECEIVE        1                           
+ 7995423   3 telltale            61f NANOSLEEP                                  
+ 8020002   1 cluster             15r RECEIVE        1                           
+ 8020002   2 cluster             10r RECEIVE        2                           
+ 8020002   3 cluster             20r REPLY          966685                      
+ 8020002   4 cluster             15r DEAD                                       
+ 8036385   1 vehfeed             45f NANOSLEEP                                  

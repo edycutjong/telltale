@@ -1,0 +1,1 @@
+run p1b-125530 class=crash at=5 accel=QEMU(TCG) policy=0
