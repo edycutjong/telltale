@@ -10,6 +10,9 @@
 #      pidin snapshots of Screen + monitor threads during the hog go to g5-pidin.txt (gate G5).
 #      TT_EVROOT (default evidence/runs) where the run dir goes; TT_CONF_EXTRA extra telltale.conf lines for this
 #      run (e.g. "mismatch_n=1000"); TT_HEAL_AT=S sends `ttinject heal` when the trace reaches S seconds.
+#      TT_DEBUG=1 turns on engineering mode (`ttctl debug on`) and captures two display frames with ttshot (a separate
+#      process reading what Screen composed): banner.png once the engineering banner is up, card.png once the incident
+#      card is shown.
 set -euo pipefail
 cd "$(dirname "$0")/.."
 CLS=${1:?class}; AT=${2:-12.221}; SETTLE=${3:-12}
@@ -21,6 +24,11 @@ $G sudo "cd /tmp/tt; cp telltale.conf telltale-run.conf; printf '%b\\n' '${TT_CO
 [ "$CLS" = starve ] && TT_CPU=${TT_CPU:-3}
 $G sudo "sh /tmp/tt/tt_up.sh trace-hero.csv ${TT_HOLD:-8} ${TT_POLICY:-0} ${TT_CPU:--} ${TT_SCOPE:-all} ${TT_SUP:-script}" > "$EV/up.txt" 2>&1
 HP=${TT_HOG_PRIO:-40}
+if [ "${TT_DEBUG:-0}" = 1 ]; then
+  $G sudo "cd /tmp/tt; rm -f log/*.ppm log/shot-*.txt; ./ttctl debug on
+    ( (n=0; while ! grep -q 'mode=engineering' log/telltale.log && [ \$n -lt 600 ]; do sleep 0.05; n=\$((n+1)); done; sleep 0.3; ./ttshot log/banner.ppm) > log/shot-banner.txt 2>&1 < /dev/null & )
+    ( (n=0; while ! grep -q 'CARD shown' log/telltale.log && [ \$n -lt 900 ]; do sleep 0.05; n=\$((n+1)); done; sleep 0.5; ./ttshot log/card.ppm) > log/shot-card.txt 2>&1 < /dev/null & )" > "$EV/debug.txt" 2>&1
+fi
 if [ "$CLS" = starve ]; then
   HT=; [ "${TT_POLICY:-0}" = 1 ] && HT="env TT_TYPE=hog_t"
   $G sudo "cd /tmp/tt; ($HT ./hog ${TT_HOG_MS:-3000} $HP $TT_CPU --at $AT > log/hog.log 2>&1 &)
@@ -38,6 +46,12 @@ $G sudo 'cd /tmp/tt; ./ttctl status; echo; cat /dev/telltale-events; echo; cat /
 $G sudo 'pidin -F "%a %b %N %p %J %B" | grep -E "vehicled|vehfeed|telltale|cluster|hog|slm" | grep -v grep' > "$EV/pidin.txt" 2>&1 || true
 for f in telltale cluster vehicled vehfeed super; do $G get "/tmp/tt/log/$f.log" "$EV/" 2>/dev/null || true; done
 $G get /tmp/tt/log/checks.csv "$EV/" 2>/dev/null || true
+if [ "${TT_DEBUG:-0}" = 1 ]; then
+  for f in banner card; do
+    $G get "/tmp/tt/log/shot-$f.txt" "$EV/" 2>/dev/null || true
+    $G get "/tmp/tt/log/$f.ppm" "$EV/" 2>/dev/null && python3 -c 'import sys; from PIL import Image; Image.open(sys.argv[1]).save(sys.argv[2], optimize=True)' "$EV/$f.ppm" "$EV/$f.png" && rm -f "$EV/$f.ppm"
+  done
+fi
 $G get '/tmp/tt/ev/*.csv' "$EV/" 2>/dev/null || true
-echo "run $RID class=$CLS inject=${TT_INJECT:-$CLS} heal_at=${TT_HEAL_AT:--} conf_extra=${TT_CONF_EXTRA:--} at=$AT accel=QEMU(TCG) policy=${TT_POLICY:-0} cpu=${TT_CPU:-any} scope=${TT_SCOPE:-all} sup=${TT_SUP:-script}$([ "$CLS" = starve ] && echo " hog_prio=$HP hog_ms=${TT_HOG_MS:-3000}")" > "$EV/RUN.txt"
+echo "run $RID class=$CLS inject=${TT_INJECT:-$CLS} heal_at=${TT_HEAL_AT:--} conf_extra=${TT_CONF_EXTRA:--} at=$AT accel=QEMU(TCG) policy=${TT_POLICY:-0} debug=${TT_DEBUG:-0} cpu=${TT_CPU:-any} scope=${TT_SCOPE:-all} sup=${TT_SUP:-script}$([ "$CLS" = starve ] && echo " hog_prio=$HP hog_ms=${TT_HOG_MS:-3000}")" > "$EV/RUN.txt"
 cat "$EV/inject.txt" 2>/dev/null; grep -E 'DETECT|cause|SIGKILL|INCIDENT|->|gone|safe' "$EV/telltale.log" || true

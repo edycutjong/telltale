@@ -1,0 +1,25 @@
+telltale: conf period_ms=20
+telltale: conf W_ms=100
+telltale: conf tick_stall_ms=150
+telltale: conf truth_lost_ms=200
+telltale: conf restart_timeout_ms=4000
+telltale: conf mismatch_n=3
+telltale: conf truth_ok_n=5
+telltale: conf mismatch_n=1000
+telltale: pid=12148753 uid=0 type=untyped prio=60
+telltale: period_ms=20 W_ms=100 tick_stall_ms=150 h_max=615 mismatch_n=1000 unknown_kill_ms=750 restart_timeout_ms=4000 policy=none (uid/pid checks)
+telltale: display 1280x768, tier G1-FULL (screen_read_display, display-manager context)
+telltale: BANNER x=371 w=538 mode=driver text="DISPLAY FAULT · SHOWING TRUE SPEED"
+telltale: renderer registered pid=12173340 draw_tid=3 window=tt-cluster-12173340
+telltale: window tt-cluster-12173340 found at 0,24
+telltale: ARMED renderer pid=12173340 (window tt-cluster-12173340)
+telltale: WAIT -> NORMAL
+telltale: SCREEN_STALL check started 66 ms ago
+telltale: SCREEN_STALL check started 74 ms ago
+telltale: DETECT TT-VAL-0001 VALUE_MISMATCH shown=48 truth=47 lamps_shown=0x01 lamps_truth=0x00 caught_ms=18.7
+telltale: BANNER x=148 w=983 mode=engineering text="ENGINEERING VIEW · DISPLAY FAULT CAUGHT · VALUE_MISMATCH · 19 ms"
+telltale: NORMAL -> SAFE-HOLD
+telltale: INCIDENT TT-VAL-0001,VALUE_MISMATCH,-,48,47,472896936757,472915652912,18.7,472941361774,0,0,474575224298,0,0.0,12173340,0,0x01,0x00
+telltale: CARD shown TT-VAL-0001 at 868,144 404x188 rows="INCIDENT TT-VAL-0001|VALUE_MISMATCH|shown 48 · truth 47 km/h|caught 19 ms · restored 1678 ms|handed back, no restart|service: cat /dev/telltale"
+telltale: SAFE-HOLD -> NORMAL
+telltale: CARD hidden TT-VAL-0001 (timeout)

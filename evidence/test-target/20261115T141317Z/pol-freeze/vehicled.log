@@ -1,0 +1,3 @@
+vehicled: pid=77856784 uid=0 type=vehicle_t prio=50
+vehicled: DCMD_VEH_SET guarded by secpol permission vehicle:write (object type id 1)
+vehicled: serving /dev/vehicle

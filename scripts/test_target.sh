@@ -4,7 +4,8 @@
 # evidence/test-target/<UTC stamp>/ and the summary in summary.txt there.
 #   scripts/test_target.sh [--no-policy]
 # Cases: one fault run per class (freeze blank stale misdraw crash lampdrop + STARVE renderer-CPU-only),
-# a clean hero drive (0 incidents), the hold -> heal -> hand-back acceptance sequence (no kill), FREEZE with slm as the
+# a clean hero drive (0 incidents), the hold -> heal -> hand-back acceptance sequence (no kill), the same sequence in
+# engineering mode (banner text + incident card, both read back from the composed display by ttshot), FREEZE with slm as the
 # renderer supervisor (S-SLM), then
 # (unless --no-policy) a FREEZE run with the secpol policy loaded and every process typed + tests/target/secpol_denies.sh.
 # NOTE: the policy push is immutable until the guest reboots, and an untyped Screen cannot be restarted under it,
@@ -27,6 +28,7 @@ run_case t lampdrop 16.0 12                                   # brake lamp lit f
 run_case t starve "$AT" 10 TT_SCOPE=renderer                 # "STARVE (renderer CPU only)"
 run_case t none 0 56                                          # whole hero drive + parked tail
 run_case t accept "$AT" 10 TT_INJECT=stale TT_HEAL_AT=14.0 TT_CONF_EXTRA=mismatch_n=1000
+run_case t debug "$AT" 14 TT_INJECT=stale TT_HEAL_AT=14.0 TT_CONF_EXTRA=mismatch_n=1000 TT_DEBUG=1   # engineering banner + incident card, read back
 run_case slm freeze "$AT" 12 TT_SUP=slm                     # S-SLM: slm (not the script loop) restarts the renderer
 if [ "${1:-}" != --no-policy ]; then
   run_case pol freeze "$AT" 12 TT_POLICY=1

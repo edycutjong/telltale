@@ -1,0 +1,4 @@
+cluster: pid=64421916 uid=0 type=untyped prio=15
+cluster: now uid=1000
+cluster: window tt-cluster-64421916 1280x720 at 0,24 z=10 perm=0x14544477
+cluster: registered with the monitor (pid 64421916, draw tid 3, window tt-cluster-64421916)

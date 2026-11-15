@@ -1,0 +1,3 @@
+vehfeed: pid=10633241 uid=0 type=untyped prio=45
+vehfeed: 2187 rows, 43.8 s, hold 8.0 s, loop 0, scenario rows 19
+vehfeed: trace done; holding the last sample (parked) every 50 ms

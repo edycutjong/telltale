@@ -2,7 +2,9 @@
 """Assert what one recorded Telltale run on the QNX target must show (used by scripts/test_target.sh).
 
   python3 scripts/check_run.py <run-dir> <class>
-  class: freeze blank stale misdraw crash lampdrop starve accept none
+  class: freeze blank stale misdraw crash lampdrop starve accept debug none
+  debug = the accept sequence in engineering mode: the banner text and the incident card must be logged with this
+  incident's values AND be present in the frames ttshot read back from the composed display (banner.png, card.png).
 
 Reads <run-dir>/incidents.csv (the monitor's incident rows) and inject.txt / hog.log (the fault command time).
 Prints one PASS/FAIL line per assertion; exit 0 iff all pass.
@@ -27,7 +29,63 @@ EXPECT = {
     "lampdrop": ({"VALUE_MISMATCH"}, {"live-wrong"}, True),
     "starve": ({"TICK_STALL", "VALUE_MISMATCH"}, {"starved"}, False),   # mismatch first if the speed moves
     "accept": ({"VALUE_MISMATCH"}, None, False),
+    "debug": ({"VALUE_MISMATCH"}, None, False),
 }
+
+# display geometry (src/common/layout.h): window at 0,24; banner rows 600..663; card 868,120 404x188 (window offsets)
+WIN_Y = 24
+BANNER = (0, WIN_Y + 600, 1280, 64)
+CARD = (868, WIN_Y + 120, 404, 188)
+AMBER, CARD_BG, LIT = (0xF2, 0xA9, 0x00), (0x1A, 0x19, 0x16), (0xF4, 0xF1, 0xE8)
+
+
+def near(p, c, tol=24):
+    return all(abs(a - b) <= tol for a, b in zip(p, c))
+
+
+def check_debug(run: Path, r: dict[str, str]) -> list[tuple[bool, str]]:
+    out: list[tuple[bool, str]] = []
+    log = (run / "telltale.log").read_text(errors="replace") if (run / "telltale.log").exists() else ""
+    tlv, tdet, ttrue = int(r["t_last_verified_ns"]), int(r["t_detect_ns"]), int(r["t_true_ns"])
+    caught, restored = f"{(tdet - tlv) / 1e6:.0f}", f"{(ttrue - tlv) / 1e6:.0f}"
+    want_banner = f"ENGINEERING VIEW \u00b7 DISPLAY FAULT CAUGHT \u00b7 {r['verdict']} \u00b7 {caught} ms"
+    m = re.search(r'BANNER x=(\d+) w=(\d+) mode=engineering text="([^"]*)"', log)
+    out.append((m is not None and m.group(3) == want_banner, f"engineering banner logged with this incident's class + caught ms ({want_banner!r})"))
+    mc = re.search(r'CARD shown (\S+) at \d+,\d+ \d+x\d+ rows="([^"]*)"', log)
+    rows = mc.group(2).split("|") if mc else []
+    want_rows = {0: f"INCIDENT {r['id']}", 3: f"caught {caught} ms \u00b7 restored {restored} ms", 4: "handed back, no restart"}
+    out.append((len(rows) == 6 and all(rows[i] == v for i, v in want_rows.items()),
+                f"incident card logged with this incident's id, caught/restored ms and action ({rows[:1] + rows[3:5]})"))
+    out.append((f"CARD hidden {r['id']} (timeout)" in log, "card hidden after card_ms"))
+    try:
+        from PIL import Image
+    except ImportError:
+        out.append((False, "Pillow needed to read back banner.png / card.png"))
+        return out
+    bp, cp = run / "banner.png", run / "card.png"
+    if bp.exists() and m:
+        img = Image.open(bp).convert("RGB")
+        x0, y0, w, h = BANNER
+        px = img.crop((x0, y0, x0 + w, y0 + h)).load()
+        cols = [x for x in range(w) if any(not near(px[x, y], AMBER) for y in range(h))]
+        amber = sum(near(px[x, y], AMBER) for x in range(w) for y in range(h)) / (w * h)
+        lx, lw = int(m.group(1)), int(m.group(2))
+        ok = bool(cols) and abs(cols[0] - lx) <= 4 and abs(cols[-1] + 1 - (lx + lw)) <= 6 and 0.6 <= amber < 0.98
+        out.append((ok, f"banner read back: amber {amber:.2f}, text spans x {cols[0] if cols else '-'}..{cols[-1] + 1 if cols else '-'}"
+                        f" vs drawn {lx}..{lx + lw} (+-4/6 px)"))
+    else:
+        out.append((False, "banner.png captured (ttshot)"))
+    if cp.exists():
+        img = Image.open(cp).convert("RGB")
+        x0, y0, w, h = CARD
+        px = img.crop((x0, y0, x0 + w, y0 + h)).load()
+        bg = sum(near(px[x, y], CARD_BG, 6) for x in range(w) for y in range(h)) / (w * h)
+        lit = sum(near(px[x, y], LIT, 6) for x in range(w) for y in range(h))
+        stripe = all(near(px[x, y], AMBER) for x in range(w) for y in range(4))
+        out.append((bg >= 0.6 and lit >= 200 and stripe, f"card read back: background {bg:.2f}, {lit} lit text px, amber top stripe {stripe}"))
+    else:
+        out.append((False, "card.png captured (ttshot)"))
+    return out
 
 
 WARNINGS: list[str] = []
@@ -95,12 +153,14 @@ def check(run: Path, cls: str) -> list[tuple[bool, str]]:
     elif kill is False:
         out.append((not killed and int(r["restarts"]) == 0, "no kill, no restart"))
     out.append((int(r["t_true_ns"]) > t_detect, "hand-back: a verified-true renderer frame after detection (t_true set)"))
-    if cls == "accept":
+    if cls in ("accept", "debug"):
         p = run / "heal.txt"
         m = re.search(r"t_command_ns=(\d+)", p.read_text()) if p.exists() else None
         t_heal = int(m.group(1)) if m else None
         out.append((t_heal is not None and t_detect < t_heal < int(r["t_true_ns"]),
                     f"heal sent during the hold, before the hand-back (t_heal {t_heal})"))
+    if cls == "debug":
+        out += check_debug(run, r)
     if cls == "crash":
         out.append((int(r["new_pid"]) > 0 and r["new_pid"] != r["renderer_pid"], f"a new renderer registered (pid {r['renderer_pid']} -> {r['new_pid']})"))
     if cls == "misdraw":

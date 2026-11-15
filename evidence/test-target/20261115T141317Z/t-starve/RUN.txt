@@ -1,0 +1,1 @@
+run t class=starve inject=starve heal_at=- conf_extra=- at=12.221 accel=QEMU(TCG) policy=0 debug=0 cpu=3 scope=renderer sup=script hog_prio=40 hog_ms=3000
