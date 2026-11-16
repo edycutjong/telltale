@@ -1,0 +1,672 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Telltale: the car stopped, the speedometer didn't</title>
+<meta name="description" content="An isolated QNX 8.0 monitor that reads back what the instrument cluster actually shows and puts the true speed back on the glass. 200 of 200 injected faults caught, 0 false alarms in 91,029 checks (QEMU TCG).">
+<link rel="canonical" href="https://telltale.edycu.dev/">
+<meta property="og:type" content="website">
+<meta property="og:site_name" content="Telltale">
+<meta property="og:title" content="Telltale: the car stopped, the speedometer didn't">
+<meta property="og:description" content="An isolated QNX 8.0 monitor reads back the cluster's pixels and puts the truth back on the glass. 200/200 injected faults caught, 0 missed (QEMU TCG).">
+<meta property="og:url" content="https://telltale.edycu.dev/">
+<meta property="og:image" content="https://telltale.edycu.dev/assets/og-image.png?v=p4">
+<meta property="og:image:width" content="2400">
+<meta property="og:image:height" content="1260">
+<meta property="og:image:alt" content="Telltale: a frozen cluster at 48 km/h beside the verified 0, over the speed trace of a real stop.">
+<meta name="twitter:card" content="summary_large_image">
+<meta name="twitter:image" content="https://telltale.edycu.dev/assets/og-image.png?v=p4">
+<meta name="theme-color" content="#EFE9DC">
+<link rel="icon" href="assets/icon.svg" type="image/svg+xml">
+<link rel="apple-touch-icon" href="assets/icon-512.png">
+<link rel="preload" href="assets/fonts/D-DIN-Bold.otf" as="font" type="font/otf" crossorigin>
+<link rel="preload" href="assets/fonts/overpass-var.woff2" as="font" type="font/woff2" crossorigin>
+<style>
+@font-face { font-family: "D-DIN"; src: url(assets/fonts/D-DIN-Bold.otf) format("opentype"); font-weight: 700; font-display: swap; }
+@font-face { font-family: "Overpass"; src: url(assets/fonts/overpass-var.woff2) format("woff2"); font-weight: 100 900; font-display: swap; }
+@font-face { font-family: "Overpass Mono"; src: url(assets/fonts/overpass-mono-var.woff2) format("woff2"); font-weight: 300 700; font-display: swap; }
+/* shared by the landing and the deck: design.md §4 tokens (verbatim) + the small-text amendment + the chart components */
+:root {
+  --bg:      #EFE9DC;
+  --ink:     #1C1B19;
+  --muted:   #6E6A61;
+  --before:  #C8321E;
+  --after:   #1F7A4D;
+  --rule:    #B9B1A0;
+  --glass:   #0E0D0B;
+  --lit:     #F4F1E8;
+  --iso-red:   #E5322D;
+  --iso-amber: #F2A900;
+  --iso-green: #2FB34A;
+  --iso-blue:  #2F6FE0;
+  --font-display: "D-DIN", "Barlow Condensed", "Arial Narrow", sans-serif;
+  --font-body:    "Overpass", "Helvetica Neue", Arial, sans-serif;
+  --font-data:    "Overpass Mono", "Menlo", monospace;
+  /* small-text shades (design.md amendment, measured on --bg) */
+  --text-mid: #57534B; --text-low: #67635A; --text-lie: #B32C1A; --text-truth: #1C6F46;
+  --sheet: #F6F2E9; --band: #E5DECE; --hair: rgba(28,27,25,.14);
+}
+.tt-glass { background: var(--glass); color: var(--lit); border-radius: 16px; position: relative;
+  box-shadow: 0 22px 40px -22px rgba(28,27,25,.65), inset 0 0 0 1px rgba(244,241,232,.07), inset 0 1px 0 rgba(244,241,232,.10); }
+.tt-glass .dg { font: 700 1em/1 var(--font-display); font-variant-numeric: tabular-nums; letter-spacing: .01em; }
+.tt-glass .lamps { position: absolute; left: 14px; top: 12px; display: flex; gap: 6px; }
+.tt-glass .lamps i { width: 11px; height: 11px; border-radius: 2px; background: #2A2824; display: block; }
+.tt-glass .lamps i.on { background: var(--iso-green); }
+.tt-glass .st { position: absolute; right: 14px; bottom: 11px; font: 600 11px/1 var(--font-data); letter-spacing: .16em; text-transform: uppercase; }
+.tt-glass .bn { position: absolute; left: 0; right: 0; bottom: 0; height: 26%; background: var(--iso-amber); color: var(--glass);
+  border-radius: 0 0 16px 16px; display: flex; align-items: center; justify-content: center; font: 700 clamp(9px, .8vw, 13px)/1 var(--font-display);
+  letter-spacing: .06em; opacity: 0; }
+/* strip chart */
+.strip-w, .strip-p, .bench, .abl, .disc { display: block; width: 100%; height: auto; overflow: visible; }
+.g-s { stroke: var(--rule); stroke-width: 1; opacity: .55; }
+.g-v { stroke: var(--rule); stroke-width: 1; }
+.ax { font: 500 12px var(--font-data); fill: var(--text-low); }
+.truth { fill: none; stroke: var(--ink); stroke-width: 3; stroke-linejoin: round; stroke-linecap: round; }
+.lie { fill: none; stroke: var(--before); stroke-width: 3; stroke-dasharray: 11 8; }
+.armed { fill: none; stroke: var(--before); stroke-width: 3; }
+.tick { stroke: var(--after); stroke-width: 5; stroke-linecap: round; }
+.stylus { stroke: var(--ink); stroke-width: 1; opacity: 0; }
+.lb { font: 600 14px var(--font-data); fill: var(--ink); }
+.lb.tr { fill: var(--text-truth); } .lb.li { fill: var(--text-lie); }
+.strip-p .ax { font-size: 11px; }
+/* bench strip plot */
+.bench .dot { fill: var(--ink); opacity: .55; }
+.bench .p95 { stroke: var(--ink); stroke-width: 3; }
+.bench .pv { font: 600 13px var(--font-data); fill: var(--ink); }
+.bench .cl { font: 700 19px var(--font-display); fill: var(--ink); letter-spacing: .04em; }
+.bench .tgt { stroke: var(--muted); stroke-width: 1.5; stroke-dasharray: 5 5; }
+.abl .ab { fill: var(--before); opacity: .85; }
+/* the disc */
+.disc .paper { fill: var(--sheet); stroke: var(--hair); }
+.disc .ring { fill: none; stroke: var(--rule); stroke-width: 1; }
+.disc .spoke { stroke: var(--rule); stroke-width: .8; opacity: .6; }
+.disc .spoke5 { stroke: var(--muted); stroke-width: 1.2; }
+.disc .truth-d { fill: none; stroke: var(--ink); stroke-width: 1.6; stroke-linejoin: round; }
+.disc .hub { fill: var(--bg); stroke: var(--hair); }
+
+* { box-sizing: border-box; margin: 0; }
+html { overflow-x: clip; scroll-behavior: smooth; scroll-padding-top: 72px; }
+body { background: var(--bg); color: var(--ink); font: 400 18px/1.6 var(--font-body); -webkit-font-smoothing: antialiased; }
+body::before { content: ""; position: fixed; inset: 0; pointer-events: none; z-index: 50; opacity: .045;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='180' height='180'%3E%3Cfilter id='n'%3E%3CfeTurbulence baseFrequency='.85' numOctaves='2' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='180' height='180' filter='url(%23n)'/%3E%3C/svg%3E"); }
+::selection { background: rgba(31,122,77,.22); }
+:focus-visible { outline: 3px solid var(--after); outline-offset: 3px; border-radius: 4px; }
+a { color: inherit; }
+.wrap { max-width: 1240px; margin: 0 auto; padding: 0 40px; }
+.lab { font: 600 12px/1.3 var(--font-data); letter-spacing: .16em; text-transform: uppercase; color: var(--text-low); }
+.lab.li { color: var(--text-lie); } .lab.tr { color: var(--text-truth); }
+h2 { font: 700 clamp(36px, 4.2vw, 58px)/1 var(--font-display); letter-spacing: -.005em; max-width: 18em; }
+h3 { font: 700 26px/1.1 var(--font-display); }
+p.lede { color: var(--text-mid); max-width: 38em; margin-top: 18px; }
+code, .mono { font-family: var(--font-data); font-size: .86em; }
+.chip { display: inline-block; font: 600 12px/1 var(--font-data); padding: 6px 9px 5px; border: 1px solid var(--hair); border-radius: 6px; background: var(--sheet); color: var(--ink); white-space: nowrap; }
+/* nav */
+.nav { position: sticky; top: 0; z-index: 40; background: rgba(239,233,220,.9); backdrop-filter: blur(8px); border-bottom: 1px solid transparent; transition: border-color .2s; }
+.nav.sc { border-bottom-color: var(--hair); }
+.nav .wrap { display: flex; align-items: center; gap: 26px; height: 64px; }
+.brand { display: flex; align-items: center; gap: 10px; text-decoration: none; font: 700 26px/1 var(--font-display); }
+.brand img { width: 30px; height: 30px; }
+.brand em { font-style: normal; color: var(--before); }
+.nav ul { display: flex; gap: 22px; list-style: none; padding: 0; margin-left: auto; font: 600 13px/1 var(--font-body); }
+.nav ul a { text-decoration: none; color: var(--text-mid); padding: 8px 0; border-bottom: 2px solid transparent; transition: color .15s, border-color .15s; }
+.nav ul a:hover { color: var(--ink); border-bottom-color: var(--ink); }
+.btn { display: inline-flex; align-items: center; gap: 9px; font: 700 15px/1 var(--font-body); text-decoration: none; padding: 13px 18px 12px; border-radius: 10px;
+  border: 1.5px solid var(--ink); transition: transform .15s ease, background .15s, color .15s, box-shadow .15s; }
+.btn:hover { transform: translateY(-2px); box-shadow: 0 8px 18px -10px rgba(28,27,25,.6); }
+.btn:active { transform: translateY(0); box-shadow: none; }
+.btn.solid { background: var(--ink); color: var(--lit); }
+.btn.solid:hover { background: #33312d; }
+.btn.line:hover { background: var(--sheet); }
+.btn svg { width: 16px; height: 16px; }
+.nav .btn { padding: 10px 14px 9px; font-size: 14px; }
+/* hero */
+.hero { padding: 34px 0 0; }
+.hero .top { display: grid; grid-template-columns: max-content minmax(0, 1fr); gap: 56px; align-items: end; }
+.hero .top > div:last-child { padding-bottom: 6px; }
+h1 { font: 700 clamp(46px, 5vw, 74px)/.96 var(--font-display); letter-spacing: -.012em; margin-top: 16px; }
+h1 > span { display: block; white-space: nowrap; }
+h1 .mark { display: inline-block; position: relative; color: var(--before); }
+h1 .mark svg { position: absolute; left: -6%; top: -24%; width: 112%; height: 142%; overflow: visible; pointer-events: none; }
+h1 .mark ellipse { fill: none; stroke: var(--before); stroke-width: 2.2; stroke-linecap: round; }
+h1 .hl { color: var(--after); }
+.hero .sub { color: var(--text-mid); font-size: 18.5px; max-width: 33em; }
+.hero .sub b { color: var(--ink); font-weight: 700; }
+.cta { display: flex; flex-wrap: wrap; gap: 12px; margin-top: 26px; }
+.proof { margin-top: 18px; font: 500 12.5px/1.5 var(--font-data); color: var(--text-low); letter-spacing: .02em; }
+/* the stage */
+.stage { position: relative; margin-top: 30px; border-top: 1px solid var(--rule); border-bottom: 1px solid var(--rule); background: linear-gradient(180deg, rgba(246,242,233,.55), rgba(246,242,233,0)); }
+.stage .chart { position: relative; max-width: 1600px; margin: 0 auto; }
+.strip-p { display: none; }
+.pair { position: absolute; left: 6.5%; bottom: 9%; width: 30%; display: grid; grid-template-columns: 1fr 1fr; gap: 14px; }
+.pair .tt-glass { height: clamp(96px, 8.8vw, 142px); display: grid; place-items: center; font-size: clamp(48px, 5vw, 84px); transition: box-shadow .25s; }
+.pair .lab { margin-bottom: 7px; font-size: 11px; }
+.pair .cnt { margin-top: 7px; font: 500 12px/1.3 var(--font-data); color: var(--text-low); }
+.pair .cnt b { font-weight: 700; }
+#gL .st { color: #FF8A73; }
+.ring48 { position: absolute; left: 18%; top: 14%; width: 64%; height: 72%; overflow: visible; pointer-events: none; }
+.ring48 ellipse { fill: none; stroke: var(--iso-red); stroke-width: 3; vector-effect: non-scaling-stroke; stroke-dasharray: 1; stroke-dashoffset: 0; }
+#gR .st { color: var(--iso-green); }
+#gR.ok { box-shadow: 0 22px 40px -22px rgba(28,27,25,.65), 0 0 0 3px var(--after); }
+#gR.hold .bn { opacity: 1; }
+.cnt.li b { color: var(--text-lie); } .cnt.tr b { color: var(--text-truth); }
+.ctrl { position: absolute; right: 2%; top: 12px; display: flex; align-items: center; gap: 12px; font: 600 12px/1 var(--font-data); color: var(--text-low); }
+.ctrl .clock { font-variant-numeric: tabular-nums; min-width: 10ch; text-align: right; }
+.ctrl button { font: 700 13px/1 var(--font-body); color: var(--ink); background: var(--sheet); border: 1.5px solid var(--ink); border-radius: 8px; padding: 8px 12px 7px; cursor: pointer; transition: transform .15s, background .15s; }
+.ctrl button:hover { background: #fff; transform: translateY(-1px); }
+.ctrl button:active { transform: translateY(0); }
+.cap { max-width: 1240px; margin: 0 auto; padding: 14px 40px 0; font: 500 13px/1.6 var(--font-data); color: var(--text-low); }
+.cap b { color: var(--ink); font-weight: 600; }
+/* zoom: inside the tick */
+.zoom { padding: 72px 0 24px; }
+.zoom .grid2 { display: grid; grid-template-columns: minmax(0, 1.1fr) minmax(0, 1fr); gap: 56px; align-items: end; }
+.zoom .ruler { margin-top: 34px; }
+.ruler { position: relative; margin-top: 8px; padding: 32px 0 0; }
+.bar { position: relative; height: 54px; border-radius: 8px; overflow: hidden; background: var(--sheet); box-shadow: inset 0 0 0 1px var(--hair); }
+.bar i { position: absolute; top: 0; bottom: 0; display: flex; align-items: center; padding-left: 10px; font: 700 12px/1.1 var(--font-data); font-style: normal; white-space: nowrap; overflow: hidden; }
+.bar .r { left: 0; width: calc(var(--safe) * 1%); background: var(--before); color: #fff; }
+.bar .a { left: calc(var(--safe) * 1%); width: calc((var(--true) - var(--safe)) * 1%); background: var(--iso-amber); color: var(--glass); }
+.bar .g { left: calc(var(--true) * 1%); right: 0; background: var(--after); color: #fff; }
+.bar .cur { position: absolute; top: -6px; bottom: -6px; width: 2px; background: var(--ink); left: 100%; opacity: 0; }
+.marks { position: relative; height: 230px; margin-top: 8px; }
+.mk { position: absolute; top: 0; left: calc(var(--p) * 1%); width: 1px; height: calc(24px + var(--d) * 46px); background: var(--ink); transition: opacity .3s; }
+.mk span { position: absolute; top: 100%; left: -4px; padding-top: 6px; width: 132px; font: 500 12px/1.35 var(--font-data); color: var(--text-mid); }
+.mk span b { display: block; font: 700 16px/1.1 var(--font-display); color: var(--ink); }
+.mk.right span { left: auto; right: -4px; text-align: right; }
+.mk.tick { width: 4px; margin-left: -1.5px; background: var(--after); }
+.zoom .src { margin-top: 10px; font: 500 12px/1.5 var(--font-data); color: var(--text-low); }
+.dim .mk:not(.on) { opacity: .25; }
+/* receipts */
+.receipts { margin-top: 64px; background: var(--band); border-top: 1px solid var(--hair); border-bottom: 1px solid var(--hair); position: relative; }
+.receipts::before { content: ""; position: absolute; inset: 0; pointer-events: none; opacity: .55; background: repeating-linear-gradient(0deg, transparent 0 31px, rgba(185,177,160,.45) 31px 32px); }
+.receipts .wrap { position: relative; display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); }
+.rc { padding: 40px 26px 34px; border-left: 1px solid rgba(28,27,25,.12); }
+.rc:first-child { border-left: 0; padding-left: 0; }
+.rc .n { font: 700 clamp(46px, 4.6vw, 70px)/1 var(--font-display); font-variant-numeric: tabular-nums; white-space: nowrap; }
+.rc .n small { font-size: .5em; color: var(--text-mid); }
+.rc p { margin-top: 10px; font-size: 15.5px; line-height: 1.45; color: var(--text-mid); }
+.rc .chip { margin-top: 14px; font-size: 11px; }
+/* demo pair */
+section.blk { padding: 96px 0 0; }
+.demo { display: grid; grid-template-columns: minmax(0, 1.25fr) minmax(0, 1fr); gap: 28px; margin-top: 40px; align-items: start; }
+.shot { position: relative; background: var(--glass); border-radius: 14px; padding: 10px; box-shadow: 0 30px 50px -34px rgba(28,27,25,.7); }
+.shot img { display: block; width: 100%; height: auto; border-radius: 6px; }
+.shot .co { position: absolute; width: 28px; height: 28px; border-radius: 50%; background: var(--lit); color: var(--glass); display: grid; place-items: center;
+  font: 700 15px/1 var(--font-display); box-shadow: 0 0 0 3px var(--glass), 0 0 0 4.5px var(--lit); transform: translate(-50%, -50%); }
+.shot figcaption { color: #CFCAC0; font: 500 12.5px/1.5 var(--font-data); padding: 12px 6px 4px; }
+.shot figcaption b { color: var(--lit); }
+.tabs { display: flex; gap: 8px; margin-bottom: 12px; }
+.tabs button { font: 600 13px/1 var(--font-data); padding: 9px 12px 8px; border-radius: 8px; border: 1.5px solid var(--ink); background: transparent; color: var(--ink); cursor: pointer; transition: background .15s, color .15s, transform .15s; }
+.tabs button:hover { transform: translateY(-1px); background: var(--sheet); }
+.tabs button[aria-selected="true"] { background: var(--ink); color: var(--lit); }
+.term { background: #161513; color: #E8E3D8; border-radius: 14px; overflow: hidden; box-shadow: 0 30px 50px -34px rgba(28,27,25,.7); }
+.term .bar2 { display: flex; justify-content: space-between; gap: 12px; padding: 12px 16px; background: #22201D; font: 600 12px/1.3 var(--font-data); color: #B8B2A6; }
+.term pre { margin: 0; padding: 18px 16px 20px; font: 500 13px/1.7 var(--font-data); white-space: pre-wrap; word-break: break-word; min-height: 260px; }
+.term .k { color: #F2A900; } .term .ok { color: #7FD69A; } .term .dm { color: #8E897F; }
+.legend { list-style: none; padding: 0; margin-top: 18px; display: grid; gap: 10px; font-size: 15.5px; color: var(--text-mid); }
+.legend b { display: inline-grid; place-items: center; width: 22px; height: 22px; margin-right: 8px; border-radius: 50%; background: var(--ink); color: var(--lit); font: 700 13px/1 var(--font-display); }
+/* how */
+.flow { margin-top: 40px; background: var(--sheet); border: 1px solid var(--hair); border-radius: 18px; padding: 22px 18px 12px; }
+.flow svg { display: block; width: 100%; height: auto; }
+.flow .nd rect { fill: #fff; stroke: var(--ink); stroke-width: 1.4; }
+.flow .nd.mon rect { stroke: var(--after); stroke-width: 2.6; }
+.flow .nd.scr rect { fill: var(--glass); stroke: var(--glass); }
+.flow .t1 { font: 700 21px var(--font-display); fill: var(--ink); }
+.flow .t2 { font: 500 12.5px var(--font-data); fill: var(--text-mid); }
+.flow .scr .t1 { fill: var(--lit); } .flow .scr .t2 { fill: #CFCAC0; }
+.flow .e { fill: none; stroke: var(--muted); stroke-width: 1.6; }
+.flow .e.red { stroke: var(--before); stroke-width: 2.2; } .flow .e.grn { stroke: var(--after); stroke-width: 2.4; }
+.flow .e.dsh { stroke-dasharray: 6 5; }
+.flow .el { font: 600 12px var(--font-data); fill: var(--text-mid); }
+.flow .el.red { fill: var(--text-lie); } .flow .el.grn { fill: var(--text-truth); }
+.bento { display: grid; grid-template-columns: repeat(6, minmax(0, 1fr)); gap: 16px; margin-top: 16px; }
+.card { background: var(--sheet); border: 1px solid var(--hair); border-radius: 16px; padding: 24px 24px 22px; position: relative; transition: transform .2s ease, box-shadow .2s ease; }
+.card:hover { transform: translateY(-3px); box-shadow: 0 18px 30px -24px rgba(28,27,25,.55); }
+.card .ic { width: 46px; height: 34px; margin-bottom: 14px; }
+.card .ic * { fill: none; stroke: var(--ink); stroke-width: 1.8; stroke-linecap: round; stroke-linejoin: round; }
+.card p { margin-top: 10px; font-size: 15.5px; line-height: 1.55; color: var(--text-mid); }
+.card .chip { margin-top: 16px; }
+.c1 { grid-column: span 3; grid-row: span 2; background: var(--glass); color: var(--lit); border-color: var(--glass); }
+.c1 p { color: #CFCAC0; font-size: 16.5px; } .c1 .ic * { stroke: var(--lit); } .c1 .chip { background: #22201D; color: var(--lit); border-color: #3A3732; }
+.c1 h3 { font-size: 32px; }
+.c2, .c3 { grid-column: span 3; } .c4, .c5 { grid-column: span 3; }
+.c1 .pix { margin-top: 22px; display: grid; grid-template-columns: repeat(16, 1fr); gap: 2px; max-width: 320px; }
+.c1 .pix i { aspect-ratio: 1; background: #2A2824; border-radius: 1px; }
+.c1 .pix i.on { background: var(--lit); }
+.crop { margin-top: 22px; } .crop img { display: block; width: 100%; max-width: 420px; height: auto; border-radius: 8px; outline: 1px solid #3A3732; }
+.crop figcaption { margin-top: 8px; font: 500 12px/1.4 var(--font-data); color: #B8B2A6; }
+.det { margin-top: 22px; font: 500 13px/1.6 var(--font-data); color: var(--text-mid); }
+/* bench */
+.benchgrid { display: grid; grid-template-columns: minmax(0, 1.6fr) minmax(0, 1fr); gap: 28px; margin-top: 40px; }
+.panel { background: var(--sheet); border: 1px solid var(--hair); border-radius: 18px; padding: 24px 24px 18px; }
+.panel h3 { font-size: 23px; }
+.panel p { margin-top: 8px; font-size: 15.5px; color: var(--text-mid); }
+.panel .chip { margin-top: 10px; white-space: normal; line-height: 1.4; }
+.note { margin-top: 18px; font-size: 15.5px; color: var(--text-mid); max-width: 60em; }
+.note b { color: var(--text-lie); font-weight: 700; }
+/* disc */
+.clean { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 56px; align-items: center; margin-top: 24px; }
+.discwrap { position: relative; max-width: 560px; }
+.disc .rot { transform-origin: 300px 300px; animation: spin 140s linear infinite; }
+@keyframes spin { to { transform: rotate(360deg); } }
+.discwrap .zero { position: absolute; inset: 0; display: grid; place-items: center; text-align: center; pointer-events: none; }
+.discwrap .zero b { display: block; font: 700 92px/1 var(--font-display); }
+.discwrap .zero span { font: 600 11px/1.3 var(--font-data); letter-spacing: .14em; text-transform: uppercase; color: var(--text-low); }
+.disc-cap { margin-top: 12px; font: 500 12.5px/1.5 var(--font-data); color: var(--text-low); max-width: 560px; }
+.big0 { font: 700 clamp(72px, 9vw, 132px)/.9 var(--font-display); }
+/* limits */
+.limits { margin-top: 110px; padding: 84px 0 90px; background: #E7E0CF; position: relative; overflow: hidden; border-top: 1px solid var(--hair); border-bottom: 1px solid var(--hair); }
+.limits::before { content: ""; position: absolute; top: 0; bottom: 0; left: max(16px, calc(50% - 640px)); width: 5px; border-left: 1px solid var(--rule); border-right: 1px solid var(--rule); }
+.limits .lab { color: var(--text-low); }
+
+.limits ol { list-style: none; padding: 0; margin-top: 38px; border-top: 1px solid var(--rule); counter-reset: q; }
+.limits li { display: grid; grid-template-columns: 70px minmax(0, 1fr); gap: 20px; padding: 24px 0; border-bottom: 1px solid var(--rule); counter-increment: q; }
+.limits li::before { content: counter(q, decimal-leading-zero); font: 700 30px/1 var(--font-display); color: var(--ink); }
+.limits blockquote { font: 400 clamp(19px, 1.8vw, 24px)/1.45 var(--font-body); max-width: 46em; }
+
+.limits cite { display: block; margin-top: 8px; font: 500 12px/1.4 var(--font-data); font-style: normal; color: var(--text-low); }
+.limits a { color: var(--ink); }
+/* codelab */
+.lab-band { display: grid; grid-template-columns: minmax(0, 1.3fr) minmax(0, 1fr); gap: 40px; align-items: center; margin-top: 0; padding: 72px 0; border-bottom: 1px solid var(--hair); }
+.lab-band .term pre { min-height: 0; }
+/* faq */
+.faq { margin-top: 32px; border-top: 1px solid var(--rule); max-width: 900px; }
+.faq details { border-bottom: 1px solid var(--rule); }
+.faq summary { cursor: pointer; list-style: none; padding: 22px 44px 22px 0; position: relative; font: 700 22px/1.2 var(--font-display); transition: color .15s; }
+.faq summary::-webkit-details-marker { display: none; }
+.faq summary::after { content: "+"; position: absolute; right: 6px; top: 18px; font: 400 28px/1 var(--font-body); transition: transform .2s; }
+.faq details[open] summary::after { transform: rotate(45deg); }
+.faq summary:hover { color: var(--text-truth); }
+.faq details p { padding: 0 0 22px; color: var(--text-mid); max-width: 44em; font-size: 16.5px; }
+footer { margin-top: 100px; padding: 40px 0 56px; border-top: 1px solid var(--rule); }
+footer .wrap { display: flex; flex-wrap: wrap; gap: 20px 40px; align-items: center; justify-content: space-between; font-size: 15px; color: var(--text-mid); }
+footer nav { display: flex; flex-wrap: wrap; gap: 8px 22px; }
+footer nav a { color: var(--ink); text-decoration: underline; text-decoration-color: var(--rule); text-underline-offset: 4px; transition: text-decoration-color .15s; }
+footer nav a:hover { text-decoration-color: var(--ink); }
+.badge { font: 600 11px/1.3 var(--font-data); letter-spacing: .1em; text-transform: uppercase; color: var(--text-low); }
+/* reveal from a visible default: JS only adds motion */
+.js .rv { transition: opacity .7s ease, transform .7s ease; }
+.js .rv.pre { opacity: 0; transform: translateY(14px); }
+@media (max-width: 1080px) {
+  .nav ul { display: none; }
+  .hero .top { grid-template-columns: minmax(0, 1fr); gap: 18px; }
+  .pair { width: 44%; left: 5%; }
+  .zoom .grid2, .demo, .benchgrid, .clean, .lab-band { grid-template-columns: minmax(0, 1fr); }
+  .receipts .wrap { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .rc:nth-child(3) { border-left: 0; padding-left: 0; }
+  .bento .card { grid-column: span 6; }
+}
+@media (max-width: 760px) {
+  body { font-size: 17px; }
+  .wrap { padding: 0 20px; }
+  .nav .btn span { display: none; }
+  h1 { font-size: clamp(40px, 11.6vw, 54px); }
+  h1 > span { white-space: normal; }
+  .hero { padding-top: 20px; }
+  .strip-w { display: none; } .strip-p { display: block; }
+  .stage { margin-top: 24px; padding-top: 14px; }
+  .pair { position: static; width: auto; padding: 0 20px 10px; gap: 10px; }
+  .pair .tt-glass { height: 92px; font-size: 54px; }
+  .pair .tt-glass .st { font-size: 9px; right: 9px; bottom: 8px; letter-spacing: .1em; }
+  .tt-glass .bn { font-size: 8px; }
+  .ctrl { position: static; padding: 6px 20px 0; justify-content: space-between; }
+  .cap { padding: 12px 20px 0; font-size: 12px; }
+  .receipts .wrap { grid-template-columns: 1fr; }
+  .rc { border-left: 0; padding: 26px 0; border-top: 1px solid rgba(28,27,25,.12); }
+  .rc:first-child { border-top: 0; }
+  .marks { height: 300px; }
+  .mk span { width: 112px; font-size: 11px; }
+  .limits li { grid-template-columns: 1fr; gap: 6px; }
+  .faq summary { font-size: 19px; }
+  .term pre { font-size: 12px; }
+  .hero { display: flex; flex-direction: column; }
+  .hero .top { display: contents; }
+  .hero .top > div { padding: 0 20px; }
+  .hero .top > div:first-child { order: 1; }
+  .hero .stage { order: 2; }
+  .hero .top > div:last-child { order: 3; padding-top: 22px; padding-bottom: 6px; }
+  .marks { height: auto; margin-top: 18px; }
+  .mk, .mk.tick { position: static; width: auto; height: auto; margin: 0; background: none; border-left: 2px solid var(--ink); padding: 2px 0 10px 12px; }
+  .mk.tick { border-left: 4px solid var(--after); }
+  .mk span, .mk.right span { position: static; width: auto; padding: 0; text-align: left; font-size: 12.5px; }
+  .mk span b { display: inline; margin-right: 8px; }
+  .bar .r, .bar .g { color: transparent; }
+  .flow { overflow-x: auto; padding-bottom: 6px; }
+  .flow svg { min-width: 760px; }
+  .flow::after { content: "scroll the diagram →"; display: block; font: 500 11px/1 var(--font-data); color: var(--text-low); padding: 8px 4px 0; position: sticky; left: 0; }
+}
+@media (min-width: 1081px) and (max-height: 820px) {
+  .hero { padding-top: 18px; } h1 { font-size: clamp(42px, 4.6vw, 66px); }
+  .stage { margin-top: 18px; } .hero .sub { font-size: 17px; }
+}
+@media (prefers-reduced-motion: reduce) {
+  html { scroll-behavior: auto; }
+  .disc .rot { animation: none; }
+  .js .rv.pre { opacity: 1; transform: none; }
+  * { transition-duration: .01ms !important; }
+}
+@media print {
+  .nav, .ctrl, .tabs, body::before { display: none !important; }
+  .js .rv.pre { opacity: 1 !important; transform: none !important; transition: none !important; }
+}
+</style>
+</head>
+<body>
+<a class="chip" href="#main" style="position:absolute;left:-999px" onfocus="this.style.left='12px'" onblur="this.style.left='-999px'">Skip to content</a>
+<header class="nav" id="nav"><div class="wrap">
+  <a class="brand" href="#top" aria-label="Telltale home"><img src="assets/icon.svg" alt="" width="30" height="30"><span>Tell<em>tale</em></span></a>
+  <ul>
+    <li><a href="#stop">The stop</a></li><li><a href="#glass">Read-back</a></li><li><a href="#how">How it works</a></li>
+    <li><a href="#bench">Bench</a></li><li><a href="#limits">Limits</a></li><li><a href="#faq">FAQ</a></li><li><a href="codelab/">Codelab</a></li>
+  </ul>
+  <a class="btn solid" aria-label="Source on GitHub" href="https://github.com/edycutjong/telltale"><svg viewBox="0 0 16 16" aria-hidden="true"><path d="M5 4 1.5 8 5 12M11 4l3.5 4L11 12" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></svg><span>Source</span></a>
+</div></header>
+
+<main id="main">
+<section class="hero" id="top">
+  <div class="wrap top">
+    <div>
+      <p class="lab">Runs on QNX 8.0 &nbsp;·&nbsp; one recorded stop, replayed at 1×</p>
+      <h1><span>The car stopped.</span><span>The speedometer <span class="mark">didn't.<svg viewBox="0 0 100 50" preserveAspectRatio="none" aria-hidden="true"><ellipse cx="50" cy="26" rx="47" ry="21" pathLength="1" id="inkE" vector-effect="non-scaling-stroke"/></svg></span></span><span class="hl">Telltale noticed.</span></h1>
+      <div class="cta">
+        <a class="btn solid" href="https://github.com/edycutjong/telltale"><svg viewBox="0 0 16 16" aria-hidden="true"><path d="M5 4 1.5 8 5 12M11 4l3.5 4L11 12" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></svg>Source on GitHub</a>
+        <a class="btn line" href="pitch/">Pitch deck</a>
+        <a class="btn line" href="codelab/">Codelab</a>
+      </div>
+    </div>
+    <div>
+      <p class="sub">A frozen instrument cluster looks healthy: a live process, crisp digits, the wrong speed. Telltale is a separate QNX 8.0 process that reads back the pixels the driver sees, every 20 ms, and puts the truth back on the glass. On this stop it was true again <b>53.2 ms</b> after the last true frame. Across <b>200 injected faults</b>, it missed <b>0</b>.</p>
+      <p class="proof">C · QNX Screen · resource managers · secpol · Apache-2.0<br>QEMU (TCG) timings on an x86_64 guest, not hardware</p>
+    </div>
+  </div>
+
+  <figure class="stage" id="stop" aria-label="Replay of one real stop">
+    <div class="chart">
+      <svg class="strip-w" viewBox="0 0 1600 350" role="img" aria-labelledby="strip-w-t"><title id="strip-w-t">Speed over time on a real stop: the true speed falls from 49.01 to 0 km/h; with the monitor off the glass stays at 48; with Telltale armed the glass is caught 20.3 ms after the last true frame and the true value is back on the glass 53.2 ms after it.</title><defs><pattern id="strip-w-h" width="7" height="7" patternUnits="userSpaceOnUse" patternTransform="rotate(45)"><line x1="0" y1="0" x2="0" y2="7" stroke="#C8321E" stroke-width="1.3" opacity=".42"/></pattern><clipPath id="strip-w-c"><rect class="tt-clip" x="0" y="0" width="1600" height="350"/></clipPath></defs><line class="g-s" x1="136.2" x2="136.2" y1="18" y2="318"/><line class="g-s" x1="256.5" x2="256.5" y1="18" y2="318"/><line class="g-s" x1="376.8" x2="376.8" y1="18" y2="318"/><line class="g-s" x1="497.1" x2="497.1" y1="18" y2="318"/><line class="g-s" x1="617.5" x2="617.5" y1="18" y2="318"/><line class="g-s" x1="737.8" x2="737.8" y1="18" y2="318"/><line class="g-s" x1="858.1" x2="858.1" y1="18" y2="318"/><line class="g-s" x1="978.4" x2="978.4" y1="18" y2="318"/><line class="g-s" x1="1098.7" x2="1098.7" y1="18" y2="318"/><line class="g-s" x1="1219.0" x2="1219.0" y1="18" y2="318"/><line class="g-s" x1="1339.4" x2="1339.4" y1="18" y2="318"/><line class="g-s" x1="1459.7" x2="1459.7" y1="18" y2="318"/><line class="g-s" x1="1580.0" x2="1580.0" y1="18" y2="318"/><line class="g-v" x1="64" x2="1580" y1="318.0" y2="318.0"/><text class="ax" x="56" y="322.0" text-anchor="end">0</text><line class="g-v" x1="64" x2="1580" y1="218.0" y2="218.0"/><text class="ax" x="56" y="222.0" text-anchor="end">20</text><line class="g-v" x1="64" x2="1580" y1="118.0" y2="118.0"/><text class="ax" x="56" y="122.0" text-anchor="end">40</text><line class="g-v" x1="64" x2="1580" y1="18.0" y2="18.0"/><text class="ax" x="56" y="22.0" text-anchor="end">60</text><text class="ax" x="72" y="34.0">km/h</text><g clip-path="url(#strip-w-c)"><path class="gap" d="M542.8 78.0 L1580.0 78.0 L1574.9 318.0 L1565.6 318.0 L1558.2 318.0 L1550.9 318.0 L1541.5 318.0 L1535.5 318.0 L1529.5 318.0 L1522.1 318.0 L1514.8 318.0 L1507.3 318.0 L1499.4 318.0 L1492.6 318.0 L1485.9 318.0 L1478.7 318.0 L1470.9 318.0 L1463.3 318.0 L1456.6 318.0 L1449.2 318.0 L1442.6 318.0 L1434.5 318.0 L1427.6 318.0 L1420.5 318.0 L1413.2 318.0 L1405.9 318.0 L1398.3 318.0 L1391.6 318.0 L1384.5 318.0 L1377.1 318.0 L1369.8 318.0 L1361.9 318.0 L1354.8 318.0 L1348.4 318.0 L1341.2 318.0 L1333.7 318.0 L1325.8 318.0 L1318.7 318.0 L1312.3 318.0 L1305.0 318.0 L1297.6 318.0 L1289.6 318.0 L1283.3 318.0 L1276.2 318.0 L1270.2 318.0 L1264.2 318.0 L1256.8 318.0 L1249.5 318.0 L1241.4 318.0 L1235.0 318.0 L1228.2 318.0 L1220.4 318.0 L1213.4 318.0 L1205.3 318.0 L1198.4 318.0 L1192.0 318.0 L1184.6 318.0 L1177.3 318.0 L1169.2 318.0 L1162.9 318.0 L1155.9 318.0 L1147.9 318.0 L1140.6 318.0 L1133.1 318.0 L1126.2 318.0 L1119.2 318.0 L1111.8 318.0 L1104.5 318.0 L1097.0 318.0 L1090.1 318.0 L1083.0 318.0 L1075.7 312.9 L1068.4 307.3 L1060.7 306.5 L1054.0 305.9 L1047.0 304.8 L1039.7 304.1 L1032.3 303.0 L1024.9 301.4 L1017.8 299.9 L1010.9 298.1 L1003.6 296.2 L994.4 293.4 L986.8 291.2 L979.6 289.1 L970.4 285.9 L964.0 284.2 L957.4 281.6 L950.6 278.9 L943.3 276.0 L935.9 273.1 L927.8 270.1 L921.1 266.9 L914.5 263.6 L907.2 260.1 L899.8 256.7 L892.1 253.0 L885.0 249.3 L877.7 245.6 L871.1 242.1 L863.1 238.2 L856.0 234.1 L849.2 230.6 L841.6 226.2 L834.9 222.1 L826.9 218.1 L819.8 214.1 L812.9 209.9 L805.5 205.8 L798.4 201.8 L790.5 197.7 L783.7 194.0 L776.8 190.3 L769.4 186.2 L762.1 182.2 L754.1 178.2 L747.5 174.8 L740.7 170.3 L733.3 166.6 L726.3 162.8 L718.3 159.1 L711.3 156.0 L704.2 152.1 L696.9 149.0 L689.9 145.8 L681.8 142.8 L675.5 139.6 L668.5 136.7 L661.1 133.2 L653.8 130.3 L645.7 127.5 L639.4 123.9 L632.3 120.7 L625.0 118.2 L617.6 115.1 L609.6 111.7 L603.3 109.1 L596.3 106.2 L588.8 103.0 L581.5 100.4 L573.4 97.5 L566.8 94.5 L559.9 91.5 L552.7 89.1 L545.4 86.7 Z" fill="url(#strip-w-h)"/><path class="lie" d="M542.8 78.0 L1580.0 78.0"/><path class="armed" d="M542.8 78.0 L549.2 78.0 L549.2 87.9"/><path class="truth" d="M68.0 97.6 L74.7 96.9 L82.0 96.6 L89.4 96.0 L96.7 95.8 L104.1 95.9 L110.7 95.0 L118.1 94.7 L125.5 94.6 L132.9 93.9 L140.3 94.3 L146.9 93.2 L154.2 92.9 L161.8 92.8 L168.9 92.2 L176.3 91.5 L183.0 91.8 L191.1 91.0 L198.3 90.8 L205.0 89.8 L212.4 89.5 L219.0 89.6 L227.2 88.8 L234.0 88.3 L241.2 88.2 L248.6 86.8 L255.3 86.1 L263.2 84.9 L270.6 84.8 L277.3 83.8 L284.4 83.5 L291.4 82.9 L299.3 81.9 L306.7 81.9 L313.5 81.2 L320.6 80.7 L328.0 80.2 L335.3 79.1 L342.7 78.9 L350.2 78.3 L356.6 78.4 L364.2 77.5 L371.5 76.4 L378.8 76.4 L386.1 76.1 L392.8 76.0 L400.3 75.4 L407.6 74.6 L414.8 74.3 L422.1 73.8 L429.0 74.0 L437.1 73.5 L443.7 73.0 L450.9 72.8 L458.4 72.6 L465.1 72.5 L473.2 72.1 L479.9 72.1 L487.3 72.8 L494.5 72.8 L501.1 73.9 L509.2 75.7 L516.4 76.9 L523.7 78.7 L530.7 81.0 L537.4 83.7 L545.4 86.7 L552.7 89.1 L559.9 91.5 L566.8 94.5 L573.4 97.5 L581.5 100.4 L588.8 103.0 L596.3 106.2 L603.3 109.1 L609.6 111.7 L617.6 115.1 L625.0 118.2 L632.3 120.7 L639.4 123.9 L645.7 127.5 L653.8 130.3 L661.1 133.2 L668.5 136.7 L675.5 139.6 L681.8 142.8 L689.9 145.8 L696.9 149.0 L704.2 152.1 L711.3 156.0 L718.3 159.1 L726.3 162.8 L733.3 166.6 L740.7 170.3 L747.5 174.8 L754.1 178.2 L762.1 182.2 L769.4 186.2 L776.8 190.3 L783.7 194.0 L790.5 197.7 L798.4 201.8 L805.5 205.8 L812.9 209.9 L819.8 214.1 L826.9 218.1 L834.9 222.1 L841.6 226.2 L849.2 230.6 L856.0 234.1 L863.1 238.2 L871.1 242.1 L877.7 245.6 L885.0 249.3 L892.1 253.0 L899.8 256.7 L907.2 260.1 L914.5 263.6 L921.1 266.9 L927.8 270.1 L935.9 273.1 L943.3 276.0 L950.6 278.9 L957.4 281.6 L964.0 284.2 L970.4 285.9 L979.6 289.1 L986.8 291.2 L994.4 293.4 L1003.6 296.2 L1010.9 298.1 L1017.8 299.9 L1024.9 301.4 L1032.3 303.0 L1039.7 304.1 L1047.0 304.8 L1054.0 305.9 L1060.7 306.5 L1068.4 307.3 L1075.7 312.9 L1083.0 318.0 L1090.1 318.0 L1097.0 318.0 L1104.5 318.0 L1111.8 318.0 L1119.2 318.0 L1126.2 318.0 L1133.1 318.0 L1140.6 318.0 L1147.9 318.0 L1155.9 318.0 L1162.9 318.0 L1169.2 318.0 L1177.3 318.0 L1184.6 318.0 L1192.0 318.0 L1198.4 318.0 L1205.3 318.0 L1213.4 318.0 L1220.4 318.0 L1228.2 318.0 L1235.0 318.0 L1241.4 318.0 L1249.5 318.0 L1256.8 318.0 L1264.2 318.0 L1270.2 318.0 L1276.2 318.0 L1283.3 318.0 L1289.6 318.0 L1297.6 318.0 L1305.0 318.0 L1312.3 318.0 L1318.7 318.0 L1325.8 318.0 L1333.7 318.0 L1341.2 318.0 L1348.4 318.0 L1354.8 318.0 L1361.9 318.0 L1369.8 318.0 L1377.1 318.0 L1384.5 318.0 L1391.6 318.0 L1398.3 318.0 L1405.9 318.0 L1413.2 318.0 L1420.5 318.0 L1427.6 318.0 L1434.5 318.0 L1442.6 318.0 L1449.2 318.0 L1456.6 318.0 L1463.3 318.0 L1470.9 318.0 L1478.7 318.0 L1485.9 318.0 L1492.6 318.0 L1499.4 318.0 L1507.3 318.0 L1514.8 318.0 L1522.1 318.0 L1529.5 318.0 L1535.5 318.0 L1541.5 318.0 L1550.9 318.0 L1558.2 318.0 L1565.6 318.0 L1574.9 318.0"/></g><line class="tick" x1="545.3" x2="545.3" y1="16.0" y2="133.0"/><line class="stylus" x1="1580.0" x2="1580.0" y1="18" y2="318"/><text class="lb tr" x="555.3" y="30.0">caught 20.3 ms · truth back on glass 53.2 ms</text><text class="lb li" x="1580.0" y="69.0" text-anchor="end">monitor off: the glass stays 48</text><text class="lb" x="1580.0" y="309.0" text-anchor="end">truth: 0 km/h</text></svg>
+      <div class="ctrl"><span class="clock" id="clk">t = 21.0 s</span><span class="chip">1×</span><button type="button" id="replay">Replay the stop</button></div>
+      <div class="pair">
+        <div><p class="lab li">Monitor off</p>
+          <div class="tt-glass" id="gL"><span class="lamps" aria-hidden="true"><i class="on"></i><i></i><i></i></span><span class="dg" id="dL">48</span><svg class="ring48" id="r48" viewBox="0 0 100 60" preserveAspectRatio="none" aria-hidden="true"><ellipse cx="50" cy="31" rx="45" ry="25" pathLength="1"/></svg><span class="st" id="sL">frozen</span></div>
+          <p class="cnt li">wrong for <b id="cL">8.6 s</b> and counting</p></div>
+        <div><p class="lab tr">Telltale armed</p>
+          <div class="tt-glass ok" id="gR"><span class="lamps" aria-hidden="true"><i></i><i></i><i></i></span><span class="dg" id="dR">0</span><span class="st" id="sR">verified</span><span class="bn">DISPLAY FAULT · SHOWING TRUE SPEED</span></div>
+          <p class="cnt tr">true again after <b id="cR">53.2 ms</b></p></div>
+      </div>
+      <svg class="strip-p" viewBox="0 0 400 300" role="img" aria-labelledby="strip-p-t"><title id="strip-p-t">Speed over time on a real stop: the true speed falls from 49.01 to 0 km/h; with the monitor off the glass stays at 48; with Telltale armed the glass is caught 20.3 ms after the last true frame and the true value is back on the glass 53.2 ms after it.</title><defs><pattern id="strip-p-h" width="7" height="7" patternUnits="userSpaceOnUse" patternTransform="rotate(45)"><line x1="0" y1="0" x2="0" y2="7" stroke="#C8321E" stroke-width="1.3" opacity=".42"/></pattern><clipPath id="strip-p-c"><rect class="tt-clip" x="0" y="0" width="400" height="300"/></clipPath></defs><line class="g-s" x1="51.0" x2="51.0" y1="22" y2="266"/><line class="g-s" x1="93.7" x2="93.7" y1="22" y2="266"/><line class="g-s" x1="136.3" x2="136.3" y1="22" y2="266"/><line class="g-s" x1="178.9" x2="178.9" y1="22" y2="266"/><line class="g-s" x1="221.5" x2="221.5" y1="22" y2="266"/><line class="g-s" x1="264.1" x2="264.1" y1="22" y2="266"/><line class="g-s" x1="306.8" x2="306.8" y1="22" y2="266"/><line class="g-s" x1="349.4" x2="349.4" y1="22" y2="266"/><line class="g-s" x1="392.0" x2="392.0" y1="22" y2="266"/><line class="g-v" x1="34" x2="392" y1="266.0" y2="266.0"/><text class="ax" x="26" y="270.0" text-anchor="end">0</text><line class="g-v" x1="34" x2="392" y1="184.7" y2="184.7"/><text class="ax" x="26" y="188.7" text-anchor="end">20</text><line class="g-v" x1="34" x2="392" y1="103.3" y2="103.3"/><text class="ax" x="26" y="107.3" text-anchor="end">40</text><line class="g-v" x1="34" x2="392" y1="22.0" y2="22.0"/><text class="ax" x="26" y="26.0" text-anchor="end">60</text><text class="ax" x="42" y="38.0">km/h</text><g clip-path="url(#strip-p-c)"><path class="gap" d="M109.8 70.8 L392.0 70.8 L390.0 266.0 L387.2 266.0 L384.7 266.0 L382.4 266.0 L379.8 266.0 L377.2 266.0 L374.4 266.0 L372.1 266.0 L369.6 266.0 L367.5 266.0 L365.4 266.0 L362.8 266.0 L360.2 266.0 L357.3 266.0 L355.0 266.0 L352.6 266.0 L349.8 266.0 L347.4 266.0 L344.5 266.0 L342.1 266.0 L339.8 266.0 L337.2 266.0 L334.6 266.0 L331.7 266.0 L329.5 266.0 L327.0 266.0 L324.2 266.0 L321.6 266.0 L319.0 266.0 L316.5 266.0 L314.0 266.0 L311.4 266.0 L308.8 266.0 L306.2 266.0 L303.7 266.0 L301.2 266.0 L298.6 261.9 L296.0 257.3 L293.3 256.6 L290.9 256.1 L288.4 255.3 L285.8 254.7 L283.2 253.8 L280.6 252.5 L278.1 251.2 L275.6 249.8 L273.1 248.3 L269.8 246.0 L267.1 244.2 L264.6 242.5 L261.3 239.9 L259.0 238.5 L256.7 236.4 L254.3 234.2 L251.7 231.8 L249.1 229.5 L246.2 227.0 L243.9 224.4 L241.5 221.8 L238.9 218.9 L236.3 216.1 L233.6 213.1 L231.1 210.1 L228.5 207.1 L226.1 204.3 L223.3 201.1 L220.8 197.8 L218.4 194.9 L215.7 191.3 L213.3 188.0 L210.5 184.7 L208.0 181.5 L205.5 178.1 L202.9 174.7 L200.4 171.5 L197.6 168.2 L195.2 165.1 L192.7 162.1 L190.1 158.8 L187.5 155.6 L184.7 152.3 L182.4 149.5 L179.9 145.9 L177.3 142.9 L174.9 139.7 L172.0 136.7 L169.5 134.2 L167.0 131.1 L164.4 128.5 L161.9 125.9 L159.1 123.5 L156.8 120.9 L154.4 118.5 L151.8 115.7 L149.2 113.3 L146.3 111.1 L144.0 108.2 L141.5 105.5 L139.0 103.5 L136.3 101.0 L133.5 98.2 L131.3 96.1 L128.8 93.7 L126.1 91.1 L123.5 89.0 L120.7 86.7 L118.3 84.2 L115.9 81.8 L113.4 79.8 L110.8 77.9 Z" fill="url(#strip-p-h)"/><path class="lie" d="M109.8 70.8 L392.0 70.8"/><path class="armed" d="M109.8 70.8 L112.1 70.8 L112.1 78.9"/><path class="truth" d="M36.3 71.7 L38.9 71.6 L41.6 71.0 L43.9 71.1 L46.6 70.4 L49.2 69.5 L51.7 69.5 L54.3 69.3 L56.7 69.2 L59.4 68.7 L62.0 68.1 L64.5 67.8 L67.1 67.3 L69.5 67.5 L72.4 67.1 L74.7 66.7 L77.3 66.6 L79.9 66.4 L82.3 66.3 L85.2 66.0 L87.6 66.0 L90.2 66.6 L92.7 66.6 L95.1 67.5 L97.9 68.9 L100.5 69.9 L103.1 71.4 L105.6 73.2 L107.9 75.4 L110.8 77.9 L113.4 79.8 L115.9 81.8 L118.3 84.2 L120.7 86.7 L123.5 89.0 L126.1 91.1 L128.8 93.7 L131.3 96.1 L133.5 98.2 L136.3 101.0 L139.0 103.5 L141.5 105.5 L144.0 108.2 L146.3 111.1 L149.2 113.3 L151.8 115.7 L154.4 118.5 L156.8 120.9 L159.1 123.5 L161.9 125.9 L164.4 128.5 L167.0 131.1 L169.5 134.2 L172.0 136.7 L174.9 139.7 L177.3 142.9 L179.9 145.9 L182.4 149.5 L184.7 152.3 L187.5 155.6 L190.1 158.8 L192.7 162.1 L195.2 165.1 L197.6 168.2 L200.4 171.5 L202.9 174.7 L205.5 178.1 L208.0 181.5 L210.5 184.7 L213.3 188.0 L215.7 191.3 L218.4 194.9 L220.8 197.8 L223.3 201.1 L226.1 204.3 L228.5 207.1 L231.1 210.1 L233.6 213.1 L236.3 216.1 L238.9 218.9 L241.5 221.8 L243.9 224.4 L246.2 227.0 L249.1 229.5 L251.7 231.8 L254.3 234.2 L256.7 236.4 L259.0 238.5 L261.3 239.9 L264.6 242.5 L267.1 244.2 L269.8 246.0 L273.1 248.3 L275.6 249.8 L278.1 251.2 L280.6 252.5 L283.2 253.8 L285.8 254.7 L288.4 255.3 L290.9 256.1 L293.3 256.6 L296.0 257.3 L298.6 261.9 L301.2 266.0 L303.7 266.0 L306.2 266.0 L308.8 266.0 L311.4 266.0 L314.0 266.0 L316.5 266.0 L319.0 266.0 L321.6 266.0 L324.2 266.0 L327.0 266.0 L329.5 266.0 L331.7 266.0 L334.6 266.0 L337.2 266.0 L339.8 266.0 L342.1 266.0 L344.5 266.0 L347.4 266.0 L349.8 266.0 L352.6 266.0 L355.0 266.0 L357.3 266.0 L360.2 266.0 L362.8 266.0 L365.4 266.0 L367.5 266.0 L369.6 266.0 L372.1 266.0 L374.4 266.0 L377.2 266.0 L379.8 266.0 L382.4 266.0 L384.7 266.0 L387.2 266.0 L390.0 266.0"/></g><line class="tick" x1="110.7" x2="110.7" y1="20.0" y2="115.5"/><line class="stylus" x1="392.0" x2="392.0" y1="22" y2="266"/></svg>
+    </div>
+    <figcaption class="cap">One real stop from the comma2k19 dataset: <b>49.01 → 0 km/h in 4.8 s</b>. Right: incident <b>TT-FRZ-0001</b>, recorded on this stop at build 985ab29. Left: monitor off, as in the ablation: glass wrong a median <b>29.9 s of 30</b>, still wrong at the end in 40 of 40 runs. Glasses redrawn from those records; QEMU (TCG), not hardware.</figcaption>
+  </figure>
+</section>
+
+<section class="zoom" id="tick">
+  <div class="wrap">
+    <div class="grid2 rv">
+      <div><p class="lab tr">Inside the green tick · ×20 slower</p>
+        <h2 style="margin-top:14px">At 1× it is a hairline. Slowed down, it is a procedure.</h2></div>
+      <div><p class="lede" style="margin-top:0">Cover the lie with the truth first, then repair. Each mark is a timestamp from incident TT-FRZ-0001, counted from the last frame verified true.</p>
+        <p class="src">incidents.csv · TICK_STALL, cause hung · shown 48, truth 46 km/h · QEMU TCG</p></div>
+    </div>
+    <div class="ruler rv" id="ruler" style="--safe:14.78;--true:88.82">
+      <div class="bar"><i class="r">glass unverified</i><i class="a">safe layer: true speed + banner</i><i class="g">handed back</i><span class="cur" id="cur"></span></div>
+      <div class="marks">
+        <div class="mk" style="--p:0;--d:0"><span><b>0 ms</b>last true frame</span></div>
+        <div class="mk tick" style="--p:5.64;--d:1.35"><span><b>20.3 ms</b>caught: TICK_STALL, renderer hung</span></div>
+        <div class="mk" style="--p:14.78;--d:0"><span><b>53.2 ms</b>true value read back on the glass</span></div>
+        <div class="mk" style="--p:16.32;--d:2.7"><span><b>58.7 ms</b>SIGKILL to the hung renderer</span></div>
+        <div class="mk right" style="--p:82.23;--d:0"><span><b>296.0 ms</b>new renderer registers</span></div>
+        <div class="mk right" style="--p:88.82;--d:1.35"><span><b>319.7 ms</b>its first verified frame: hand-back</span></div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<section class="receipts" aria-label="Measured results">
+  <div class="wrap">
+    <div class="rc rv"><div class="n"><span data-c="200">200</span><small>/200</small></div><p>injected faults caught, 0 missed: 4 classes × 50 on the QNX guest</p><span class="chip">evidence/bench-faults.csv</span></div>
+    <div class="rc rv"><div class="n"><span data-c="0">0</span></div><p>false alarms in 91,029 checks over 30 minutes of a real drive</p><span class="chip">evidence/bench-clean.csv</span></div>
+    <div class="rc rv"><div class="n"><span data-c="29.9" data-d="1">29.9</span><small> s</small></div><p>of 30, the glass stays wrong with the monitor off (median, n = 40)</p><span class="chip">evidence/bench-ablation.csv</span></div>
+    <div class="rc rv"><div class="n"><span data-c="163">163</span><small>/0</small></div><p>on-target test cases passed / failed, incl. 22 secpol denial checks</p><span class="chip">evidence/test-target/…/summary.txt</span></div>
+  </div>
+</section>
+
+<section class="blk" id="glass">
+  <div class="wrap">
+    <p class="lab">What the monitor saw</p>
+    <h2 style="margin-top:14px">Read back from the glass, never asked of the renderer.</h2>
+    <p class="lede">The cluster's own pixels, read from the composed display with <code>screen_read_display</code> on the QNX guest. This run used the engineering view, which labels each decision.</p>
+    <div class="demo">
+      <div class="rv">
+        <div class="tabs" role="tablist" aria-label="Read-back images">
+          <button type="button" role="tab" id="tb1" aria-selected="false" aria-controls="shotfig" data-src="assets/readback/banner.png" data-t="+466 ms after the catch · during the hold" data-alt="Read-back of the QNX cluster during the hold: digits 42 and an amber engineering banner, DISPLAY FAULT CAUGHT, VALUE_MISMATCH, 19 ms.">During the hold</button>
+          <button type="button" role="tab" id="tb2" aria-selected="true" aria-controls="shotfig" data-src="assets/readback/card.png" data-t="+2362 ms after the catch · after hand-back" data-alt="Read-back of the QNX cluster after hand-back: digits 20, lamps, and the incident card TT-VAL-0001: shown 48, truth 47 km/h, caught 19 ms.">After hand-back</button>
+        </div>
+        <figure class="shot" id="shotfig" role="tabpanel">
+          <img id="shotimg" src="assets/readback/card.png" width="1280" height="768" alt="Read-back of the QNX cluster after hand-back: digits 20, lamps, and the incident card TT-VAL-0001: shown 48, truth 47 km/h, caught 19 ms." loading="lazy">
+          <span class="co" style="left:44.5%;top:27%">1</span><span class="co" style="left:12.6%;top:9%">2</span><span class="co" id="co3" style="left:65.6%;top:15.5%">3</span>
+          <figcaption><b id="shott">+2362 ms after the catch · after hand-back</b> · incident TT-VAL-0001 · run t-debug, build 985ab29 · 1280 × 768 composed display</figcaption>
+        </figure>
+        <ol class="legend"><li><b>1</b>speed digits as composed, decoded against the D-DIN glyph atlas</li><li><b>2</b>the lamp row: 6 lamps checked against the vehicle state</li><li><b>3</b>drawn by Telltale, not the renderer: banner during the hold, incident card after</li></ol>
+      </div>
+      <div class="term rv" aria-label="telltale.log replay">
+        <div class="bar2"><span>telltale.log · same run</span><span>QEMU TCG</span></div>
+        <pre id="log">DETECT TT-VAL-0001 VALUE_MISMATCH shown=48 truth=47 lamps_shown=0x01 lamps_truth=0x00 caught_ms=19.1
+NORMAL -> SAFE-HOLD
+SAFE verified on glass TT-VAL-0001 (21.8 ms after detect, composed check)
+CARD shown TT-VAL-0001 at 868,144 404x188 rows="INCIDENT TT-VAL-0001|VALUE_MISMATCH|shown 48 · truth 47 km/h|caught 19 ms · restored 1757 ms|handed back, no restart|service: cat /dev/telltale"
+SAFE-HOLD -> NORMAL</pre>
+      </div>
+    </div>
+  </div>
+</section>
+
+<section class="blk" id="how">
+  <div class="wrap">
+    <h2>Two processes look at one screen. Only one of them can lie.</h2>
+    <div class="flow rv">
+      <svg viewBox="0 0 1160 360" role="img" aria-labelledby="flow-t"><title id="flow-t">vehfeed sets the vehicle state in vehicled, the /dev/vehicle resource manager. The cluster renderer reads it and posts its window to QNX Screen. telltale reads the vehicle state and reads the composed display back from Screen; on a lie it posts a safe layer on top, kills the renderer, which slm or a shell loop respawns, and verifies the new renderer before hand-back.</title>
+        <defs><marker id="ah" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0 0L10 5L0 10z" fill="#6E6A61"/></marker>
+        <marker id="ahr" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0 0L10 5L0 10z" fill="#C8321E"/></marker>
+        <marker id="ahg" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0 0L10 5L0 10z" fill="#1F7A4D"/></marker></defs>
+        <g class="nd"><rect x="10" y="20" width="210" height="80" rx="10"/><text class="t1" x="30" y="54">vehfeed</text><text class="t2" x="30" y="78">real comma2k19 speed</text></g>
+        <g class="nd"><rect x="300" y="20" width="290" height="80" rx="10"/><text class="t1" x="320" y="54">vehicled</text><text class="t2" x="320" y="78">resource manager /dev/vehicle</text></g>
+        <g class="nd"><rect x="10" y="196" width="250" height="88" rx="10"/><text class="t1" x="30" y="232">cluster</text><text class="t2" x="30" y="258">renderer · renderer_t · prio 20</text></g>
+        <g class="nd scr"><rect x="420" y="196" width="280" height="88" rx="10"/><text class="t1" x="440" y="232">QNX Screen</text><text class="t2" x="440" y="258">composes what the driver sees</text></g>
+        <g class="nd mon"><rect x="860" y="178" width="290" height="124" rx="10"/><text class="t1" x="880" y="214" style="fill:#1C6F46">telltale</text><text class="t2" x="880" y="240">monitor_t · SCHED_FIFO 60</text><text class="t2" x="880" y="262">read back → decode → compare</text><text class="t2" x="880" y="284">→ safe layer, kill, verify</text></g>
+        <path class="e" d="M220 60H294" marker-end="url(#ah)"/><text class="el" x="228" y="50">devctl SET</text>
+        <path class="e" d="M340 100L196 190" marker-end="url(#ah)"/><text class="el" x="252" y="150" text-anchor="end">ionotify pulse + devctl GET</text>
+        <path class="e" d="M590 60Q820 60 940 172" marker-end="url(#ah)"/><text class="el" x="640" y="48">devctl GET_SINCE, every check</text>
+        <path class="e red" d="M260 240H414" marker-end="url(#ahr)"/><text class="el red" x="268" y="230">screen_post_window</text>
+        <path class="e grn" d="M700 224H854" marker-end="url(#ahg)"/><text class="el grn" x="712" y="214">screen_read_display</text>
+        <path class="e grn dsh" d="M860 270H706" marker-end="url(#ahg)"/><text class="el grn" x="716" y="292">safe layer, z-top</text>
+        <path class="e red" d="M1005 302V338H135V290" marker-end="url(#ahr)"/><text class="el red" x="300" y="330">SIGKILL if hung, wrong or blank → respawned by slm or a shell loop</text>
+      </svg>
+    </div>
+    <div class="bento">
+      <article class="card c1 rv"><svg class="ic" viewBox="0 0 46 34" aria-hidden="true"><rect x="2" y="2" width="42" height="30" rx="4"/><path d="M2 14h42" stroke-dasharray="3 3"/><path d="M14 8v12M20 8v12"/></svg>
+        <h3>It reads the glass, not the renderer's word</h3>
+        <p>Every 20 ms the monitor reads back the digit, lamp and tick regions and decodes them with the glyph atlas the cluster draws with. In the BLANK and MISDRAW runs a renderer self-report would have passed <b style="color:var(--lit)">60 of 60</b>; the read-back caught all 60.</p>
+        <figure class="crop"><img src="assets/readback/digits.png" width="600" height="300" alt="Crop of a real read-back: the digits 42 on the cluster glass during a hold." loading="lazy"><figcaption>the digit region of a real read-back (run t-debug, during the hold)</figcaption></figure>
+        <span class="chip">screen_read_display</span></article>
+      <article class="card c2 rv"><svg class="ic" viewBox="0 0 46 34" aria-hidden="true"><path d="M3 17h10M33 17h10M13 9h20v16H13z"/><path d="M19 15h8M19 20h5"/></svg>
+        <h3>The truth is a pathname</h3><p>vehicled serves the vehicle state at <code>/dev/vehicle</code>. The cluster is woken by an ionotify pulse; the monitor asks for everything since its last check.</p><span class="chip">resource manager · devctl</span></article>
+      <article class="card c3 rv"><svg class="ic" viewBox="0 0 46 34" aria-hidden="true"><path d="M14 15v-4a9 9 0 0 1 18 0v4"/><rect x="10" y="15" width="26" height="17" rx="3"/><path d="M23 21v5"/></svg>
+        <h3>Its own type</h3><p>Feeder, vehicled, renderer and monitor each run in their own secpol type; 22 of 22 denial checks pass on the target.</p><span class="chip">secpol</span></article>
+      <article class="card c4 rv"><svg class="ic" viewBox="0 0 46 34" aria-hidden="true"><path d="M4 28h38M8 28V8M18 28V14M28 28V4M38 28V20"/></svg>
+        <h3>Hung or starved?</h3><p>The monitor runs at FIFO 60, the renderer at 20. On a stall it reads <code>/proc</code> to tell a hung renderer from a starved one, and leaves a starved one running: 0 of 50 STARVE runs were restarted.</p><span class="chip">SCHED_FIFO · /proc</span></article>
+      <article class="card c5 rv"><svg class="ic" viewBox="0 0 46 34" aria-hidden="true"><path d="M8 17a15 15 0 1 1 4 10"/><path d="M4 22l4 6 6-4"/></svg>
+        <h3>Cover first, then repair</h3><p>A safe layer with the true values goes on top, then SIGKILL, respawn, and a verified frame before the glass is handed back.</p><span class="chip">screen_post_window · slm</span></article>
+    </div>
+    <p class="det">No machine learning, on purpose: the check is a deterministic glyph decode, so the same frame always gets the same verdict.</p>
+  </div>
+</section>
+
+<section class="blk" id="bench">
+  <div class="wrap">
+    <h2>Four ways for a cluster to lie. 200 tries. None missed.</h2>
+    <div class="benchgrid">
+      <div class="panel rv"><h3>Every detection, one dot each</h3><p>Milliseconds from the injected fault to the monitor's verdict, with each class's p95.</p><svg class="bench" viewBox="0 0 760 420" role="img" aria-labelledby="bench-t"><title id="bench-t">Detection time of every injected fault, by class, with each class p95: BLANK 24.8, CRASH 31.1, MISDRAW 55.0, FREEZE 129.8, STARVE 175.8, STALE 271.2 ms; 0 missed.</title><line class="g-s" x1="118.0" x2="118.0" y1="24" y2="370"/><text class="ax" x="118.0" y="392" text-anchor="middle">0</text><line class="g-s" x1="221.3" x2="221.3" y1="24" y2="370"/><text class="ax" x="221.3" y="392" text-anchor="middle">50</text><line class="g-s" x1="324.7" x2="324.7" y1="24" y2="370"/><text class="ax" x="324.7" y="392" text-anchor="middle">100</text><line class="g-s" x1="428.0" x2="428.0" y1="24" y2="370"/><text class="ax" x="428.0" y="392" text-anchor="middle">150</text><line class="g-s" x1="531.3" x2="531.3" y1="24" y2="370"/><text class="ax" x="531.3" y="392" text-anchor="middle">200</text><line class="g-s" x1="634.7" x2="634.7" y1="24" y2="370"/><text class="ax" x="634.7" y="392" text-anchor="middle">250</text><line class="g-s" x1="738.0" x2="738.0" y1="24" y2="370"/><text class="ax" x="738.0" y="392" text-anchor="middle">300</text><text class="ax" x="738" y="414" text-anchor="end">ms from fault to detection · QEMU TCG</text><line class="tgt" x1="324.7" x2="324.7" y1="16" y2="370"/><text class="ax" x="330.7" y="26">100 ms stretch</text><line class="tgt" x1="525.8" x2="525.8" y1="16" y2="370"/><text class="ax" x="531.8" y="26">197.3 ms formula bound</text><text class="cl" x="100" y="67.0" text-anchor="end">BLANK</text><text class="ax" x="100" y="83.0" text-anchor="end">n = 50</text><circle class="dot" cx="132.3" cy="51.0" r="3.4"/><circle class="dot" cx="133.7" cy="59.8" r="3.4"/><circle class="dot" cx="134.7" cy="68.6" r="3.4"/><circle class="dot" cx="136.8" cy="53.2" r="3.4"/><circle class="dot" cx="137.6" cy="62.0" r="3.4"/><circle class="dot" cx="139.2" cy="70.8" r="3.4"/><circle class="dot" cx="139.5" cy="55.4" r="3.4"/><circle class="dot" cx="139.7" cy="64.2" r="3.4"/><circle class="dot" cx="139.9" cy="73.0" r="3.4"/><circle class="dot" cx="140.2" cy="57.6" r="3.4"/><circle class="dot" cx="141.9" cy="66.4" r="3.4"/><circle class="dot" cx="142.8" cy="51.0" r="3.4"/><circle class="dot" cx="142.9" cy="59.8" r="3.4"/><circle class="dot" cx="144.8" cy="68.6" r="3.4"/><circle class="dot" cx="145.9" cy="53.2" r="3.4"/><circle class="dot" cx="146.2" cy="62.0" r="3.4"/><circle class="dot" cx="148.9" cy="70.8" r="3.4"/><circle class="dot" cx="149.3" cy="55.4" r="3.4"/><circle class="dot" cx="149.5" cy="64.2" r="3.4"/><circle class="dot" cx="149.9" cy="73.0" r="3.4"/><circle class="dot" cx="150.9" cy="57.6" r="3.4"/><circle class="dot" cx="151.5" cy="66.4" r="3.4"/><circle class="dot" cx="152.9" cy="51.0" r="3.4"/><circle class="dot" cx="153.3" cy="59.8" r="3.4"/><circle class="dot" cx="154.2" cy="68.6" r="3.4"/><circle class="dot" cx="154.2" cy="53.2" r="3.4"/><circle class="dot" cx="155.0" cy="62.0" r="3.4"/><circle class="dot" cx="155.2" cy="70.8" r="3.4"/><circle class="dot" cx="155.4" cy="55.4" r="3.4"/><circle class="dot" cx="155.8" cy="64.2" r="3.4"/><circle class="dot" cx="155.9" cy="73.0" r="3.4"/><circle class="dot" cx="156.6" cy="57.6" r="3.4"/><circle class="dot" cx="157.1" cy="66.4" r="3.4"/><circle class="dot" cx="157.2" cy="51.0" r="3.4"/><circle class="dot" cx="158.5" cy="59.8" r="3.4"/><circle class="dot" cx="158.9" cy="68.6" r="3.4"/><circle class="dot" cx="161.0" cy="53.2" r="3.4"/><circle class="dot" cx="162.0" cy="62.0" r="3.4"/><circle class="dot" cx="162.1" cy="70.8" r="3.4"/><circle class="dot" cx="162.7" cy="55.4" r="3.4"/><circle class="dot" cx="165.7" cy="64.2" r="3.4"/><circle class="dot" cx="167.4" cy="73.0" r="3.4"/><circle class="dot" cx="168.1" cy="57.6" r="3.4"/><circle class="dot" cx="168.4" cy="66.4" r="3.4"/><circle class="dot" cx="168.7" cy="51.0" r="3.4"/><circle class="dot" cx="168.9" cy="59.8" r="3.4"/><circle class="dot" cx="169.0" cy="68.6" r="3.4"/><circle class="dot" cx="169.2" cy="53.2" r="3.4"/><circle class="dot" cx="170.4" cy="62.0" r="3.4"/><circle class="dot" cx="173.2" cy="70.8" r="3.4"/><line class="p95" x1="169.3" x2="169.3" y1="45.0" y2="79.0"/><text class="pv" x="177.3" y="54.0">p95 24.8</text><text class="cl" x="100" y="123.0" text-anchor="end">CRASH</text><text class="ax" x="100" y="139.0" text-anchor="end">n = 50</text><circle class="dot" cx="143.3" cy="107.0" r="3.4"/><circle class="dot" cx="143.4" cy="115.8" r="3.4"/><circle class="dot" cx="143.5" cy="124.6" r="3.4"/><circle class="dot" cx="143.8" cy="109.2" r="3.4"/><circle class="dot" cx="143.8" cy="118.0" r="3.4"/><circle class="dot" cx="143.9" cy="126.8" r="3.4"/><circle class="dot" cx="144.0" cy="111.4" r="3.4"/><circle class="dot" cx="144.1" cy="120.2" r="3.4"/><circle class="dot" cx="144.1" cy="129.0" r="3.4"/><circle class="dot" cx="144.5" cy="113.6" r="3.4"/><circle class="dot" cx="144.7" cy="122.4" r="3.4"/><circle class="dot" cx="144.7" cy="107.0" r="3.4"/><circle class="dot" cx="144.9" cy="115.8" r="3.4"/><circle class="dot" cx="145.0" cy="124.6" r="3.4"/><circle class="dot" cx="145.1" cy="109.2" r="3.4"/><circle class="dot" cx="145.5" cy="118.0" r="3.4"/><circle class="dot" cx="145.6" cy="126.8" r="3.4"/><circle class="dot" cx="145.7" cy="111.4" r="3.4"/><circle class="dot" cx="145.9" cy="120.2" r="3.4"/><circle class="dot" cx="146.1" cy="129.0" r="3.4"/><circle class="dot" cx="146.4" cy="113.6" r="3.4"/><circle class="dot" cx="146.7" cy="122.4" r="3.4"/><circle class="dot" cx="146.7" cy="107.0" r="3.4"/><circle class="dot" cx="147.1" cy="115.8" r="3.4"/><circle class="dot" cx="147.2" cy="124.6" r="3.4"/><circle class="dot" cx="147.5" cy="109.2" r="3.4"/><circle class="dot" cx="149.5" cy="118.0" r="3.4"/><circle class="dot" cx="149.9" cy="126.8" r="3.4"/><circle class="dot" cx="150.3" cy="111.4" r="3.4"/><circle class="dot" cx="150.8" cy="120.2" r="3.4"/><circle class="dot" cx="151.7" cy="129.0" r="3.4"/><circle class="dot" cx="153.6" cy="113.6" r="3.4"/><circle class="dot" cx="158.6" cy="122.4" r="3.4"/><circle class="dot" cx="160.6" cy="107.0" r="3.4"/><circle class="dot" cx="172.7" cy="115.8" r="3.4"/><circle class="dot" cx="174.2" cy="124.6" r="3.4"/><circle class="dot" cx="174.9" cy="109.2" r="3.4"/><circle class="dot" cx="175.2" cy="118.0" r="3.4"/><circle class="dot" cx="175.5" cy="126.8" r="3.4"/><circle class="dot" cx="176.4" cy="111.4" r="3.4"/><circle class="dot" cx="176.6" cy="120.2" r="3.4"/><circle class="dot" cx="176.7" cy="129.0" r="3.4"/><circle class="dot" cx="178.7" cy="113.6" r="3.4"/><circle class="dot" cx="179.4" cy="122.4" r="3.4"/><circle class="dot" cx="180.7" cy="107.0" r="3.4"/><circle class="dot" cx="180.9" cy="115.8" r="3.4"/><circle class="dot" cx="181.1" cy="124.6" r="3.4"/><circle class="dot" cx="182.2" cy="109.2" r="3.4"/><circle class="dot" cx="183.8" cy="118.0" r="3.4"/><circle class="dot" cx="195.6" cy="126.8" r="3.4"/><line class="p95" x1="182.3" x2="182.3" y1="101.0" y2="135.0"/><text class="pv" x="190.3" y="110.0">p95 31.1</text><text class="cl" x="100" y="179.0" text-anchor="end">MISDRAW</text><text class="ax" x="100" y="195.0" text-anchor="end">n = 10</text><circle class="dot" cx="130.0" cy="163.0" r="3.4"/><circle class="dot" cx="143.4" cy="171.8" r="3.4"/><circle class="dot" cx="145.9" cy="180.6" r="3.4"/><circle class="dot" cx="152.3" cy="165.2" r="3.4"/><circle class="dot" cx="155.0" cy="174.0" r="3.4"/><circle class="dot" cx="156.9" cy="182.8" r="3.4"/><circle class="dot" cx="159.7" cy="167.4" r="3.4"/><circle class="dot" cx="166.8" cy="176.2" r="3.4"/><circle class="dot" cx="170.4" cy="185.0" r="3.4"/><circle class="dot" cx="231.6" cy="169.6" r="3.4"/><line class="p95" x1="231.7" x2="231.7" y1="157.0" y2="191.0"/><text class="pv" x="239.7" y="166.0">p95 55.0</text><text class="cl" x="100" y="235.0" text-anchor="end">FREEZE</text><text class="ax" x="100" y="251.0" text-anchor="end">n = 50</text><circle class="dot" cx="233.2" cy="219.0" r="3.4"/><circle class="dot" cx="234.7" cy="227.8" r="3.4"/><circle class="dot" cx="237.6" cy="236.6" r="3.4"/><circle class="dot" cx="239.8" cy="221.2" r="3.4"/><circle class="dot" cx="240.7" cy="230.0" r="3.4"/><circle class="dot" cx="245.9" cy="238.8" r="3.4"/><circle class="dot" cx="247.3" cy="223.4" r="3.4"/><circle class="dot" cx="250.3" cy="232.2" r="3.4"/><circle class="dot" cx="258.2" cy="241.0" r="3.4"/><circle class="dot" cx="258.7" cy="225.6" r="3.4"/><circle class="dot" cx="261.3" cy="234.4" r="3.4"/><circle class="dot" cx="267.6" cy="219.0" r="3.4"/><circle class="dot" cx="297.4" cy="227.8" r="3.4"/><circle class="dot" cx="305.2" cy="236.6" r="3.4"/><circle class="dot" cx="317.5" cy="221.2" r="3.4"/><circle class="dot" cx="325.5" cy="230.0" r="3.4"/><circle class="dot" cx="326.5" cy="238.8" r="3.4"/><circle class="dot" cx="326.6" cy="223.4" r="3.4"/><circle class="dot" cx="328.8" cy="232.2" r="3.4"/><circle class="dot" cx="330.8" cy="241.0" r="3.4"/><circle class="dot" cx="332.3" cy="225.6" r="3.4"/><circle class="dot" cx="335.7" cy="234.4" r="3.4"/><circle class="dot" cx="336.0" cy="219.0" r="3.4"/><circle class="dot" cx="337.4" cy="227.8" r="3.4"/><circle class="dot" cx="338.8" cy="236.6" r="3.4"/><circle class="dot" cx="339.1" cy="221.2" r="3.4"/><circle class="dot" cx="340.8" cy="230.0" r="3.4"/><circle class="dot" cx="341.8" cy="238.8" r="3.4"/><circle class="dot" cx="341.8" cy="223.4" r="3.4"/><circle class="dot" cx="342.7" cy="232.2" r="3.4"/><circle class="dot" cx="349.4" cy="241.0" r="3.4"/><circle class="dot" cx="350.5" cy="225.6" r="3.4"/><circle class="dot" cx="355.0" cy="234.4" r="3.4"/><circle class="dot" cx="357.7" cy="219.0" r="3.4"/><circle class="dot" cx="358.0" cy="227.8" r="3.4"/><circle class="dot" cx="358.1" cy="236.6" r="3.4"/><circle class="dot" cx="358.3" cy="221.2" r="3.4"/><circle class="dot" cx="359.1" cy="230.0" r="3.4"/><circle class="dot" cx="359.8" cy="238.8" r="3.4"/><circle class="dot" cx="360.5" cy="223.4" r="3.4"/><circle class="dot" cx="361.1" cy="232.2" r="3.4"/><circle class="dot" cx="365.1" cy="241.0" r="3.4"/><circle class="dot" cx="368.5" cy="225.6" r="3.4"/><circle class="dot" cx="368.9" cy="234.4" r="3.4"/><circle class="dot" cx="372.1" cy="219.0" r="3.4"/><circle class="dot" cx="374.7" cy="227.8" r="3.4"/><circle class="dot" cx="385.5" cy="236.6" r="3.4"/><circle class="dot" cx="386.3" cy="221.2" r="3.4"/><circle class="dot" cx="392.9" cy="230.0" r="3.4"/><circle class="dot" cx="438.2" cy="238.8" r="3.4"/><line class="p95" x1="386.3" x2="386.3" y1="213.0" y2="247.0"/><text class="pv" x="394.3" y="222.0">p95 129.8</text><text class="cl" x="100" y="291.0" text-anchor="end">STARVE</text><text class="ax" x="100" y="307.0" text-anchor="end">n = 50</text><circle class="dot" cx="332.5" cy="275.0" r="3.4"/><circle class="dot" cx="337.6" cy="283.8" r="3.4"/><circle class="dot" cx="339.3" cy="292.6" r="3.4"/><circle class="dot" cx="344.9" cy="277.2" r="3.4"/><circle class="dot" cx="350.0" cy="286.0" r="3.4"/><circle class="dot" cx="350.0" cy="294.8" r="3.4"/><circle class="dot" cx="358.0" cy="279.4" r="3.4"/><circle class="dot" cx="362.9" cy="288.2" r="3.4"/><circle class="dot" cx="363.4" cy="297.0" r="3.4"/><circle class="dot" cx="365.6" cy="281.6" r="3.4"/><circle class="dot" cx="365.7" cy="290.4" r="3.4"/><circle class="dot" cx="365.9" cy="275.0" r="3.4"/><circle class="dot" cx="365.9" cy="283.8" r="3.4"/><circle class="dot" cx="412.7" cy="292.6" r="3.4"/><circle class="dot" cx="413.3" cy="277.2" r="3.4"/><circle class="dot" cx="413.5" cy="286.0" r="3.4"/><circle class="dot" cx="415.3" cy="294.8" r="3.4"/><circle class="dot" cx="415.7" cy="279.4" r="3.4"/><circle class="dot" cx="416.4" cy="288.2" r="3.4"/><circle class="dot" cx="416.7" cy="297.0" r="3.4"/><circle class="dot" cx="418.1" cy="281.6" r="3.4"/><circle class="dot" cx="419.9" cy="290.4" r="3.4"/><circle class="dot" cx="420.6" cy="275.0" r="3.4"/><circle class="dot" cx="421.1" cy="283.8" r="3.4"/><circle class="dot" cx="423.0" cy="292.6" r="3.4"/><circle class="dot" cx="428.1" cy="277.2" r="3.4"/><circle class="dot" cx="431.8" cy="286.0" r="3.4"/><circle class="dot" cx="432.6" cy="294.8" r="3.4"/><circle class="dot" cx="434.8" cy="279.4" r="3.4"/><circle class="dot" cx="435.9" cy="288.2" r="3.4"/><circle class="dot" cx="438.4" cy="297.0" r="3.4"/><circle class="dot" cx="439.7" cy="281.6" r="3.4"/><circle class="dot" cx="439.9" cy="290.4" r="3.4"/><circle class="dot" cx="440.8" cy="275.0" r="3.4"/><circle class="dot" cx="441.2" cy="283.8" r="3.4"/><circle class="dot" cx="441.7" cy="292.6" r="3.4"/><circle class="dot" cx="442.7" cy="277.2" r="3.4"/><circle class="dot" cx="445.4" cy="286.0" r="3.4"/><circle class="dot" cx="446.2" cy="294.8" r="3.4"/><circle class="dot" cx="446.8" cy="279.4" r="3.4"/><circle class="dot" cx="447.9" cy="288.2" r="3.4"/><circle class="dot" cx="449.1" cy="297.0" r="3.4"/><circle class="dot" cx="455.3" cy="281.6" r="3.4"/><circle class="dot" cx="459.5" cy="290.4" r="3.4"/><circle class="dot" cx="461.0" cy="275.0" r="3.4"/><circle class="dot" cx="466.1" cy="283.8" r="3.4"/><circle class="dot" cx="478.4" cy="292.6" r="3.4"/><circle class="dot" cx="481.3" cy="277.2" r="3.4"/><circle class="dot" cx="481.4" cy="286.0" r="3.4"/><circle class="dot" cx="482.4" cy="294.8" r="3.4"/><line class="p95" x1="481.3" x2="481.3" y1="269.0" y2="303.0"/><text class="pv" x="489.3" y="278.0">p95 175.8</text><text class="cl" x="100" y="347.0" text-anchor="end">STALE</text><text class="ax" x="100" y="363.0" text-anchor="end">n = 50</text><circle class="dot" cx="334.3" cy="331.0" r="3.4"/><circle class="dot" cx="336.1" cy="339.8" r="3.4"/><circle class="dot" cx="336.5" cy="348.6" r="3.4"/><circle class="dot" cx="338.4" cy="333.2" r="3.4"/><circle class="dot" cx="341.0" cy="342.0" r="3.4"/><circle class="dot" cx="346.7" cy="350.8" r="3.4"/><circle class="dot" cx="347.1" cy="335.4" r="3.4"/><circle class="dot" cx="351.7" cy="344.2" r="3.4"/><circle class="dot" cx="357.5" cy="353.0" r="3.4"/><circle class="dot" cx="357.6" cy="337.6" r="3.4"/><circle class="dot" cx="360.9" cy="346.4" r="3.4"/><circle class="dot" cx="361.8" cy="331.0" r="3.4"/><circle class="dot" cx="363.6" cy="339.8" r="3.4"/><circle class="dot" cx="365.0" cy="348.6" r="3.4"/><circle class="dot" cx="365.8" cy="333.2" r="3.4"/><circle class="dot" cx="366.3" cy="342.0" r="3.4"/><circle class="dot" cx="367.7" cy="350.8" r="3.4"/><circle class="dot" cx="371.6" cy="335.4" r="3.4"/><circle class="dot" cx="436.0" cy="344.2" r="3.4"/><circle class="dot" cx="443.4" cy="353.0" r="3.4"/><circle class="dot" cx="446.7" cy="337.6" r="3.4"/><circle class="dot" cx="448.4" cy="346.4" r="3.4"/><circle class="dot" cx="451.7" cy="331.0" r="3.4"/><circle class="dot" cx="455.1" cy="339.8" r="3.4"/><circle class="dot" cx="465.7" cy="348.6" r="3.4"/><circle class="dot" cx="468.3" cy="333.2" r="3.4"/><circle class="dot" cx="471.6" cy="342.0" r="3.4"/><circle class="dot" cx="472.3" cy="350.8" r="3.4"/><circle class="dot" cx="472.7" cy="335.4" r="3.4"/><circle class="dot" cx="475.1" cy="344.2" r="3.4"/><circle class="dot" cx="475.7" cy="353.0" r="3.4"/><circle class="dot" cx="560.9" cy="337.6" r="3.4"/><circle class="dot" cx="561.2" cy="346.4" r="3.4"/><circle class="dot" cx="561.8" cy="331.0" r="3.4"/><circle class="dot" cx="570.8" cy="339.8" r="3.4"/><circle class="dot" cx="572.7" cy="348.6" r="3.4"/><circle class="dot" cx="574.3" cy="333.2" r="3.4"/><circle class="dot" cx="576.7" cy="342.0" r="3.4"/><circle class="dot" cx="581.0" cy="350.8" r="3.4"/><circle class="dot" cx="582.5" cy="335.4" r="3.4"/><circle class="dot" cx="652.3" cy="344.2" r="3.4"/><circle class="dot" cx="653.2" cy="353.0" r="3.4"/><circle class="dot" cx="656.7" cy="337.6" r="3.4"/><circle class="dot" cx="663.2" cy="346.4" r="3.4"/><circle class="dot" cx="665.0" cy="331.0" r="3.4"/><circle class="dot" cx="668.1" cy="339.8" r="3.4"/><circle class="dot" cx="675.2" cy="348.6" r="3.4"/><circle class="dot" cx="678.5" cy="333.2" r="3.4"/><circle class="dot" cx="685.0" cy="342.0" r="3.4"/><circle class="dot" cx="685.9" cy="350.8" r="3.4"/><line class="p95" x1="678.5" x2="678.5" y1="325.0" y2="359.0"/><text class="pv" x="686.5" y="334.0">p95 271.2</text></svg><span class="chip">evidence/bench-faults.csv · bench-crash.csv · bench-misdraw.csv</span></div>
+      <div class="panel rv"><h3>Switch it off and the lie stays</h3><p>The same faults with the monitor disarmed: the glass was wrong a median 29.9 s of a 30 s window, and still wrong at the end in 40 of 40 runs.</p><svg class="abl" viewBox="0 0 520 250" role="img" aria-labelledby="abl-t"><title id="abl-t">Monitor off: seconds the glass was wrong in each of the 40 runs of a 30-second window; median 29.9 s, every run still wrong when the window closed.</title><line class="g-v" x1="34" x2="510" y1="184.0" y2="184.0"/><text class="ax" x="28" y="188.0" text-anchor="end">0</text><line class="g-v" x1="34" x2="510" y1="127.3" y2="127.3"/><text class="ax" x="28" y="131.3" text-anchor="end">10</text><line class="g-v" x1="34" x2="510" y1="70.7" y2="70.7"/><text class="ax" x="28" y="74.7" text-anchor="end">20</text><line class="g-v" x1="34" x2="510" y1="14.0" y2="14.0"/><text class="ax" x="28" y="18.0" text-anchor="end">30</text><rect class="ab" x="36.0" y="19.2" width="7.9" height="164.8"/><rect class="ab" x="47.9" y="16.7" width="7.9" height="167.3"/><rect class="ab" x="59.8" y="16.6" width="7.9" height="167.4"/><rect class="ab" x="71.7" y="16.0" width="7.9" height="168.0"/><rect class="ab" x="83.6" y="15.8" width="7.9" height="168.2"/><rect class="ab" x="95.5" y="15.5" width="7.9" height="168.5"/><rect class="ab" x="107.4" y="15.5" width="7.9" height="168.5"/><rect class="ab" x="119.3" y="15.4" width="7.9" height="168.6"/><rect class="ab" x="131.2" y="15.2" width="7.9" height="168.8"/><rect class="ab" x="143.1" y="15.2" width="7.9" height="168.8"/><rect class="ab" x="155.0" y="14.9" width="7.9" height="169.1"/><rect class="ab" x="166.9" y="14.9" width="7.9" height="169.1"/><rect class="ab" x="178.8" y="14.9" width="7.9" height="169.1"/><rect class="ab" x="190.7" y="14.7" width="7.9" height="169.3"/><rect class="ab" x="202.6" y="14.6" width="7.9" height="169.4"/><rect class="ab" x="214.5" y="14.6" width="7.9" height="169.4"/><rect class="ab" x="226.4" y="14.6" width="7.9" height="169.4"/><rect class="ab" x="238.3" y="14.6" width="7.9" height="169.4"/><rect class="ab" x="250.2" y="14.6" width="7.9" height="169.4"/><rect class="ab" x="262.1" y="14.5" width="7.9" height="169.5"/><rect class="ab" x="274.0" y="14.4" width="7.9" height="169.6"/><rect class="ab" x="285.9" y="14.4" width="7.9" height="169.6"/><rect class="ab" x="297.8" y="14.4" width="7.9" height="169.6"/><rect class="ab" x="309.7" y="14.4" width="7.9" height="169.6"/><rect class="ab" x="321.6" y="14.4" width="7.9" height="169.6"/><rect class="ab" x="333.5" y="14.3" width="7.9" height="169.7"/><rect class="ab" x="345.4" y="14.3" width="7.9" height="169.7"/><rect class="ab" x="357.3" y="14.3" width="7.9" height="169.7"/><rect class="ab" x="369.2" y="14.1" width="7.9" height="169.9"/><rect class="ab" x="381.1" y="14.1" width="7.9" height="169.9"/><rect class="ab" x="393.0" y="14.1" width="7.9" height="169.9"/><rect class="ab" x="404.9" y="14.1" width="7.9" height="169.9"/><rect class="ab" x="416.8" y="14.1" width="7.9" height="169.9"/><rect class="ab" x="428.7" y="14.1" width="7.9" height="169.9"/><rect class="ab" x="440.6" y="14.1" width="7.9" height="169.9"/><rect class="ab" x="452.5" y="14.1" width="7.9" height="169.9"/><rect class="ab" x="464.4" y="14.1" width="7.9" height="169.9"/><rect class="ab" x="476.3" y="14.1" width="7.9" height="169.9"/><rect class="ab" x="488.2" y="14.1" width="7.9" height="169.9"/><rect class="ab" x="500.1" y="14.0" width="7.9" height="170.0"/><text class="ax" x="34" y="216">40 runs, monitor disarmed, sorted</text><text class="ax" x="34" y="236">seconds wrong of a 30 s window · QEMU TCG</text></svg><span class="chip">evidence/bench-ablation.csv</span></div>
+    </div>
+    <p class="note">Not every target held: the 197.3 ms formula bound held for BLANK, FREEZE and STARVE, the under-100 ms stretch only for BLANK, and <b>STALE missed its 200 ms target (p95 271.2 ms).</b></p>
+  </div>
+</section>
+
+<section class="blk" id="clean">
+  <div class="wrap clean">
+    <div class="rv"><div class="discwrap"><svg class="disc" viewBox="0 0 600 600" role="img" aria-labelledby="disc-t"><title id="disc-t">The 31-minute real drive drawn like a tachograph disc: 91,029 checks, 0 false alarms.</title><circle cx="300" cy="300" r="290" class="paper"/><g class="rot"><circle cx="300" cy="300" r="92.0" class="ring"/><circle cx="300" cy="300" r="150.7" class="ring"/><circle cx="300" cy="300" r="209.3" class="ring"/><circle cx="300" cy="300" r="268.0" class="ring"/><line class="spoke5" x1="300.0" y1="216.8" x2="300.0" y2="26.1"/><text class="ax" x="300.0" y="15.5" text-anchor="middle">0</text><line class="spoke" x1="317.9" y1="212.8" x2="355.2" y2="31.8"/><line class="spoke" x1="335.2" y1="218.2" x2="408.1" y2="48.4"/><line class="spoke" x1="350.9" y1="226.9" x2="456.6" y2="75.3"/><line class="spoke" x1="364.6" y1="238.7" x2="498.7" y2="111.5"/><line class="spoke5" x1="370.7" y1="256.1" x2="532.6" y2="155.4"/><text class="ax" x="545.0" y="151.6" text-anchor="middle">5</text><line class="spoke" x1="383.6" y1="269.2" x2="556.9" y2="205.2"/><line class="spoke" x1="388.1" y1="286.6" x2="570.8" y2="258.9"/><line class="spoke" x1="388.9" y1="304.7" x2="573.5" y2="314.3"/><line class="spoke" x1="386.2" y1="322.5" x2="565.0" y2="369.2"/><line class="spoke5" x1="374.6" y1="336.8" x2="545.6" y2="421.1"/><text class="ax" x="558.8" y="431.6" text-anchor="middle">10</text><line class="spoke" x1="370.3" y1="354.7" x2="516.2" y2="468.2"/><line class="spoke" x1="357.8" y1="367.7" x2="477.8" y2="508.3"/><line class="spoke" x1="343.0" y1="378.0" x2="432.2" y2="539.8"/><line class="spoke" x1="326.4" y1="385.1" x2="381.2" y2="561.6"/><line class="spoke5" x1="308.1" y1="382.8" x2="326.8" y2="572.6"/><text class="ax" x="328.3" y="591.1" text-anchor="middle">15</text><line class="spoke" x1="290.7" y1="388.6" x2="271.3" y2="572.4"/><line class="spoke" x1="273.0" y1="384.9" x2="217.0" y2="561.0"/><line class="spoke" x1="256.5" y1="377.7" x2="166.2" y2="538.9"/><line class="spoke" x1="241.7" y1="367.3" x2="120.8" y2="507.1"/><line class="spoke5" x1="234.0" y1="350.6" x2="82.7" y2="466.7"/><text class="ax" x="71.1" y="479.6" text-anchor="middle">20</text><line class="spoke" x1="219.9" y1="338.9" x2="53.6" y2="419.5"/><line class="spoke" x1="213.7" y1="321.9" x2="34.5" y2="367.4"/><line class="spoke" x1="211.0" y1="304.1" x2="26.4" y2="312.5"/><line class="spoke" x1="212.0" y1="286.1" x2="29.5" y2="257.1"/><line class="spoke5" x1="222.1" y1="270.7" x2="43.7" y2="203.5"/><text class="ax" x="30.0" y="202.3" text-anchor="middle">25</text><line class="spoke" x1="224.7" y1="252.5" x2="68.4" y2="153.8"/><line class="spoke" x1="235.8" y1="238.3" x2="102.6" y2="110.1"/><line class="spoke" x1="249.6" y1="226.6" x2="144.9" y2="74.3"/><line class="spoke" x1="265.4" y1="217.9" x2="193.6" y2="47.6"/><line class="spoke5" x1="283.8" y1="218.4" x2="246.6" y2="31.4"/><text class="ax" x="243.8" y="21.0" text-anchor="middle">30</text><path class="truth-d" d="M300.0 208.0 L300.6 208.0 L301.2 208.0 L301.9 208.0 L302.5 208.0 L303.1 208.1 L303.7 208.1 L304.4 208.1 L305.0 208.1 L305.6 208.2 L306.2 208.2 L306.8 208.3 L307.5 208.3 L308.1 208.4 L308.7 208.4 L309.3 208.5 L309.9 208.5 L312.4 192.4 L315.7 171.5 L318.5 156.9 L321.5 142.1 L324.3 130.0 L326.9 120.3 L329.6 111.2 L331.4 108.4 L333.4 104.3 L334.9 103.3 L335.3 108.7 L335.6 114.3 L333.4 131.8 L332.4 142.6 L332.3 148.0 L333.4 148.0 L333.8 151.1 L334.3 153.6 L334.2 158.3 L333.4 165.5 L331.9 175.2 L329.7 187.2 L327.2 199.2 L325.8 207.1 L325.2 211.5 L325.8 211.7 L326.4 211.9 L327.0 212.0 L327.6 212.2 L328.2 212.4 L328.8 212.6 L329.3 212.8 L329.9 213.0 L330.5 213.2 L331.1 213.4 L331.7 213.6 L332.3 213.8 L337.2 202.7 L343.4 188.7 L349.6 175.3 L354.9 164.7 L359.5 156.3 L363.4 149.8 L366.1 146.1 L367.7 145.4 L369.4 144.2 L370.4 144.9 L371.4 145.4 L370.6 149.9 L372.3 148.9 L372.9 150.2 L371.9 154.8 L370.8 159.5 L370.9 161.6 L373.1 159.7 L376.4 155.6 L369.9 170.0 L353.3 202.6 L344.7 219.6 L345.2 219.9 L345.8 220.2 L346.3 220.5 L346.9 220.8 L347.4 221.1 L347.9 221.5 L348.4 221.8 L349.0 222.1 L349.5 222.5 L350.0 222.8 L350.5 223.1 L351.1 223.5 L351.6 223.8 L352.1 224.2 L352.6 224.5 L353.1 224.9 L353.6 225.2 L354.1 225.6 L354.6 226.0 L355.1 226.3 L355.6 226.7 L356.1 227.1 L356.6 227.5 L357.1 227.9 L357.6 228.3 L358.1 228.6 L358.6 229.0 L359.0 229.4 L359.5 229.8 L360.0 230.2 L360.4 230.6 L360.9 231.1 L361.4 231.5 L361.8 231.9 L362.3 232.3 L362.8 232.7 L363.2 233.2 L363.7 233.6 L364.1 234.0 L364.6 234.5 L365.0 234.9 L365.4 235.3 L365.9 235.8 L366.3 236.2 L366.7 236.7 L367.2 237.1 L367.6 237.6 L368.0 238.0 L368.4 238.5 L368.8 239.0 L369.3 239.4 L369.7 239.9 L371.2 239.4 L389.3 225.0 L406.6 211.7 L418.5 203.3 L428.2 196.8 L435.8 192.1 L442.4 188.4 L445.9 187.3 L450.7 185.2 L451.4 186.3 L452.1 187.3 L452.6 188.5 L453.3 189.7 L454.2 190.6 L455.7 191.1 L456.8 191.9 L459.6 191.5 L462.0 191.5 L465.4 190.8 L467.3 191.2 L467.0 193.0 L466.7 194.7 L469.8 194.4 L469.0 196.5 L468.4 198.4 L470.0 199.0 L473.1 198.8 L473.4 200.1 L473.9 201.4 L474.6 202.6 L475.7 203.5 L476.9 204.4 L478.1 205.3 L478.6 206.6 L479.6 207.6 L480.4 208.8 L480.8 210.1 L481.8 211.1 L483.8 211.6 L487.1 211.6 L491.2 211.3 L495.7 210.8 L500.5 210.2 L504.7 210.0 L509.7 209.5 L514.4 209.2 L518.5 209.2 L522.9 209.1 L527.4 209.0 L530.6 209.6 L531.8 210.9 L531.8 212.7 L532.0 214.4 L531.9 216.2 L532.9 217.7 L534.5 218.9 L535.9 220.2 L536.1 221.9 L536.5 223.5 L535.6 225.6 L534.8 227.5 L533.3 229.7 L531.8 231.9 L531.4 233.7 L530.8 235.6 L529.4 237.6 L528.9 239.4 L529.0 241.0 L530.9 242.2 L533.4 243.3 L536.1 244.3 L539.5 245.2 L537.2 247.4 L531.5 250.3 L526.8 252.9 L524.0 255.1 L522.6 256.9 L522.8 258.5 L523.1 260.0 L523.5 261.5 L523.3 263.0 L524.0 264.5 L524.1 266.0 L521.1 268.0 L514.0 270.5 L509.6 272.6 L507.2 274.3 L507.7 275.7 L508.2 277.0 L509.2 278.3 L510.8 279.6 L512.1 280.9 L512.3 282.4 L511.5 283.9 L510.7 285.4 L511.9 286.7 L513.0 288.1 L514.2 289.5 L516.3 290.9 L517.8 292.3 L519.0 293.7 L520.6 295.2 L523.1 296.6 L527.2 298.1 L532.1 299.6 L537.1 301.2 L541.8 302.9 L544.7 304.6 L546.7 306.3 L548.2 308.0 L547.6 309.6 L546.8 311.3 L546.0 312.9 L545.4 314.5 L545.3 316.2 L545.3 317.9 L545.2 319.5 L545.7 321.2 L545.9 322.9 L546.2 324.6 L546.2 326.3 L545.9 328.0 L546.4 329.7 L546.4 331.4 L546.3 333.1 L546.2 334.8 L546.0 336.4 L545.1 338.0 L543.7 339.5 L542.5 341.0 L540.4 342.3 L537.9 343.5 L536.2 344.9 L536.6 346.6 L537.6 348.5 L538.3 350.3 L539.0 352.1 L539.9 354.0 L540.4 355.8 L541.0 357.7 L541.0 359.4 L540.1 360.9 L539.3 362.5 L538.0 363.8 L533.9 364.4 L530.5 365.2 L528.3 366.2 L525.8 367.2 L523.6 368.2 L521.4 369.1 L519.6 370.2 L517.8 371.3 L516.4 372.4 L520.6 375.5 L526.1 379.1 L528.3 381.6 L531.8 384.6 L534.2 387.3 L535.4 389.5 L534.7 391.1 L534.2 392.8 L534.1 394.5 L533.4 396.1 L533.0 397.8 L532.3 399.4 L531.4 400.8 L530.4 402.3 L529.5 403.7 L528.9 405.3 L528.4 406.9 L527.0 408.2 L526.6 409.9 L525.8 411.4 L524.9 412.8 L522.8 413.7 L520.9 414.6 L519.8 415.9 L518.6 417.2 L518.3 418.9 L518.6 421.0 L518.0 422.6 L517.4 424.2 L516.7 425.8 L516.6 427.7 L516.1 429.4 L514.3 430.2 L513.6 431.8 L513.1 433.5 L512.6 435.2 L512.0 436.9 L510.9 438.1 L509.8 439.5 L508.7 440.8 L507.5 442.0 L506.6 443.5 L505.2 444.6 L503.6 445.5 L502.3 446.7 L501.0 447.8 L499.8 449.0 L499.5 450.9 L498.8 452.5 L497.5 453.6 L495.7 454.4 L493.9 455.1 L493.2 456.6 L493.1 458.7 L493.1 461.0 L492.1 462.4 L490.3 463.1 L488.8 464.0 L487.3 464.9 L486.0 466.1 L484.0 466.5 L482.7 467.6 L482.5 469.7 L482.1 471.6 L481.4 473.3 L480.3 474.6 L479.7 476.4 L478.3 477.4 L477.1 478.6 L475.8 479.7 L474.6 480.9 L473.1 481.8 L471.1 482.2 L469.2 482.6 L466.2 481.9 L462.5 480.2 L460.2 480.1 L458.4 480.5 L455.8 480.0 L452.3 478.3 L448.4 476.2 L442.6 471.6 L439.3 470.0 L440.6 474.0 L442.0 478.2 L441.8 480.4 L440.3 480.9 L439.0 481.8 L438.0 483.0 L437.7 485.3 L436.0 485.5 L433.9 485.3 L432.5 486.1 L429.6 484.7 L425.3 481.0 L424.5 482.6 L425.1 486.1 L424.2 487.5 L422.5 487.6 L421.0 488.2 L419.9 489.3 L418.8 490.3 L417.3 490.8 L415.8 491.2 L414.6 492.1 L413.4 493.1 L412.1 493.8 L410.6 494.4 L409.3 495.1 L407.9 495.8 L406.7 496.7 L405.5 497.7 L404.1 498.2 L402.6 498.7 L401.4 499.5 L399.9 500.1 L398.6 500.7 L397.2 501.4 L395.8 502.0 L394.5 502.8 L393.2 503.5 L391.9 504.2 L390.4 504.7 L389.1 505.5 L387.9 506.5 L386.6 507.4 L385.4 508.4 L382.9 506.3 L381.4 506.5 L380.5 508.5 L379.4 509.9 L377.9 510.2 L376.4 510.3 L374.2 508.7 L371.1 504.3 L368.3 500.8 L364.4 493.4 L360.8 486.9 L359.2 486.3 L356.4 481.8 L352.6 473.6 L348.4 463.7 L342.6 447.7 L336.4 429.5 L333.0 420.6 L333.6 426.2 L334.9 434.7 L334.8 438.1 L333.4 436.6 L328.7 420.8 L322.9 399.2 L323.5 405.0 L326.0 420.1 L328.0 433.7 L329.8 447.3 L331.1 459.4 L332.1 470.9 L332.6 480.1 L332.8 488.3 L332.9 496.5 L332.7 504.3 L332.5 512.0 L332.1 518.9 L331.6 526.2 L330.8 532.1 L330.0 538.4 L328.8 542.0 L327.1 542.1 L325.4 541.3 L323.8 541.7 L322.2 542.0 L320.5 542.5 L318.8 541.7 L317.2 541.7 L315.6 541.7 L313.9 541.9 L312.3 542.3 L310.7 542.8 L309.1 543.2 L307.4 543.1 L305.8 543.3 L304.1 542.9 L302.5 542.9 L300.8 543.1 L299.2 542.9 L297.5 543.2 L295.9 542.9 L294.2 543.0 L292.6 543.2 L291.0 543.0 L289.3 543.1 L287.7 542.8 L286.0 542.5 L284.4 542.4 L282.8 542.2 L281.1 542.5 L279.5 542.1 L277.8 542.0 L276.2 541.6 L274.6 541.8 L272.9 541.6 L271.3 541.4 L269.7 541.1 L268.0 541.0 L266.4 540.8 L264.9 540.0 L263.2 539.7 L261.5 540.3 L259.9 540.1 L258.3 539.4 L256.9 537.8 L255.6 536.0 L254.2 534.8 L252.6 534.3 L250.8 535.2 L249.0 535.9 L247.4 535.6 L245.8 535.2 L244.2 534.8 L242.7 534.0 L241.1 533.6 L239.4 533.9 L237.6 534.2 L235.9 534.2 L234.3 533.8 L232.9 532.8 L231.5 531.9 L229.7 532.0 L227.9 532.2 L226.3 531.8 L224.8 531.2 L223.4 530.3 L222.4 528.0 L221.0 527.2 L219.4 526.7 L222.1 514.5 L230.7 486.8 L236.5 467.7 L238.4 459.5 L243.3 444.0 L246.1 434.1 L244.5 435.5 L241.8 439.4 L242.2 435.7 L244.1 428.9 L245.0 424.6 L244.2 424.2 L242.1 426.5 L241.7 425.1 L241.0 424.4 L240.1 424.0 L239.6 423.0 L239.5 421.1 L239.4 419.4 L239.3 417.5 L239.5 415.3 L239.1 414.2 L235.5 418.9 L229.5 427.8 L225.0 433.8 L220.7 439.4 L216.0 445.4 L211.6 450.6 L207.8 454.6 L203.6 459.2 L204.8 454.8 L205.5 451.4 L204.7 450.5 L200.9 454.0 L198.4 455.6 L197.0 455.5 L195.4 455.6 L198.0 449.5 L202.1 441.5 L203.6 437.3 L202.1 437.5 L199.7 438.9 L198.0 439.2 L196.4 439.5 L195.9 438.1 L195.3 436.9 L190.8 440.8 L185.3 445.9 L180.7 449.6 L178.0 451.0 L175.1 452.4 L171.1 455.2 L167.4 457.4 L164.1 459.1 L161.3 460.2 L158.3 461.4 L154.7 463.4 L150.8 465.4 L150.1 464.0 L150.6 461.3 L151.0 458.6 L152.5 454.9 L159.4 445.7 L164.8 438.3 L166.4 434.7 L166.4 432.9 L166.2 431.4 L164.1 431.6 L159.7 434.0 L156.1 435.6 L152.9 436.8 L150.5 437.1 L150.4 435.4 L151.7 432.4 L151.5 430.8 L149.3 430.9 L148.1 430.1 L146.6 429.6 L144.6 429.5 L142.2 429.7 L139.9 429.9 L137.2 430.3 L134.5 430.6 L139.1 425.1 L142.5 420.8 L143.9 418.1 L141.3 418.4 L135.2 421.2 L130.7 422.7 L127.7 423.2 L124.1 424.0 L121.8 423.7 L125.3 419.6 L125.7 417.6 L123.6 417.3 L119.8 418.0 L117.2 418.0 L116.0 417.0 L114.3 416.3 L111.6 416.2 L111.5 414.6 L112.3 412.3 L113.1 410.2 L112.2 409.0 L109.5 408.8 L107.6 408.2 L105.9 407.4 L103.5 407.1 L101.1 406.6 L98.9 406.1 L98.8 404.4 L99.3 402.4 L101.5 399.6 L104.8 396.3 L106.7 393.7 L105.5 392.7 L103.6 392.0 L100.0 392.0 L95.7 392.3 L91.4 392.6 L87.4 392.6 L86.5 391.3 L85.3 390.1 L81.5 389.9 L79.0 389.2 L79.2 387.4 L80.3 385.3 L81.9 383.0 L83.4 380.7 L85.4 378.3 L85.6 376.6 L85.1 375.2 L84.6 373.7 L84.4 372.1 L84.7 370.4 L84.6 368.9 L82.6 367.9 L79.4 367.3 L76.9 366.4 L78.2 364.4 L82.1 361.6 L89.8 357.9 L99.3 353.9 L106.0 350.6 L108.7 348.6 L108.1 347.3 L103.7 347.0 L99.1 346.7 L96.6 345.8 L94.4 344.8 L91.5 344.0 L87.5 343.3 L83.6 342.6 L79.5 341.9 L75.6 341.0 L81.7 338.4 L84.2 336.5 L84.0 335.0 L81.1 333.9 L75.8 333.2 L70.5 332.4 L65.7 331.5 L60.5 330.5 L57.7 329.2 L58.2 327.5 L57.8 325.9 L57.7 324.3 L58.0 322.6 L57.7 320.9 L57.6 319.3 L57.3 317.7 L57.6 316.0 L57.4 314.4 L57.0 312.7 L57.0 311.1 L56.9 309.5 L57.4 307.8 L57.8 306.1 L57.7 304.5 L58.5 302.9 L58.3 301.2 L60.2 299.6 L60.9 298.0 L60.5 296.4 L59.2 294.7 L57.8 293.0 L58.1 291.4 L59.2 289.8 L59.6 288.2 L59.3 286.6 L58.9 284.9 L58.9 283.3 L60.0 281.7 L60.9 280.1 L59.4 278.4 L59.6 276.8 L62.5 275.4 L67.7 274.4 L72.5 273.3 L75.3 272.1 L75.9 270.7 L74.4 268.9 L70.7 266.8 L70.3 265.2 L71.4 263.8 L70.5 262.0 L73.4 260.9 L77.0 260.0 L79.0 258.8 L78.6 257.2 L76.3 255.2 L75.3 253.4 L76.1 252.0 L77.9 250.8 L79.0 249.4 L79.5 248.0 L86.4 248.1 L91.4 247.8 L95.6 247.4 L99.9 247.0 L104.1 246.7 L109.7 246.9 L115.4 247.1 L118.8 246.7 L121.5 246.2 L126.8 246.6 L136.7 248.4 L155.9 253.4 L168.0 256.3 L172.6 256.9 L179.4 258.3 L179.5 257.4 L170.4 253.2 L161.3 248.8 L152.6 244.5 L147.6 241.4 L146.6 239.9 L146.1 238.4 L149.3 238.5 L152.2 238.6 L156.9 239.4 L166.4 242.3 L171.5 243.5 L176.3 244.6 L182.9 246.6 L194.2 250.9 L206.6 255.9 L211.0 257.2 L204.6 253.3 L197.6 249.1 L200.1 249.4 L203.8 250.5 L210.4 253.1 L215.0 254.8 L219.1 256.3 L219.4 255.7 L219.7 255.2 L220.0 254.6 L220.3 254.1 L220.6 253.6 L220.9 253.0 L221.2 252.5 L221.5 252.0 L221.9 251.4 L216.7 247.4 L213.1 244.3 L209.9 241.4 L207.8 239.2 L206.0 237.0 L204.1 234.8 L203.4 233.4 L204.8 233.4 L200.1 229.1 L196.9 225.8 L190.5 220.1 L186.2 215.7 L184.1 212.9 L186.3 213.4 L190.6 215.5 L195.0 217.7 L202.3 222.4 L210.0 227.5 L216.7 232.0 L222.7 236.0 L227.2 238.9 L229.9 240.4 L230.3 239.9 L230.7 239.4 L231.2 239.0 L231.6 238.5 L232.0 238.0 L232.4 237.6 L232.8 237.1 L233.3 236.7 L229.6 232.3 L230.8 232.6 L234.6 235.3 L235.0 234.9 L235.4 234.5 L235.9 234.0 L236.3 233.6 L236.8 233.2 L237.2 232.7 L237.7 232.3 L238.2 231.9 L238.6 231.5 L239.1 231.1 L239.6 230.6 L240.0 230.2 L240.5 229.8 L241.0 229.4 L241.4 229.0 L230.2 214.2 L219.6 199.9 L214.0 191.3 L209.5 184.1 L210.4 183.6 L214.6 187.4 L217.6 190.0 L219.8 191.3 L217.1 186.1 L213.9 179.9 L211.4 174.6 L211.2 172.5 L227.0 193.7 L243.2 216.1 L248.9 223.5 L249.5 223.1 L250.0 222.8 L250.5 222.5 L251.0 222.1 L251.6 221.8 L252.1 221.5 L252.6 221.1 L253.1 220.8 L253.7 220.5 L254.2 220.2 L254.8 219.9 L255.3 219.6 L255.9 219.3 L256.4 219.0 L256.9 218.7 L257.5 218.4 L258.1 218.1 L258.6 217.8 L259.2 217.6 L259.7 217.3 L260.3 217.0 L260.8 216.7 L261.4 216.5 L262.0 216.2 L262.5 216.0 L263.1 215.7 L263.7 215.5 L264.3 215.2 L264.8 215.0 L265.4 214.8 L260.5 200.7 L253.4 180.6 L249.9 168.9 L249.1 164.2 L245.0 150.2 L242.5 140.1 L240.1 129.5 L239.9 125.2 L239.8 121.1 L242.0 123.6 L243.3 123.7 L244.6 123.7 L246.2 124.7 L248.3 127.2 L251.3 133.0 L255.2 142.7 L259.3 153.1 L261.9 159.1 L266.7 173.3 L270.2 183.5 L273.8 194.6 L277.5 206.8 L279.0 210.4 L279.6 210.3 L280.2 210.1 L280.9 210.0 L281.5 209.9 L280.9 204.1 L277.1 180.4 L274.2 160.5 L272.3 144.0 L270.9 129.3 L270.4 119.0 L270.6 112.5 L272.1 113.6 L273.5 114.6 L274.9 115.6 L275.9 113.3 L276.8 110.5 L278.2 111.6 L279.9 115.2 L281.5 118.5 L282.8 118.7 L284.1 119.7 L285.3 118.8 L286.5 118.8 L288.0 122.8 L289.0 119.9 L290.1 116.4 L291.3 116.0 L292.5 115.8 L293.7 114.3 L295.0 114.3 L296.3 117.0 L297.5 118.7 L298.8 122.2 L300.0 127.9"/></g><circle cx="300" cy="300" r="86" class="hub"/></svg><div class="zero"><div><b>0</b><span>false alarms</span></div></div></div>
+      <p class="disc-cap">The 31-minute bench drive, drawn the way a tachograph disc records a shift: minutes around the rim, speed outward (rings at 0, 40, 80, 120 km/h).</p></div>
+    <div class="rv"><p class="lab">The quiet half of the job</p>
+      <h2 style="margin-top:14px">Half an hour of real driving. Not one false alarm.</h2>
+      <p class="lede">A monitor that cries wolf gets switched off. Armed for 30 minutes of a real drive, Telltale checked the glass <b>91,029 times</b> and raised <b>0</b> false alarms.</p>
+      <p class="det">evidence/bench-clean.csv · read-back cost p95 6.28 ms per check · QEMU TCG</p></div>
+  </div>
+</section>
+
+<section class="limits" id="limits">
+  <div class="wrap">
+    <p class="lab">Honest by design</p>
+    <h2 style="margin-top:14px">The limits, in the README's own words.</h2>
+    <ol>
+      <li class="rv"><div><blockquote>All timings are QEMU (TCG) on a loaded Mac, not hardware; QEMU ran without a visible display, so the glass is read back and captured to images by <code>ttshot</code>.</blockquote><cite>README · Honest limits</cite></div></li>
+      <li class="rv"><div><blockquote>The monitor is not supervised: nothing restarts <code>telltale</code> if it dies.</blockquote><cite>README · Honest limits</cite></div></li>
+      <li class="rv"><div><blockquote>The 200 injections are a declared population in one real 31-minute drive, not general coverage.</blockquote><cite>README · Honest limits · <a href="https://github.com/edycutjong/telltale/blob/main/docs/ENGINEERING.md#known-limits-measured">full list in ENGINEERING.md</a></cite></div></li>
+    </ol>
+  </div>
+</section>
+
+<section class="wrap lab-band" id="codelab">
+  <div class="rv"><p class="lab">Codelab</p><h2 style="margin-top:14px">Learn the primitive it stands on.</h2>
+    <p class="lede">Your first QNX 8.0 resource manager on an Apple-Silicon Mac: a counter at a pathname with read, write, devctl and ionotify pulses. Every command block except the QEMU boot shows the output recorded on the guest.</p>
+    <div class="cta"><a class="btn solid" href="codelab/">Open the codelab</a></div></div>
+  <div class="term rv"><div class="bar2"><span>excerpts · codelab/src</span><span>C · QNX 8.0</span></div><pre><span class="dm">/* counter.h */</span>
+#define COUNTER_DEVPATH <span class="k">"/dev/counter"</span>
+<span class="dm">/* counter.c: the server owns the pathname */</span>
+resmgr_attach(dpp, &amp;rattr, COUNTER_DEVPATH, _FTYPE_ANY, 0,
+              &amp;connect_funcs, &amp;io_funcs, &amp;attr)
+<span class="dm">/* counterctl.c: a client is plain POSIX + devctl() */</span>
+int fd = open(COUNTER_DEVPATH, O_RDWR);
+devctl(fd, DCMD_COUNTER_GET, &amp;v, sizeof v, NULL)</pre></div>
+</section>
+
+<section class="blk" id="faq" style="padding-top:80px">
+  <div class="wrap">
+    <h2>Questions a QNX engineer would ask.</h2>
+    <div class="faq">
+      <details><summary>Does this really run on QNX?</summary><p>Yes. C built with <code>qcc</code> from QNX SDP 8.0, running on the QNX Everywhere Quick Start image: an x86_64 guest under QEMU (TCG) on an Apple-Silicon Mac. No hardware was used, so every timing here is QEMU timing.</p></details>
+      <details><summary>Why read pixels instead of trusting the renderer?</summary><p>Because the renderer is the part that fails. In the BLANK and MISDRAW runs, a self-report of "intended vs truth" would have passed 50 of 50 and 10 of 10; reading back the composed display caught all 60.</p></details>
+      <details><summary>What does QNX give it that a plain process would not?</summary><p>A monitor is only worth something if a broken renderer cannot take it down. Telltale is its own process in its own secpol type at FIFO 60; it reads the truth from a resource manager and the glass from Screen, and restarts the renderer while everything else keeps running.</p></details>
+      <details><summary>What is real, and what is replayed or injected?</summary><p>Real: the QNX target, Screen composition, read-back, decode and recovery. Replayed: real CAN speed from comma2k19, fed into <code>/dev/vehicle</code>. Injected: the faults, by the project's own injector. Not verified yet: the gear indicator.</p></details>
+      <details><summary>Is there AI in it?</summary><p>No, on purpose. The check is a deterministic glyph decode: the same frame always gets the same verdict, and every verdict can be replayed from the logged rows.</p></details>
+      <details><summary>How do I reproduce the numbers?</summary><p>With the SDP installed: <code>make target</code>, boot the guest with <code>scripts/run_qemu.sh</code>, then <code>make test-target</code> and <code>scripts/bench_all.sh run</code>. <code>scripts/bench_all.sh report</code> regenerates every table from the committed CSVs; see <a href="https://github.com/edycutjong/telltale/blob/main/DEMO.md">DEMO.md</a>.</p></details>
+    </div>
+  </div>
+</section>
+</main>
+
+<footer><div class="wrap">
+  <a class="brand" href="#top"><img src="assets/icon.svg" alt="" width="30" height="30"><span>Tell<em>tale</em></span></a>
+  <nav aria-label="Footer"><a href="https://github.com/edycutjong/telltale">GitHub</a><a href="pitch/">Pitch deck</a><a href="codelab/">Codelab</a><a href="https://github.com/edycutjong/telltale/blob/main/DEMO.md">DEMO.md</a><a href="https://github.com/edycutjong/telltale/blob/main/LICENSE">Apache-2.0</a></nav>
+  <span class="badge">Built for the QNX Hackathon 2026 · Automotive &amp; Mobility</span>
+</div></footer>
+
+<script>
+(() => {
+  const D = {"trace":[[8.433,44.09],[8.489,44.22],[8.55,44.29],[8.611,44.4],[8.672,44.43],[8.733,44.42],[8.788,44.61],[8.85,44.66],[8.911,44.67],[8.973,44.81],[9.034,44.74],[9.089,44.96],[9.15,45.02],[9.213,45.03],[9.272,45.17],[9.333,45.29],[9.389,45.24],[9.456,45.39],[9.516,45.44],[9.572,45.63],[9.633,45.7],[9.688,45.69],[9.756,45.85],[9.813,45.94],[9.873,45.97],[9.934,46.24],[9.99,46.39],[10.056,46.61],[10.117,46.64],[10.173,46.84],[10.232,46.91],[10.29,47.02],[10.356,47.21],[10.417,47.23],[10.474,47.36],[10.533,47.47],[10.594,47.56],[10.655,47.78],[10.716,47.81],[10.779,47.94],[10.832,47.93],[10.895,48.1],[10.956,48.32],[11.016,48.31],[11.077,48.38],[11.133,48.4],[11.195,48.51],[11.256,48.67],[11.316,48.74],[11.376,48.85],[11.434,48.8],[11.501,48.9],[11.556,49],[11.616,49.04],[11.678,49.08],[11.734,49.1],[11.801,49.18],[11.857,49.19],[11.918,49.04],[11.978,49.03],[12.033,48.82],[12.1,48.47],[12.16,48.22],[12.221,47.86],[12.279,47.4],[12.335,46.86],[12.401,46.26],[12.462,45.79],[12.522,45.29],[12.579,44.7],[12.634,44.1],[12.701,43.52],[12.762,43.01],[12.824,42.37],[12.882,41.78],[12.935,41.26],[13.001,40.58],[13.063,39.97],[13.123,39.46],[13.182,38.81],[13.235,38.1],[13.302,37.54],[13.363,36.95],[13.424,36.26],[13.482,35.69],[13.535,35.03],[13.602,34.44],[13.66,33.8],[13.721,33.17],[13.78,32.41],[13.838,31.79],[13.905,31.05],[13.963,30.28],[14.024,29.53],[14.081,28.65],[14.136,27.96],[14.202,27.15],[14.263,26.35],[14.324,25.54],[14.382,24.8],[14.438,24.06],[14.504,23.24],[14.563,22.44],[14.624,21.61],[14.682,20.78],[14.741,19.99],[14.807,19.18],[14.863,18.36],[14.926,17.48],[14.983,16.78],[15.042,15.95],[15.108,15.18],[15.163,14.48],[15.224,13.74],[15.283,13],[15.347,12.26],[15.408,11.57],[15.469,10.88],[15.524,10.23],[15.579,9.58],[15.647,8.98],[15.708,8.4],[15.769,7.81],[15.825,7.27],[15.88,6.76],[15.933,6.42],[16.01,5.79],[16.07,5.36],[16.133,4.92],[16.209,4.35],[16.27,3.98],[16.327,3.63],[16.386,3.33],[16.448,3],[16.509,2.78],[16.57,2.64],[16.628,2.43],[16.684,2.3],[16.748,2.14],[16.809,1.02],[16.869,0],[16.928,0],[16.986,0],[17.048,0],[17.109,0],[17.17,0],[17.228,0],[17.286,0],[17.348,0],[17.409,0],[17.475,0],[17.533,0],[17.586,0],[17.653,0],[17.714,0],[17.775,0],[17.828,0],[17.886,0],[17.953,0],[18.011,0],[18.076,0],[18.133,0],[18.186,0],[18.253,0],[18.314,0],[18.375,0],[18.425,0],[18.475,0],[18.534,0],[18.586,0],[18.653,0],[18.714,0],[18.775,0],[18.828,0],[18.887,0],[18.953,0],[19.015,0],[19.075,0],[19.128,0],[19.187,0],[19.253,0],[19.314,0],[19.375,0],[19.434,0],[19.49,0],[19.553,0],[19.614,0],[19.674,0],[19.733,0],[19.791,0],[19.858,0],[19.913,0],[19.974,0],[20.03,0],[20.093,0],[20.158,0],[20.218,0],[20.274,0],[20.33,0],[20.396,0],[20.458,0],[20.519,0],[20.58,0],[20.63,0],[20.68,0],[20.758,0],[20.819,0],[20.88,0],[20.958,0]],"geom_w":{"W":1600,"H":350,"x":64,"y":18,"w":1516,"h":300,"t0":8.4,"t1":21.0,"vmax":60},"geom_p":{"W":400,"H":300,"x":34,"y":22,"w":358,"h":244,"t0":10.6,"t1":19.0,"vmax":60},"t_freeze":12.3796,"inc":{"id":"TT-FRZ-0001","verdict":"TICK_STALL","cause":"hung","shown":"48","truth":"46","caught":20.3,"safe":53.216826,"kill":58.746119,"register":296.019029,"true":319.740611,"exposure":53.2,"trace_inject":12.235,"lv_after_cmd":144.581873},"abl":{"n":40,"median":"29.9","min":"29.1","window":"30","pts":[29.088,29.531,29.537,29.646,29.682,29.729,29.744,29.747,29.788,29.793,29.844,29.847,29.848,29.879,29.887,29.889,29.891,29.892,29.897,29.914,29.923,29.923,29.929,29.931,29.938,29.943,29.944,29.944,29.978,29.982,29.983,29.983,29.984,29.985,29.985,29.985,29.987,29.987,29.991,29.996]},"banner_driver":"DISPLAY FAULT \u00b7 SHOWING TRUE SPEED","hero_stop_s":16.848};
+  const $ = s => document.querySelector(s), RM = matchMedia('(prefers-reduced-motion: reduce)').matches;
+  document.documentElement.classList.add('js');
+  addEventListener('scroll', () => $('#nav').classList.toggle('sc', scrollY > 8), { passive: true });
+  /* ---- the stop replay: one virtual clock drives both strips and both glasses ---- */
+  const tf = D.t_freeze, tc = tf + D.inc.caught / 1000, ts = tf + D.inc.safe / 1000, tt = tf + D.inc.true / 1000;
+  const T0 = 10.9, T1 = D.geom_w.t1;
+  const at = t => { const a = D.trace; for (let i = 1; i < a.length; i++) if (a[i][0] >= t) { const [t0, v0] = a[i - 1], [t1, v1] = a[i]; return v0 + (v1 - v0) * (t - t0) / (t1 - t0); } return a[a.length - 1][1]; };
+  const strips = [['.strip-w', D.geom_w], ['.strip-p', D.geom_p]].map(([s, g]) => ({ svg: $(s), g }));
+  const X = (g, t) => g.x + (t - g.t0) / (g.t1 - g.t0) * g.w;
+  function draw(t) {
+    for (const { svg, g } of strips) {
+      const x = Math.max(g.x, Math.min(X(g, t), g.x + g.w));
+      svg.querySelector('.tt-clip').setAttribute('width', x.toFixed(1));
+      const st = svg.querySelector('.stylus'); st.setAttribute('x1', x); st.setAttribute('x2', x); st.style.opacity = t < T1 ? .55 : 0;
+      svg.querySelector('.tick').style.opacity = t >= tc ? 1 : 0;
+      svg.querySelectorAll('.lb').forEach(l => l.style.opacity = t >= T1 - .05 || (l.classList.contains('tr') && t >= tc) ? 1 : 0);
+    }
+    const v = Math.max(0, Math.round(at(t)));
+    $('#dL').textContent = t < tf ? v : 48;
+    $('#sL').textContent = t < tf ? 'live' : 'frozen';
+    $('#r48 ellipse').style.strokeDashoffset = t < tf + .6 ? 1 : Math.max(0, 1 - (t - tf - .6) / .8);
+    $('#gR').querySelector('.lamps i').classList.toggle('on', t < ts);
+    $('#cL').textContent = t < tf ? '0.0 s' : (t - tf).toFixed(1) + ' s';
+    $('#dR').textContent = t < tf ? v : (t < ts ? 48 : v);
+    $('#gR').classList.toggle('hold', t >= ts && t < tt);
+    $('#gR').classList.toggle('ok', t >= tt);
+    $('#sR').textContent = t < tf ? 'live' : t < ts ? '' : t < tt ? '' : 'verified';
+    $('#cR').textContent = t < ts ? '…' : D.inc.exposure.toFixed(1) + ' ms';
+    $('#clk').textContent = 't = ' + t.toFixed(2) + ' s';
+  }
+  let raf = 0;
+  function play() {
+    cancelAnimationFrame(raf);
+    const e = $('#inkE'); e.style.transition = 'none'; e.style.strokeDasharray = 1; e.style.strokeDashoffset = 1;
+    const s0 = performance.now(); let inked = false;
+    const step = now => {
+      const t = T0 + (now - s0) / 1000;
+      draw(Math.min(t, T1));
+      if (!inked && t >= tf + 1.2) { inked = true; e.style.transition = 'stroke-dashoffset 1.1s cubic-bezier(.6,0,.2,1)'; e.style.strokeDashoffset = 0; }
+      if (t < T1) raf = requestAnimationFrame(step); else draw(T1);
+    };
+    raf = requestAnimationFrame(step);
+  }
+  draw(T1);
+  $('#replay').addEventListener('click', play);
+  if (!RM) {
+    const io = new IntersectionObserver(es => { if (es[0].isIntersecting) { io.disconnect(); (document.fonts ? document.fonts.ready : Promise.resolve()).then(() => setTimeout(play, 350)); } }, { threshold: .35 });
+    io.observe($('#stop'));
+  }
+  /* ---- zoom ruler: x20 replay of the incident ---- */
+  const ruler = $('#ruler'), marks = [...ruler.querySelectorAll('.mk')], cur = $('#cur');
+  const mkMs = [0, D.inc.caught, D.inc.safe, D.inc.kill, D.inc.register, D.inc.true];
+  function zoom() {
+    ruler.classList.add('dim'); marks.forEach(m => m.classList.remove('on'));
+    const s0 = performance.now(), span = 360, slow = 20;
+    const step = now => {
+      const ms = (now - s0) / slow;
+      cur.style.opacity = 1; cur.style.left = Math.min(100, ms / span * 100) + '%';
+      marks.forEach((m, i) => m.classList.toggle('on', ms >= mkMs[i]));
+      if (ms < span) requestAnimationFrame(step); else { ruler.classList.remove('dim'); cur.style.opacity = 0; }
+    };
+    requestAnimationFrame(step);
+  }
+  if (!RM) { const io2 = new IntersectionObserver(es => { if (es[0].isIntersecting) { io2.disconnect(); zoom(); } }, { threshold: .5 }); io2.observe(ruler); }
+  /* ---- receipts count up from the printed value's own precision ---- */
+  if (!RM) {
+    const io3 = new IntersectionObserver(es => es.forEach(en => { if (!en.isIntersecting) return; io3.unobserve(en.target);
+      const el = en.target, end = parseFloat(el.dataset.c), d = +(el.dataset.d || 0), s0 = performance.now();
+      if (!end) return;
+      const step = now => { const f = Math.min(1, (now - s0) / 1100), e = 1 - Math.pow(1 - f, 3); el.textContent = (end * e).toFixed(d); if (f < 1) requestAnimationFrame(step); else el.textContent = end.toFixed(d); };
+      requestAnimationFrame(step); }), { threshold: .6 });
+    document.querySelectorAll('[data-c]').forEach(el => io3.observe(el));
+  }
+  /* ---- reveal (content is visible by default; only motion is added) ---- */
+  if (!RM && 'IntersectionObserver' in window) {
+    const rv = [...document.querySelectorAll('.rv')].filter(el => el.getBoundingClientRect().top > innerHeight);
+    rv.forEach(el => el.classList.add('pre'));
+    const io4 = new IntersectionObserver(es => es.forEach(en => { if (en.isIntersecting) { en.target.classList.remove('pre'); io4.unobserve(en.target); } }), { threshold: .12 });
+    rv.forEach(el => io4.observe(el));
+    addEventListener('beforeprint', () => document.querySelectorAll('.pre').forEach(el => el.classList.remove('pre')));
+  }
+  addEventListener('beforeprint', () => document.querySelectorAll('details').forEach(d => d.open = true));
+  /* ---- the log types out at its own pace, once ---- */
+  const log = $('#log'), lines = log.textContent.split('\n');
+  const paint = n => { log.innerHTML = lines.slice(0, n).map(l => l.replace(/&/g, '&amp;').replace(/</g, '&lt;')
+      .replace(/^(DETECT|INCIDENT|CARD shown)/, '<span class="k">$1</span>').replace(/(SAFE verified on glass)/, '<span class="ok">$1</span>').replace(/(-&gt;)/g, '<span class="dm">$1</span>')).join('\n'); };
+  paint(lines.length);
+  if (!RM) { const io5 = new IntersectionObserver(es => { if (es[0].isIntersecting) { io5.disconnect(); let n = 0; paint(0); const iv = setInterval(() => { paint(++n); if (n >= lines.length) clearInterval(iv); }, 520); } }, { threshold: .5 }); io5.observe(log); }
+  /* ---- read-back tabs ---- */
+  document.querySelectorAll('.tabs button').forEach(b => b.addEventListener('click', () => {
+    document.querySelectorAll('.tabs button').forEach(x => x.setAttribute('aria-selected', x === b));
+    const img = $('#shotimg'); img.src = b.dataset.src; img.alt = b.dataset.alt; $('#shott').textContent = b.dataset.t;
+    $('#co3').style.top = b.id === 'tb1' ? '81%' : '15.5%'; $('#co3').style.left = b.id === 'tb1' ? '3.5%' : '65.6%';
+  }));
+})();
+</script>
+</body>
+</html>
