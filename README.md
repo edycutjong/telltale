@@ -1,3 +1,7 @@
+<p align="center">
+  <img src="docs/assets/readme-hero-animated.svg" alt="Telltale — reads back what the cluster shows: Glass: 48 km/h, truth 0 at the stop. Without Telltale the red trace stays flat; with it, a green tick ends the lie." width="100%">
+</p>
+
 # Telltale
 
 Telltale is an isolated QNX 8.0 monitor that reads back what the instrument cluster actually shows and checks it against the vehicle state.

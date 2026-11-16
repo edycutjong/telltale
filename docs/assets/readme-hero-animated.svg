@@ -1,0 +1,133 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1280 320" width="1280" height="320" role="img" aria-label="Telltale — reads back what the cluster shows: Glass: 48 km/h, truth 0 at the stop. Without Telltale the red trace stays flat; with it, a green tick ends the lie.">
+<!-- STORYBOARD (dur 8s — must equal this file's single master dur)
+  0-12%   steady state: the lie in full (poster): brand left; on the chart the black true speed falls to 0 while the dashed
+                        red glass trace stays flat at 48 over the hatched gap "wrong 29.9 s of 30" (run without Telltale);
+                        the glass reads 48, ringed red, FROZEN
+  12-16%  trigger:      Telltale armed: a recording pen starts replaying the same drive from the freeze          data-story="beat-2"
+  14-40%  mechanism:    Glass: 48 km/h, truth 0 at the stop. Without Telltale the red trace stays flat; with it, a green tick ends the lie.
+                        (14% the full-height green tick strikes at the split, "armed: caught in 129.8 ms"; 16% the glass
+                        flips 48 -> 0 VERIFIED with a green outline; the pen sweeps right erasing the red lie and its hatch)  data-story="beat-3"
+  40-90%  resolution:   tick + label + glass 0 VERIFIED persist, the run without Telltale stays as a faint dashed ghost;
+                        glow breath on the tick; shimmer crosses the wordmark                                   data-story="beat-4"
+  90-100% breathe + seam fade: the lie state fades back (hatch, red line, 48, ring) so the loop restarts on the poster
+-->
+  <style>
+    .blob { transform-box: fill-box; transform-origin: center; }
+    .b1 { animation: tt-drift1 14s ease-in-out infinite alternate; }
+    .b2 { animation: tt-drift2 19s ease-in-out infinite alternate; }
+    @keyframes tt-drift1 { from { transform: translate(0, 0); } to { transform: translate(60px, 18px); } }
+    @keyframes tt-drift2 { from { transform: translate(0, 0); } to { transform: translate(-70px, -14px); } }
+    .metric { animation: tt-pulse 8s ease-in-out infinite; }
+    @keyframes tt-pulse { 0%, 13% { opacity: 1; } 17% { opacity: 0.55; } 22%, 100% { opacity: 1; } }
+    .breath { animation: tt-breath 8s ease-in-out infinite; }
+    @keyframes tt-breath { 0%, 16% { opacity: 0.0001; } 30% { opacity: 0.5; } 50% { opacity: 0.16; } 70% { opacity: 0.42; } 88%, 100% { opacity: 0.0001; } }
+    @media (prefers-reduced-motion: reduce) { * { animation: none !important; } }
+  </style>
+  <defs>
+    <clipPath id="h-plate"><rect x="4" y="4" width="1272" height="312" rx="28"/></clipPath>
+    <clipPath id="h-lie"><rect x="677.5" y="52" width="382.5" height="216"><animate attributeName="x" dur="8s" repeatCount="indefinite" values="677.5;677.5;1060;1060;677.5;677.5" keyTimes="0;0.14;0.4;0.9;0.905;1"/><animate attributeName="width" dur="8s" repeatCount="indefinite" values="382.5;382.5;0;0;382.5;382.5" keyTimes="0;0.14;0.4;0.9;0.905;1"/></rect></clipPath>
+    <clipPath id="h-tale"><path transform="translate(244.2 106) scale(0.84)" d="M22-43.3L32-43.3L32-52L22-52L22-66.5L9.7-62.2L9.7-52L2.5-52L2.5-43.3L9.7-43.3L9.7-15C9.7-10.4 11.1-6.8 13.9-4.0C16.6-1.4 20.4 0 25.1 0L31 0L31-10.5L27.1-10.5C23.7-10.5 22-12.3 22-15.8ZM73.6-48.0C70.1-51.1 65-52.6 58.4-52.6C52.5-52.6 47.9-51.2 44.4-48.4C40.9-45.5 39.2-41.7 39.2-36.8L39.2-36.4L50.7-36.4L50.7-36.7C50.7-38.6 51.4-40.2 52.8-41.4C54.1-42.5 56.0-43.1 58.3-43.1C63.8-43.1 66.6-40.3 66.6-34.8L66.6-30.7L55.6-30.7C50-30.7 45.6-29.4 42.5-26.7C39.4-24.0 37.8-20.3 37.8-15.6C37.8-10.5 39.3-6.6 42.2-3.7C45.1-0.8 49.3 0.6 54.6 0.6C57.4 0.6 59.7 0.2 61.6-0.6C63.4-1.4 65.2-2.7 66.9-4.5L66.9 0L78.9 0L78.9-34.2C78.9-40.3 77.1-44.9 73.6-48.0ZM64.5-11.7C63.0-10.2 60.7-9.4 57.4-9.4C52.3-9.4 49.8-11.6 49.8-15.9C49.8-20.1 52.4-22.2 57.6-22.2L66.6-22.2L66.6-18.5C66.6-15.4 65.9-13.2 64.5-11.7ZM93.9-4.1C96.6-1.4 100.5 0 105.5 0L111.2 0L111.2-10.7L107.0-10.7C105.3-10.7 104.0-11.2 103.3-12.1C102.5-13.0 102.1-14.5 102.1-16.6L102.1-69L89.7-69L89.7-15.8C89.7-10.7 91.1-6.8 93.9-4.1ZM129.8-22.3L160.2-22.3L160.2-29.2C160.2-36.9 158.3-42.8 154.5-46.7C150.6-50.6 145.4-52.6 138.9-52.6C132.2-52.6 127.0-50.7 123.2-46.8C119.4-42.9 117.5-37 117.5-29.2L117.5-22.9C117.5-14.9 119.5-9.0 123.4-5.2C127.3-1.3 132.6 0.6 139.3 0.6C145.6 0.6 150.6-0.9 154.3-3.9C158.0-6.9 159.8-10.9 159.8-15.8L159.8-16.3L148-16.3L147.9-16C147.8-14.1 147-12.7 145.6-11.7C144.2-10.6 142.3-10.1 139.8-10.1C136.6-10.1 134.1-10.9 132.4-12.6C130.7-14.3 129.8-17.0 129.8-20.9ZM132.2-39.5C133.7-41.2 136.0-42 138.9-42C144.8-42 147.8-38.7 147.8-32.1L147.8-30.8L129.8-30.8L129.8-31.1C129.8-35.0 130.6-37.8 132.2-39.5Z"/></clipPath>
+    <pattern id="h-grid" width="32" height="32" patternUnits="userSpaceOnUse"><path d="M32 0 H0 V32" fill="none" stroke="#6E6A61" stroke-opacity="0.09" stroke-width="1"/></pattern>
+    <pattern id="h-hatch" width="7" height="7" patternUnits="userSpaceOnUse" patternTransform="rotate(45)"><rect width="7" height="7" fill="#C8321E" fill-opacity="0.08"/><line x1="0" y1="0" x2="0" y2="7" stroke="#C8321E" stroke-opacity="0.34" stroke-width="2"/></pattern>
+    <linearGradient id="h-beam" x1="0" x2="1"><stop offset="0" stop-color="#FFFDF7" stop-opacity="0"/><stop offset="0.5" stop-color="#FFFDF7" stop-opacity="0.55"/><stop offset="1" stop-color="#FFFDF7" stop-opacity="0"/></linearGradient>
+    <filter id="h-soft" x="-50%" y="-50%" width="200%" height="200%"><feGaussianBlur stdDeviation="40"/></filter>
+    <filter id="h-glow" x="-300%" y="-20%" width="700%" height="140%"><feGaussianBlur stdDeviation="5"/></filter>
+  </defs>
+
+  <!-- plate (mandatory: self-sufficient on GitHub light and dark) + grid + paper blotches + light beam -->
+  <rect x="4" y="4" width="1272" height="312" rx="28" fill="#EFE9DC" stroke="#1C1B19" stroke-opacity="0.22" stroke-width="1.5"/>
+  <g clip-path="url(#h-plate)">
+    <rect x="4" y="4" width="1272" height="312" fill="url(#h-grid)"/>
+    <circle class="blob b1" cx="300" cy="60" r="170" fill="#FFFCF4" opacity="0.7" filter="url(#h-soft)"/>
+    <circle class="blob b2" cx="980" cy="300" r="190" fill="#B9B1A0" opacity="0.22" filter="url(#h-soft)"/>
+    <rect x="-260" y="-40" width="140" height="400" fill="url(#h-beam)" transform="skewX(-18)"><animate attributeName="x" dur="8s" repeatCount="indefinite" values="-260;-260;1500;1500" keyTimes="0;0.56;0.80;1"/></rect>
+  </g>
+
+  <!-- LEFT: brand -->
+  <g transform="translate(40 42) scale(0.125)">
+    <rect x="20" y="20" width="472" height="472" rx="108" fill="#F7F3EA" stroke="#1C1B19" stroke-width="22"/>
+    <path d="M70 176 H442 M70 400 H442" stroke="#B9B1A0" stroke-width="4" fill="none"/>
+    <path d="M200 176 H420" stroke="#C8321E" stroke-width="52" stroke-linecap="round" fill="none"/>
+    <path d="M92 176 H200 C244 176 272 290 302 352 C318 386 338 400 364 400 H420" stroke="#1C1B19" stroke-width="52" stroke-linecap="round" stroke-linejoin="round" fill="none"/>
+    <path d="M254 112 V300" stroke="#1F7A4D" stroke-width="36" stroke-linecap="round" fill="none"><animate attributeName="opacity" dur="8s" repeatCount="indefinite" values="1;1;0.25;1;1" keyTimes="0;0.13;0.15000000000000002;0.2;1"/></path>
+  </g>
+  <path transform="translate(116 106) scale(0.84)" d="M49-57.6L49-69L0.6-69L0.6-57.6L18.2-57.6L18.2 0L31.4 0L31.4-57.6ZM59.7-22.3L90.1-22.3L90.1-29.2C90.1-36.9 88.2-42.8 84.3-46.7C80.5-50.6 75.3-52.6 68.8-52.6C62.1-52.6 56.9-50.7 53.1-46.8C49.3-42.9 47.4-37 47.4-29.2L47.4-22.9C47.4-14.9 49.4-9.0 53.3-5.2C57.2-1.3 62.5 0.6 69.2 0.6C75.5 0.6 80.5-0.9 84.2-3.9C87.9-6.9 89.7-10.9 89.7-15.8L89.7-16.3L77.9-16.3L77.8-16C77.7-14.1 76.9-12.7 75.5-11.7C74.1-10.6 72.2-10.1 69.7-10.1C66.5-10.1 64.0-10.9 62.3-12.6C60.6-14.3 59.7-17.0 59.7-20.9ZM62.0-39.5C63.6-41.2 65.9-42 68.8-42C74.7-42 77.7-38.7 77.7-32.1L77.7-30.8L59.7-30.8L59.7-31.1C59.7-35.0 60.5-37.8 62.0-39.5ZM104.1-4.1C106.9-1.4 110.8 0 115.8 0L121.5 0L121.5-10.7L117.3-10.7C115.6-10.7 114.3-11.2 113.5-12.1C112.8-13.0 112.4-14.5 112.4-16.6L112.4-69L100-69L100-15.8C100.0-10.7 101.4-6.8 104.1-4.1ZM132.8-4.1C135.6-1.4 139.5 0 144.5 0L150.2 0L150.2-10.7L146-10.7C144.3-10.7 143.0-11.2 142.3-12.1C141.5-13.0 141.1-14.5 141.1-16.6L141.1-69L128.7-69L128.7-15.8C128.7-10.7 130.1-6.8 132.8-4.1Z" fill="#1C1B19"/>
+  <path transform="translate(244.2 106) scale(0.84)" d="M22-43.3L32-43.3L32-52L22-52L22-66.5L9.7-62.2L9.7-52L2.5-52L2.5-43.3L9.7-43.3L9.7-15C9.7-10.4 11.1-6.8 13.9-4.0C16.6-1.4 20.4 0 25.1 0L31 0L31-10.5L27.1-10.5C23.7-10.5 22-12.3 22-15.8ZM73.6-48.0C70.1-51.1 65-52.6 58.4-52.6C52.5-52.6 47.9-51.2 44.4-48.4C40.9-45.5 39.2-41.7 39.2-36.8L39.2-36.4L50.7-36.4L50.7-36.7C50.7-38.6 51.4-40.2 52.8-41.4C54.1-42.5 56.0-43.1 58.3-43.1C63.8-43.1 66.6-40.3 66.6-34.8L66.6-30.7L55.6-30.7C50-30.7 45.6-29.4 42.5-26.7C39.4-24.0 37.8-20.3 37.8-15.6C37.8-10.5 39.3-6.6 42.2-3.7C45.1-0.8 49.3 0.6 54.6 0.6C57.4 0.6 59.7 0.2 61.6-0.6C63.4-1.4 65.2-2.7 66.9-4.5L66.9 0L78.9 0L78.9-34.2C78.9-40.3 77.1-44.9 73.6-48.0ZM64.5-11.7C63.0-10.2 60.7-9.4 57.4-9.4C52.3-9.4 49.8-11.6 49.8-15.9C49.8-20.1 52.4-22.2 57.6-22.2L66.6-22.2L66.6-18.5C66.6-15.4 65.9-13.2 64.5-11.7ZM93.9-4.1C96.6-1.4 100.5 0 105.5 0L111.2 0L111.2-10.7L107.0-10.7C105.3-10.7 104.0-11.2 103.3-12.1C102.5-13.0 102.1-14.5 102.1-16.6L102.1-69L89.7-69L89.7-15.8C89.7-10.7 91.1-6.8 93.9-4.1ZM129.8-22.3L160.2-22.3L160.2-29.2C160.2-36.9 158.3-42.8 154.5-46.7C150.6-50.6 145.4-52.6 138.9-52.6C132.2-52.6 127.0-50.7 123.2-46.8C119.4-42.9 117.5-37 117.5-29.2L117.5-22.9C117.5-14.9 119.5-9.0 123.4-5.2C127.3-1.3 132.6 0.6 139.3 0.6C145.6 0.6 150.6-0.9 154.3-3.9C158.0-6.9 159.8-10.9 159.8-15.8L159.8-16.3L148-16.3L147.9-16C147.8-14.1 147-12.7 145.6-11.7C144.2-10.6 142.3-10.1 139.8-10.1C136.6-10.1 134.1-10.9 132.4-12.6C130.7-14.3 129.8-17.0 129.8-20.9ZM132.2-39.5C133.7-41.2 136.0-42 138.9-42C144.8-42 147.8-38.7 147.8-32.1L147.8-30.8L129.8-30.8L129.8-31.1C129.8-35.0 130.6-37.8 132.2-39.5Z" fill="#C8321E"/>
+  <g clip-path="url(#h-tale)"><rect x="124.19999999999999" y="30" width="44" height="90" fill="#FFFDF7" opacity="0.55" transform="skewX(-18)"><animate attributeName="x" dur="8s" repeatCount="indefinite" values="124.19999999999999;124.19999999999999;474.2;474.2" keyTimes="0;0.58;0.74;1"/></rect></g>
+  <text x="42" y="150" font-family="'Segoe UI', system-ui, -apple-system, sans-serif" font-size="17.5" fill="#57534B">An isolated QNX 8.0 monitor that reads back</text>
+  <text x="42" y="173" font-family="'Segoe UI', system-ui, -apple-system, sans-serif" font-size="17.5" fill="#57534B">what the instrument cluster actually shows.</text>
+  <text class="metric" x="42" y="214" font-family="ui-monospace, SFMono-Regular, Menlo, Consolas, monospace" font-size="15" font-weight="700" fill="#1C6F46">200/200 injected faults caught · 0 missed</text>
+  <text x="42" y="237" font-family="ui-monospace, SFMono-Regular, Menlo, Consolas, monospace" font-size="13" fill="#67635A">QEMU TCG · 0 false positives in 91,029 checks</text>
+  <text x="42" y="280" font-family="ui-monospace, SFMono-Regular, Menlo, Consolas, monospace" font-size="13" fill="#67635A">QNX 8.0 · Screen · resmgr · message passing · secpol · C</text>
+
+  <!-- RIGHT: chart strip (real comma2k19 drive) -->
+  <g font-family="ui-monospace, SFMono-Regular, Menlo, Consolas, monospace" font-size="12" fill="#67635A">
+    <text x="600" y="44" text-anchor="end">km/h</text>
+    <text x="600" y="62" text-anchor="end">60</text><text x="600" y="130" text-anchor="end">40</text>
+    <text x="600" y="198" text-anchor="end">20</text><text x="600" y="266" text-anchor="end">0</text>
+    <text x="610" y="292">same real drive · comma2k19 · 1 s grid · QEMU TCG timing</text>
+  </g>
+  <!-- legend: two runs -->
+  <g font-family="ui-monospace, SFMono-Regular, Menlo, Consolas, monospace" font-size="12.5" font-weight="700">
+    <path d="M618 40 H648" stroke="#C8321E" stroke-width="3" stroke-dasharray="7 5"/>
+    <text x="656" y="44" fill="#B32C1A">run without Telltale</text>
+    <path d="M832 32 V48" stroke="#1F7A4D" stroke-width="4" stroke-linecap="round"/>
+    <text x="842" y="44" fill="#1C6F46">run with Telltale</text>
+  </g>
+  <g stroke="#B9B1A0" fill="none">
+    <path d="M610 58 H1056 M610 126 H1056 M610 194 H1056 M610 262 H1056" stroke-width="1"/>
+    <path d="M610 92 H1056 M610 160 H1056 M610 228 H1056" stroke-width="0.6" stroke-opacity="0.55"/>
+    <path d="M627.2 58 V262 M670 58 V262 M712.9 58 V262 M755.8 58 V262 M798.7 58 V262 M841.6 58 V262 M884.5 58 V262 M927.3 58 V262 M970.2 58 V262 M1013.1 58 V262" stroke-width="0.6" stroke-opacity="0.45"/>
+  </g>
+  <!-- ghost of the run without Telltale (persists) -->
+  <path d="M679.5 98.8 L1056.0 98.8" stroke="#C8321E" stroke-width="2" stroke-dasharray="7 6" stroke-opacity="0.32" fill="none"/>
+  <!-- the lie (run without Telltale): erased by the armed sweep, fades back at the seam -->
+  <g clip-path="url(#h-lie)">
+    <animate attributeName="opacity" dur="8s" repeatCount="indefinite" values="1;1;0;0;1;1" keyTimes="0;0.4;0.41000000000000003;0.905;0.97;1"/>
+    <path d="M679.5 98.8 L1054.2 262.0 L1048.2 262.0 L1042.3 262.0 L1038.0 262.0 L1032.8 262.0 L1027.3 262.0 L1022.5 262.0 L1017.1 262.0 L1012.0 262.0 L1007.0 262.0 L1001.7 262.0 L996.6 262.0 L991.2 262.0 L986.3 262.0 L981.1 262.0 L975.7 262.0 L970.9 262.0 L965.4 262.0 L960.6 262.0 L955.3 262.0 L950.2 262.0 L945.6 262.0 L940.8 262.0 L935.3 262.0 L930.6 262.0 L925.3 262.0 L920.0 262.0 L915.1 262.0 L909.6 262.0 L904.8 262.0 L899.4 262.0 L894.2 262.0 L889.1 262.0 L883.9 262.0 L878.8 262.0 L873.7 254.7 L868.5 253.7 L863.4 252.5 L858.1 250.7 L853.2 248.5 L847.3 245.3 L842.0 242.3 L836.4 239.0 L831.7 235.4 L826.4 231.5 L821.2 227.2 L816.2 222.7 L810.8 217.8 L805.7 212.8 L800.5 207.8 L795.5 202.6 L790.4 196.8 L785.1 191.3 L780.0 185.7 L774.6 180.2 L769.7 175.2 L764.5 169.7 L759.3 164.6 L754.2 159.0 L748.9 153.9 L743.8 149.2 L738.7 144.9 L733.6 140.7 L728.5 136.4 L723.0 132.5 L718.2 127.8 L713.0 124.0 L707.9 119.9 L702.7 115.8 L697.2 112.1 L692.4 108.0 L687.2 104.7 L682.0 100.8 L679.5 99.3 Z" fill="url(#h-hatch)"/>
+    <path d="M679.5 98.8 L1056.0 98.8" stroke="#C8321E" stroke-width="3.4" stroke-dasharray="9 6" fill="none"/>
+  </g>
+  <!-- the truth (both runs) -->
+  <path d="M612.4 99.5 L617.7 99.0 L622.7 98.5 L627.8 97.7 L632.9 97.4 L638.1 96.5 L643.3 95.9 L648.6 95.7 L653.6 95.3 L658.6 95.1 L663.9 94.8 L669.1 95.3 L674.3 97.2 L679.5 99.3 L684.4 102.7 L689.9 106.3 L694.9 110.0 L700.1 114.0 L705.4 117.9 L710.1 121.7 L715.6 126.1 L720.7 130.0 L725.9 134.4 L731.1 138.7 L735.9 142.9 L741.2 147.1 L746.4 151.8 L751.7 156.4 L756.8 161.6 L761.6 166.9 L767.1 172.4 L772.2 177.7 L777.4 183.0 L782.6 188.5 L787.6 194.0 L792.8 199.6 L798.0 204.9 L803.3 210.4 L808.3 215.3 L813.6 220.3 L818.8 225.0 L823.5 229.4 L829.1 233.4 L834.1 237.3 L838.7 240.2 L844.6 243.8 L850.5 247.2 L855.6 249.7 L860.8 251.8 L866.0 253.0 L870.9 254.2 L876.3 258.5 L881.4 262.0 L886.5 262.0 L891.8 262.0 L896.7 262.0 L902.0 262.0 L907.3 262.0 L912.5 262.0 L917.7 262.0 L922.5 262.0 L927.8 262.0 L933.0 262.0 L938.2 262.0 L943.4 262.0 L947.7 262.0 L952.5 262.0 L958.0 262.0 L962.9 262.0 L968.2 262.0 L973.4 262.0 L978.3 262.0 L983.7 262.0 L988.8 262.0 L993.9 262.0 L999.1 262.0 L1004.2 262.0 L1009.4 262.0 L1014.4 262.0 L1019.9 262.0 L1024.9 262.0 L1030.1 262.0 L1035.4 262.0 L1040.1 262.0 L1045.6 262.0 L1050.9 262.0 L1054.2 262.0" stroke="#1C1B19" stroke-width="3.2" fill="none" stroke-linejoin="round" stroke-linecap="round"/>
+  <g font-family="ui-monospace, SFMono-Regular, Menlo, Consolas, monospace">
+    <animate attributeName="opacity" dur="8s" repeatCount="indefinite" values="1;1;0;0;1;1" keyTimes="0;0.30;0.36;0.9;0.97;1"/>
+    <rect x="852" y="104.8" width="200" height="20" rx="4" fill="#F6F1E6" fill-opacity="0.94"/>
+    <text x="1048" y="119.8" text-anchor="end" font-size="13" font-weight="700" fill="#B32C1A">glass stays 48 km/h</text>
+    <rect x="862" y="182" width="190" height="40" rx="6" fill="#F6F1E6" fill-opacity="0.94"/>
+    <text x="1048" y="199" text-anchor="end" font-size="13" font-weight="700" fill="#B32C1A">wrong 29.9 s of 30</text>
+    <text x="1048" y="216" text-anchor="end" font-size="12" fill="#B32C1A">median, n=40</text>
+  </g>
+  <text x="1050" y="254" text-anchor="end" font-family="ui-monospace, SFMono-Regular, Menlo, Consolas, monospace" font-size="13" font-weight="700" fill="#1C1B19">truth: 0</text>
+
+  <!-- the armed run: pen, tick, label -->
+  <g data-story="beat-2" opacity="0">
+    <animate attributeName="opacity" dur="8s" repeatCount="indefinite" values="0;0;1;1;0;0" keyTimes="0;0.12;0.13;0.4;0.43000000000000005;1"/>
+    <line x1="679.5" y1="54" x2="679.5" y2="266" stroke="#1C1B19" stroke-width="1.6" stroke-opacity="0.65"><animate attributeName="x1" dur="8s" repeatCount="indefinite" values="679.5;679.5;679.5;1056;1056" keyTimes="0;0.12;0.14;0.4;1"/><animate attributeName="x2" dur="8s" repeatCount="indefinite" values="679.5;679.5;679.5;1056;1056" keyTimes="0;0.12;0.14;0.4;1"/></line>
+  </g>
+  <line data-story="beat-4" class="breath" x1="685.1" y1="58" x2="685.1" y2="262" stroke="#1F7A4D" stroke-width="14" stroke-linecap="round" filter="url(#h-glow)" opacity="0"/>
+  <circle data-story="beat-3" cx="685.1" cy="98.8" r="4" fill="none" stroke="#1F7A4D" stroke-width="2.5" opacity="0"><animate attributeName="r" dur="8s" repeatCount="indefinite" values="4;4;52;52" keyTimes="0;0.14;0.26;1"/><animate attributeName="opacity" dur="8s" repeatCount="indefinite" values="0;0;0.85;0;0" keyTimes="0;0.14;0.15000000000000002;0.26;1"/></circle>
+  <line data-story="beat-3" x1="685.1" y1="58" x2="685.1" y2="262" stroke="#1F7A4D" stroke-width="5" stroke-linecap="round" pathLength="100" stroke-dasharray="100 100" opacity="0"><animate attributeName="stroke-dashoffset" dur="8s" repeatCount="indefinite" values="100;100;0;0" keyTimes="0;0.14;0.17;1"/><animate attributeName="opacity" dur="8s" repeatCount="indefinite" values="0;0;1;1;0;0" keyTimes="0;0.14;0.14500000000000002;0.9;0.96;1"/></line>
+  <g data-story="beat-3" opacity="0" font-family="ui-monospace, SFMono-Regular, Menlo, Consolas, monospace">
+    <animate attributeName="opacity" dur="8s" repeatCount="indefinite" values="0;0;1;1;0;0" keyTimes="0;0.16;0.19;0.9;0.96;1"/>
+    <rect x="694.1" y="54" width="236" height="40" rx="6" fill="#F6F1E6" fill-opacity="0.95"/>
+    <text x="701.1" y="71" font-size="14" font-weight="700" fill="#1C6F46">armed: caught in 129.8 ms</text>
+    <text x="701.1" y="87" font-size="12" fill="#1C6F46">FREEZE p95 · QEMU TCG · n=50</text>
+  </g>
+
+  <!-- the glass (product surface, dark): 48 frozen -> 0 verified -->
+  <text x="1164" y="36" text-anchor="middle" font-family="ui-monospace, SFMono-Regular, Menlo, Consolas, monospace" font-size="12" letter-spacing="1.5" fill="#67635A">GLASS</text>
+  <rect data-story="beat-3" x="1078" y="40" width="172" height="234" rx="23" fill="none" stroke="#1F7A4D" stroke-width="3" opacity="0"><animate attributeName="opacity" dur="8s" repeatCount="indefinite" values="0;0;1;0.6;0.6;0;0" keyTimes="0;0.16;0.17;0.30;0.9;0.96;1"/></rect>
+  <rect x="1084" y="46" width="160" height="222" rx="18" fill="#0E0D0B"/>
+  <rect x="1100" y="62" width="16" height="16" rx="3" fill="#26241F"/><rect x="1122" y="62" width="16" height="16" rx="3" fill="#26241F"/>
+  <g><animate attributeName="opacity" dur="8s" repeatCount="indefinite" values="1;1;0;0;1;1" keyTimes="0;0.16;0.18;0.9;0.97;1"/>
+    <path transform="translate(1107.5 196) scale(1.08)" d="M48.6-11L48.6-22.5L43-22.5L43-38.7L29.9-38.7L29.9-22.5L16.6-22.5L36.3-69L23.2-69L3.5-22.5L3.5-11L29.9-11L29.9 0L43 0L43-11ZM67.4-1.4C70.6 0.3 74.2 1.1 78.3 1.1C82.4 1.1 86.0 0.3 89.3-1.4C92.5-3.0 95.0-5.3 96.8-8.4C98.7-11.5 99.6-15.0 99.6-19.1L99.6-21.4C99.6-24.4 98.9-27.2 97.5-29.9C96.0-32.5 94.0-34.6 91.3-36.2C93.4-37.5 95.1-39.3 96.4-41.6C97.7-43.9 98.4-46.6 98.4-49.5L98.4-51.3C98.4-54.7 97.6-57.8 96-60.7C94.4-63.6 92.1-65.9 89.1-67.5C86.0-69.3 82.5-70.1 78.4-70.1C74.3-70.1 70.8-69.3 67.8-67.5C64.8-65.9 62.5-63.6 60.9-60.7C59.2-57.8 58.4-54.7 58.4-51.3L58.4-49.5C58.4-46.5 59.1-43.9 60.4-41.6C61.7-39.3 63.4-37.5 65.5-36.2C62.8-34.7 60.8-32.6 59.3-30.0C57.8-27.3 57.1-24.4 57.1-21.3L57.1-19C57.1-15 58.0-11.5 59.9-8.4C61.7-5.3 64.2-3.0 67.4-1.4ZM83.8-43.7C82.5-42.2 80.7-41.4 78.4-41.4C76.1-41.4 74.3-42.1 73-43.6C71.7-45.1 71-47 71-49.4L71-51.3C71-53.5 71.7-55.3 73.1-56.8C74.4-58.3 76.2-59 78.4-59C80.6-59 82.4-58.3 83.8-56.8C85.1-55.3 85.8-53.5 85.8-51.3L85.8-49.4C85.8-47.1 85.1-45.2 83.8-43.7ZM84.7-12.5C83.1-10.8 81-10 78.4-10C75.7-10 73.6-10.9 72.1-12.6C70.6-14.3 69.8-16.5 69.8-19.2L69.8-21.6C69.8-24.3 70.6-26.4 72.2-28.1C73.8-29.8 75.9-30.6 78.4-30.6C81-30.6 83.1-29.8 84.7-28.1C86.2-26.4 87-24.3 87-21.6L87-19.2C87-16.4 86.2-14.2 84.7-12.5Z" fill="#F4F1E8"/>
+    <ellipse cx="1164" cy="158" rx="68" ry="54" fill="none" stroke="#E5322D" stroke-width="4" transform="rotate(-6 1164 158)"/>
+    <text x="1164" y="250" text-anchor="middle" font-family="ui-monospace, SFMono-Regular, Menlo, Consolas, monospace" font-size="12" font-weight="700" letter-spacing="1.5" fill="#F27E6E">FROZEN</text>
+  </g>
+  <g data-story="beat-3" opacity="0"><animate attributeName="opacity" dur="8s" repeatCount="indefinite" values="0;0;1;1;0;0" keyTimes="0;0.16;0.18;0.9;0.96;1"/>
+    <rect x="1100" y="62" width="16" height="16" rx="3" fill="#2FB34A"/>
+    <path transform="translate(1136.4 196) scale(1.08)" d="M10.1-4.9C13.4-0.9 18.6 1.1 25.6 1.1C32.6 1.1 37.8-0.9 41.2-4.9C44.5-8.9 46.2-14.8 46.2-22.7L46.2-47.1C46.2-54.7 44.5-60.4 41.2-64.3C37.8-68.2 32.6-70.1 25.6-70.1C18.9-70.1 13.8-68.2 10.3-64.3C6.8-60.4 5-54.6 5-47.1L5-22.7C5-14.8 6.7-8.8 10.1-4.9ZM31.6-13.4C30.5-11.3 28.5-10.3 25.6-10.3C22.7-10.3 20.8-11.3 19.8-13.4C18.7-15.4 18.2-18.9 18.2-23.8L18.2-45.2C18.2-50.1 18.7-53.6 19.7-55.6C20.7-57.6 22.7-58.6 25.6-58.6C28.5-58.6 30.5-57.6 31.6-55.6C32.6-53.6 33.1-50.1 33.1-45.2L33.1-23.8C33.1-18.9 32.6-15.4 31.6-13.4Z" fill="#F4F1E8"/>
+    <text x="1164" y="250" text-anchor="middle" font-family="ui-monospace, SFMono-Regular, Menlo, Consolas, monospace" font-size="12" font-weight="700" letter-spacing="1.5" fill="#2FB34A">VERIFIED</text>
+  </g>
+  <text data-story="beat-4" x="1164" y="292" text-anchor="middle" font-family="ui-monospace, SFMono-Regular, Menlo, Consolas, monospace" font-size="12" font-weight="700" fill="#1C6F46" opacity="0">true value on top<animate attributeName="opacity" dur="8s" repeatCount="indefinite" values="0;0;1;1;0;0" keyTimes="0;0.20;0.23;0.9;0.96;1"/></text>
+</svg>
