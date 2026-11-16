@@ -4,20 +4,21 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Telltale: the car stopped, the speedometer didn't</title>
-<meta name="description" content="An isolated QNX 8.0 monitor that reads back what the instrument cluster actually shows and puts the true speed back on the glass. 200 of 200 injected faults caught, 0 false alarms in 91,029 checks (QEMU TCG).">
+<meta name="description" content="An isolated QNX 8.0 monitor reads back what the instrument cluster shows and puts the true speed back on the glass. 200/200 faults caught (QEMU TCG).">
 <link rel="canonical" href="https://telltale.edycu.dev/">
 <meta property="og:type" content="website">
 <meta property="og:site_name" content="Telltale">
 <meta property="og:title" content="Telltale: the car stopped, the speedometer didn't">
-<meta property="og:description" content="An isolated QNX 8.0 monitor reads back the cluster's pixels and puts the truth back on the glass. 200/200 injected faults caught, 0 missed (QEMU TCG).">
+<meta property="og:description" content="A QNX 8.0 monitor reads back the cluster's pixels and puts the truth back. 200/200 injected faults caught (QEMU TCG).">
 <meta property="og:url" content="https://telltale.edycu.dev/">
-<meta property="og:image" content="https://telltale.edycu.dev/assets/og-image.png?v=p4">
-<meta property="og:image:width" content="2400">
-<meta property="og:image:height" content="1260">
+<meta property="og:image" content="https://telltale.edycu.dev/assets/og-1200.png?v=p4">
+<meta property="og:image:width" content="1200">
+<meta property="og:image:height" content="630">
 <meta property="og:image:alt" content="Telltale: a frozen cluster at 48 km/h beside the verified 0, over the speed trace of a real stop.">
 <meta name="twitter:card" content="summary_large_image">
-<meta name="twitter:image" content="https://telltale.edycu.dev/assets/og-image.png?v=p4">
+<meta name="twitter:image" content="https://telltale.edycu.dev/assets/og-1200.png?v=p4">
 <meta name="theme-color" content="#EFE9DC">
+<meta name="author" content="edycutjong">
 <link rel="icon" href="assets/icon.svg" type="image/svg+xml">
 <link rel="apple-touch-icon" href="assets/icon-512.png">
 <link rel="preload" href="assets/fonts/D-DIN-Bold.otf" as="font" type="font/otf" crossorigin>
@@ -437,14 +438,14 @@ footer nav a:hover { text-decoration-color: var(--ink); }
     <div class="demo">
       <div class="rv">
         <div class="tabs" role="tablist" aria-label="Read-back images">
-          <button type="button" role="tab" id="tb1" aria-selected="false" aria-controls="shotfig" data-src="assets/readback/banner.png" data-t="+466 ms after the catch · during the hold" data-alt="Read-back of the QNX cluster during the hold: digits 42 and an amber engineering banner, DISPLAY FAULT CAUGHT, VALUE_MISMATCH, 19 ms.">During the hold</button>
-          <button type="button" role="tab" id="tb2" aria-selected="true" aria-controls="shotfig" data-src="assets/readback/card.png" data-t="+2362 ms after the catch · after hand-back" data-alt="Read-back of the QNX cluster after hand-back: digits 20, lamps, and the incident card TT-VAL-0001: shown 48, truth 47 km/h, caught 19 ms.">After hand-back</button>
+          <button type="button" role="tab" id="tb1" aria-selected="false" aria-controls="shotpanel" data-src="assets/readback/banner.png" data-t="+466 ms after the catch · during the hold" data-alt="Read-back of the QNX cluster during the hold: digits 42 and an amber engineering banner, DISPLAY FAULT CAUGHT, VALUE_MISMATCH, 19 ms.">During the hold</button>
+          <button type="button" role="tab" id="tb2" aria-selected="true" aria-controls="shotpanel" data-src="assets/readback/card.png" data-t="+2362 ms after the catch · after hand-back" data-alt="Read-back of the QNX cluster after hand-back: digits 20, lamps, and the incident card TT-VAL-0001: shown 48, truth 47 km/h, caught 19 ms.">After hand-back</button>
         </div>
-        <figure class="shot" id="shotfig" role="tabpanel">
+        <div role="tabpanel" id="shotpanel" aria-labelledby="tb2"><figure class="shot" id="shotfig">
           <img id="shotimg" src="assets/readback/card.png" width="1280" height="768" alt="Read-back of the QNX cluster after hand-back: digits 20, lamps, and the incident card TT-VAL-0001: shown 48, truth 47 km/h, caught 19 ms." loading="lazy">
           <span class="co" style="left:44.5%;top:27%">1</span><span class="co" style="left:12.6%;top:9%">2</span><span class="co" id="co3" style="left:65.6%;top:15.5%">3</span>
           <figcaption><b id="shott">+2362 ms after the catch · after hand-back</b> · incident TT-VAL-0001 · run t-debug, build 985ab29 · 1280 × 768 composed display</figcaption>
-        </figure>
+        </figure></div>
         <ol class="legend"><li><b>1</b>speed digits as composed, decoded against the D-DIN glyph atlas</li><li><b>2</b>the lamp row: 6 lamps checked against the vehicle state</li><li><b>3</b>drawn by Telltale, not the renderer: banner during the hold, incident card after</li></ol>
       </div>
       <div class="term rv" aria-label="telltale.log replay">
@@ -662,7 +663,7 @@ devctl(fd, DCMD_COUNTER_GET, &amp;v, sizeof v, NULL)</pre></div>
   if (!RM) { const io5 = new IntersectionObserver(es => { if (es[0].isIntersecting) { io5.disconnect(); let n = 0; paint(0); const iv = setInterval(() => { paint(++n); if (n >= lines.length) clearInterval(iv); }, 520); } }, { threshold: .5 }); io5.observe(log); }
   /* ---- read-back tabs ---- */
   document.querySelectorAll('.tabs button').forEach(b => b.addEventListener('click', () => {
-    document.querySelectorAll('.tabs button').forEach(x => x.setAttribute('aria-selected', x === b));
+    document.querySelectorAll('.tabs button').forEach(x => x.setAttribute('aria-selected', x === b)); $('#shotpanel').setAttribute('aria-labelledby', b.id);
     const img = $('#shotimg'); img.src = b.dataset.src; img.alt = b.dataset.alt; $('#shott').textContent = b.dataset.t;
     $('#co3').style.top = b.id === 'tb1' ? '81%' : '15.5%'; $('#co3').style.left = b.id === 'tb1' ? '3.5%' : '65.6%';
   }));

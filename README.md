@@ -12,6 +12,8 @@ When a cluster freezes at 48 km/h and the car has stopped, nothing inside the re
 
 **Result, on QEMU (TCG), not hardware timing:** 200 injected faults in 4 classes, **0 missed**; detection p95 24.8 ms (BLANK) to 271.2 ms (STALE); 0 false positives in 91,029 checks of a 30-minute real drive; with the monitor off the glass is wrong for a median 29.9 s of a 30 s window. Not every target was met: see [DEMO.md](DEMO.md).
 
+**Site:** [telltale.edycu.dev](https://telltale.edycu.dev): the landing page, the [pitch deck](https://telltale.edycu.dev/pitch/) and the [codelab](https://telltale.edycu.dev/codelab/), served from [`docs/`](docs/).
+
 ## How it works
 <p align="center"><img src="docs/assets/architecture.svg" alt="Architecture: vehfeed writes the vehicle state to vehicled; cluster and telltale both read it. The cluster posts a window to Screen; telltale reads the composed display back from Screen, and on a mismatch posts a safe layer, kills the renderer and slm respawns it." width="100%"></p>
 

@@ -97,6 +97,7 @@ pre code{background:none;padding:0;font-size:13.5px}
 pre.out{border-left:3px solid var(--acc)}
 .lbl{font-size:12px;color:var(--mute);margin:.9rem 0 -.5rem;letter-spacing:.06em;text-transform:uppercase}
 table{border-collapse:collapse;margin:1rem 0;font-size:15px}td,th{border:1px solid var(--line);padding:6px 12px;text-align:left}th{background:var(--panel)}
+html{overflow-x:clip}main,article{min-width:0}:not(pre)>code{overflow-wrap:anywhere}table{display:block;max-width:100%;overflow-x:auto}
 @media(max-width:900px){.wrap{display:block}nav{display:none}}
 """
 
