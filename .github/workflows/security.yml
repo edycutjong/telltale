@@ -27,13 +27,13 @@ jobs:
         language: [python, c-cpp]
     steps:
       - uses: actions/checkout@v4
-      - uses: github/codeql-action/init@v3
+      - uses: github/codeql-action/init@v4
         with:
           languages: ${{ matrix.language }}
           build-mode: ${{ matrix.language == 'c-cpp' && 'manual' || 'none' }}
       - name: host C build (the QNX target code needs the SDP; see CONTRIBUTING.md)
         if: matrix.language == 'c-cpp'
         run: make test-host-c
-      - uses: github/codeql-action/analyze@v3
+      - uses: github/codeql-action/analyze@v4
         with:
           category: "/language:${{ matrix.language }}"
