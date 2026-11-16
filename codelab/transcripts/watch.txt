@@ -1,0 +1,4 @@
+counterwatch: armed, waiting for 3 change(s)
+counterwatch: value is now 1
+counterwatch: value is now 6
+counterwatch: value is now 7

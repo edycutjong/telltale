@@ -1,0 +1,1 @@
+resmgr_attach /dev/counter: Operation not permitted

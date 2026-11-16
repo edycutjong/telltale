@@ -57,6 +57,7 @@ Reproduce every bench number: `scripts/bench_all.sh run` then `scripts/bench_all
 | Every component, test and known limit | [`docs/ENGINEERING.md`](docs/ENGINEERING.md) |
 | Developer-experience notes on the QNX toolchain | [`docs/DX-REPORT.md`](docs/DX-REPORT.md) |
 | Input data provenance | [`data/SOURCES.md`](data/SOURCES.md) |
+| Codelab: your first QNX 8.0 resource manager on an Apple-Silicon Mac (every step run on the QEMU guest) | [`codelab/`](codelab/README.md) |
 
 ## Honest limits
 - All timings are QEMU (TCG) on a loaded Mac, not hardware; QEMU ran without a visible display, so the glass is read back and captured to images by `ttshot`.

@@ -1,0 +1,4 @@
+built out/counter
+built out/counterctl
+built out/counterwatch
+out/counter: ELF 64-bit LSB pie executable, x86-64, version 1 (SYSV), dynamically linked, interpreter /usr/lib/ldqnx-64.so.2

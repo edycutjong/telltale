@@ -1,0 +1,2 @@
+counter: serving /dev/counter
+0

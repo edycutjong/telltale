@@ -1,0 +1,2 @@
+ 5320733 ./counter                                                                        
+cat: /dev/counter: No such file or directory
