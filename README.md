@@ -18,7 +18,7 @@ When a cluster freezes at 48 km/h and the car has stopped, nothing inside the re
 1. `vehfeed` replays real CAN speed from the comma2k19 drive dataset (MIT) into `vehicled`, the `/dev/vehicle` resource manager.
 2. `cluster` draws speed digits (a D-DIN glyph atlas), 6 lamps and a liveness tick with QNX Screen.
 3. `telltale` runs every 20 ms (the configured `period_ms`, not a measured figure): `screen_read_display` of the composed digit, lamp and tick regions, decode, compare with the vehicle state.
-4. On `VALUE_MISMATCH`, `TICK_STALL` or a blank: safe layer first, then a cause check through `/proc` (hung vs starved). The renderer is killed only if it is hung, drawing wrong or blank, or stalled for an unclassifiable cause for 5 x `tick_stall_ms`; a renderer classified as starved is not killed (0 of 50 STARVE runs restarted). Then a verified hand-back.
+4. On `VALUE_MISMATCH`, `TICK_STALL` or a blank: safe layer first, then a cause check through `/proc` (hung vs starved). The renderer is killed only if it is hung, drawing wrong or blank, or stalled for an unclassifiable cause for 5 x `tick_stall_ms`; a renderer classified as starved is not killed while its window is readable (0 of 50 STARVE runs restarted); with no readable window it is restarted after `restart_timeout_ms` (4 s). Then a verified hand-back.
 
 The monitor does no machine learning on purpose: the check is a deterministic glyph decode, so the same frame gives the same verdict.
 

@@ -1,6 +1,6 @@
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 960 500" role="img" aria-labelledby="t d" font-family="Overpass, 'Helvetica Neue', Arial, sans-serif">
   <title id="t">Telltale architecture on QNX 8.0</title>
-  <desc id="d">vehfeed writes the vehicle state to the vehicled resource manager. The cluster renderer and the Telltale monitor both read it by message passing. The renderer posts a window to QNX Screen. The monitor reads the composed display back from Screen, compares it with the vehicle state, and on a mismatch posts a safe-layer window, kills the renderer and the renderer is respawned (slm, or a shell loop in the bench). vehfeed, vehicled, cluster and telltale each run in their own secpol type.</desc>
+  <desc id="d">vehfeed writes the vehicle state to the vehicled resource manager. The cluster renderer and the Telltale monitor both read it by message passing. The renderer posts a window to QNX Screen. The monitor reads the composed display back from Screen, compares it with the vehicle state, and on a mismatch posts a safe-layer window, kills the renderer and the renderer is respawned (slm, or a shell loop in the bench). vehfeed, vehicled, cluster and telltale each run in their own secpol type when the policy is loaded.</desc>
   <defs>
     <marker id="a" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0 0L10 5L0 10z" fill="#57534B"/></marker>
     <marker id="g" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0 0L10 5L0 10z" fill="#1F7A4D"/></marker>
@@ -8,7 +8,7 @@
   </defs>
   <rect width="960" height="500" fill="#EFE9DC"/>
   <rect x="16" y="16" width="928" height="468" rx="6" fill="none" stroke="#B9B1A0" stroke-width="1.5" stroke-dasharray="6 4"/>
-  <text x="32" y="40" font-size="13" font-weight="700" fill="#57534B" letter-spacing="1">QNX 8.0 GUEST · QEMU (x86_64, TCG) · vehfeed · vehicled · cluster · telltale each run in their own secpol type</text>
+  <text x="32" y="40" font-size="13" font-weight="700" fill="#57534B" letter-spacing="1">QNX 8.0 GUEST · QEMU (x86_64, TCG) · vehfeed · vehicled · cluster · telltale each run in their own secpol type (policy loaded)</text>
 
   <!-- vehfeed -->
   <rect x="40" y="90" width="150" height="64" rx="4" fill="#F7F3EA" stroke="#1C1B19"/>
