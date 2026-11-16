@@ -1,0 +1,4 @@
+counterwatch: armed, waiting for 1 change(s)
+--- 4 s after the change, is it still waiting? ---
+     pid tid name                         prio STATE          Blocked                     
+ 8626204   1 ./counterwatch-noreg          10r RECEIVE        1                           

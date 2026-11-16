@@ -1,4 +1,6 @@
 counterwatch: armed, waiting for 3 change(s)
-counterwatch: value is now 1
-counterwatch: value is now 6
+     pid tid name                         prio STATE          Blocked                     
+ 8392731   1 qnxuser/codelab/counterwatch  10r RECEIVE        1                           
+counterwatch: value is now 2
 counterwatch: value is now 7
+counterwatch: value is now 8

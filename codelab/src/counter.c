@@ -94,6 +94,7 @@ static int io_devctl(resmgr_context_t *ctp, io_devctl_t *msg, iofunc_ocb_t *ocb)
         nbytes = sizeof(uint64_t);
         break;
     case DCMD_COUNTER_ADD:
+        if (msg->i.nbytes != sizeof(int32_t)) return EINVAL;   /* the client's struct must be the size we expect */
         a->value += (uint64_t)(int64_t)*(int32_t *)_DEVCTL_DATA(msg->i);
         counter_changed(a);
         break;
@@ -109,8 +110,9 @@ static int io_devctl(resmgr_context_t *ctp, io_devctl_t *msg, iofunc_ocb_t *ocb)
     return _RESMGR_PTR(ctp, &msg->o, sizeof msg->o + nbytes);
 }
 
-/* ionotify()/select() land here. We tell the library which conditions are true RIGHT NOW; it arms the
- * client's event (a pulse) for the ones that are not, and counter_changed() fires it later. */
+/* ionotify()/select() land here. We tell the library which conditions are true RIGHT NOW. If one the client
+ * asked about is true it reports that and arms nothing; if none is, it arms the client's event (a pulse) and
+ * counter_changed() fires it later. */
 static int io_notify(resmgr_context_t *ctp, io_notify_t *msg, iofunc_ocb_t *ocb)
 {
     struct counter_attr *a = ocb->attr;

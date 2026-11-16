@@ -31,9 +31,11 @@ int main(int argc, char **argv)
     int coid = ConnectAttach(0, 0, chid, _NTO_SIDE_CHANNEL, 0);
     struct sigevent ev;
     SIGEV_PULSE_INIT(&ev, coid, SIGEV_PULSE_PRIO_INHERIT, PULSE_CODE, 0);
-    /* QNX 8.0: an event handed to ionotify() must first be registered against that fd, otherwise the
-     * resource manager's MsgDeliverEvent() has nothing it is allowed to deliver and no pulse ever arrives. */
+#ifndef SKIP_REGISTER   /* -DSKIP_REGISTER builds the broken variant the codelab uses to show the pitfall */
+    /* The reference page for ionotify() says the event must be registered with MsgRegisterEvent() against
+     * the fd that is passed to ionotify(). Leave this out and ionotify() still succeeds, but no pulse comes. */
     if (MsgRegisterEvent(&ev, fd) == -1) { perror("MsgRegisterEvent"); return 1; }
+#endif
 
     printf("counterwatch: armed, waiting for %d change(s)\n", want);
     fflush(stdout);

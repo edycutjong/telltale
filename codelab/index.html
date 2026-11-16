@@ -1,4 +1,4 @@
-<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Your first QNX resource manager on an Apple-Silicon Mac</title><meta name="description" content="Build, run and watch a /dev/counter resource manager on QNX 8.0 - read(), write(), devctl() and ionotify() pulses - cross-compiled on an M-series Mac and run on a QEMU guest. Every command below was run for real; the output you see is pasted from that run."><style>
+<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Your first QNX resource manager on an Apple-Silicon Mac</title><meta name="description" content="Build, run and watch a /dev/counter resource manager on QNX 8.0 - read(), write(), devctl() and ionotify() pulses - cross-compiled on an M-series Mac and run on a QEMU guest. Each command block is followed by the output recorded when it was run on that guest."><style>
 :root{--bg:#0e0f11;--panel:#16181b;--ink:#e9e6df;--mute:#a09b90;--line:#2a2d31;--acc:#6fd08c;--warn:#e8b25a}
 *{box-sizing:border-box}html{scroll-behavior:smooth}
 body{margin:0;background:var(--bg);color:var(--ink);font:17px/1.65 -apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,sans-serif}
@@ -21,11 +21,11 @@ pre.out{border-left:3px solid var(--acc)}
 .lbl{font-size:12px;color:var(--mute);margin:.9rem 0 -.5rem;letter-spacing:.06em;text-transform:uppercase}
 table{border-collapse:collapse;margin:1rem 0;font-size:15px}td,th{border:1px solid var(--line);padding:6px 12px;text-align:left}th{background:var(--panel)}
 @media(max-width:900px){.wrap{display:block}nav{display:none}}
-</style></head><body><div class="wrap"><nav><b>Steps</b><a href="#overview">Overview<span>5:00</span></a><a href="#set-up-the-host-toolchain">Set up the host toolchain<span>5:00</span></a><a href="#boot-qnx-8-0-under-qemu">Boot QNX 8.0 under QEMU<span>5:00</span></a><a href="#the-contract-counter-h">The contract: counter.h<span>3:00</span></a><a href="#the-server-s-state">The server&#x27;s state<span>4:00</span></a><a href="#read-and-write">read() and write()<span>8:00</span></a><a href="#devctl">devctl()<span>5:00</span></a><a href="#main-attach-a-name">main(): attach a name<span>5:00</span></a><a href="#build-it-for-qnx-and-copy-it-over">Build it for QNX and copy it over<span>3:00</span></a><a href="#run-it">Run it<span>5:00</span></a><a href="#ionotify-wait-without-polling">ionotify(): wait without polling<span>10:00</span></a><a href="#pitfalls-and-what-to-try-next">Pitfalls and what to try next<span>2:00</span></a></nav><main><h1>Your first QNX resource manager on an Apple-Silicon Mac</h1>
-<p class="meta">Build, run and watch a /dev/counter resource manager on QNX 8.0 - read(), write(), devctl() and ionotify() pulses - cross-compiled on an M-series Mac and run on a QEMU guest. Every command below was run for real; the output you see is pasted from that run.<br>Duration 55 minutes · QNX 8.0 · Apple-Silicon Mac host</p>
+</style></head><body><div class="wrap"><nav><b>Steps</b><a href="#overview">Overview<span>5:00</span></a><a href="#set-up-the-host-toolchain">Set up the host toolchain<span>5:00</span></a><a href="#boot-qnx-8-0-under-qemu">Boot QNX 8.0 under QEMU<span>6:00</span></a><a href="#the-contract-counter-h">The contract: counter.h<span>3:00</span></a><a href="#the-server-s-state">The server&#x27;s state<span>4:00</span></a><a href="#read-and-write">read() and write()<span>8:00</span></a><a href="#devctl">devctl()<span>5:00</span></a><a href="#main-attach-a-name">main(): attach a name<span>5:00</span></a><a href="#build-it-for-qnx-and-copy-it-over">Build it for QNX and copy it over<span>3:00</span></a><a href="#run-it">Run it<span>5:00</span></a><a href="#ionotify-wait-without-polling">ionotify(): wait without polling<span>12:00</span></a><a href="#pitfalls-and-what-to-try-next">Pitfalls and what to try next<span>2:00</span></a></nav><main><h1>Your first QNX resource manager on an Apple-Silicon Mac</h1>
+<p class="meta">Build, run and watch a /dev/counter resource manager on QNX 8.0 - read(), write(), devctl() and ionotify() pulses - cross-compiled on an M-series Mac and run on a QEMU guest. Each command block is followed by the output recorded when it was run on that guest.<br>Duration 63 minutes · QNX 8.0 · Apple-Silicon Mac host</p>
 <section class="step" id="overview"><h2>Overview</h2><span class="dur">5:00 min</span>
 
-<p>A <strong>resource manager</strong> is how a QNX driver or service shows up as a file: it attaches a name such as <code>/dev/counter</code> to the path space, and every <code>open()</code>, <code>read()</code>, <code>write()</code>, <code>devctl()</code> or <code>ionotify()</code> a client makes on that name arrives as a <strong>message</strong> that your code answers. There is no kernel driver to write; a resource manager is an ordinary user-space process, which is why a crash in one cannot take the kernel with it.</p>
+<p>A <strong>resource manager</strong> is how a QNX driver or service shows up as a file: it attaches a name such as <code>/dev/counter</code> to the path space, and every <code>open()</code>, <code>read()</code>, <code>write()</code>, <code>devctl()</code> or <code>ionotify()</code> a client makes on that name arrives as a <strong>message</strong> that your code answers. There is no kernel driver to write: a resource manager is an ordinary user-space process.</p>
 <p>You will build <code>/dev/counter</code>, a counter that any process can use:</p>
 <table>
 <thead>
@@ -58,17 +58,18 @@ table{border-collapse:collapse;margin:1rem 0;font-size:15px}td,th{border:1px sol
 <li>how the QNX resource-manager framework (<code>dispatch</code>, <code>resmgr</code>, <code>iofunc</code>) fits together</li>
 <li>how to cross-compile for QNX 8.0 <strong>on an Apple-Silicon Mac</strong>, where SDP 8.0 has no macOS host tools, with <code>qcc</code> in a Docker container</li>
 <li>how to run and poke your service on a QNX 8.0 guest under QEMU</li>
-<li>how <code>ionotify()</code> and pulses let a client wait on a device without polling, and the one registration call QNX 8.0 insists on that is easy to miss</li>
+<li>how <code>ionotify()</code> and pulses let a client wait on a device without polling, and the registration call that is easy to miss (we show the failure, recorded)</li>
 </ul>
 <h3>What you'll need</h3>
 <ul>
 <li>an Apple-Silicon Mac with Docker Desktop (the container runs as <code>linux/amd64</code>, emulated)</li>
-<li>the <strong>QNX Software Development Platform 8.0</strong> installed on the Mac (non-commercial license; follow QNX's own guide, <a href="https://devblog.qnx.com/how-to-use-macos-to-develop-for-qnx-8-0/">How to use macOS to develop for QNX 8.0</a>), at <code>~/qnx800</code> in this codelab</li>
-<li>the <strong>QNX Everywhere Quick Start Target Image</strong> for QEMU (<a href="https://www.qnx.com/developers/docs/qnxeverywhere/com.qnx.doc.target_images/topic/qsti_qemu/getting_started.html">getting started</a>) and <code>qemu-system-x86_64</code> (<code>brew install qemu</code>)</li>
-<li>about 55 minutes, and basic C</li>
+<li>the <strong>QNX Software Development Platform 8.0</strong> installed on the Mac (non-commercial license; follow QNX's own guide, <a href="https://devblog.qnx.com/how-to-use-macos-to-develop-for-qnx-8-0/">How to use macOS to develop for QNX 8.0</a>), at <code>~/qnx800</code>, with its license directory <code>~/.qnx</code>; Docker Desktop must be allowed to bind-mount both (and the folder you clone into)</li>
+<li>the <strong>QNX Everywhere Quick Start Target Image</strong> for QEMU (<a href="https://www.qnx.com/developers/docs/qnxeverywhere/com.qnx.doc.target_images/topic/qsti_qemu/getting_started.html">getting started</a>): install the <code>com.qnx.qnx800.quickstart.qemu</code> package with QNX Software Center and run its <code>unpack_qemu_image.sh</code>; and <code>qemu-system-x86_64</code> (<code>brew install qemu</code>)</li>
+<li>this repository, cloned: <code>git clone https://github.com/edycutjong/telltale.git &amp;&amp; cd telltale/codelab</code>. Every path below is relative to that <code>codelab/</code> folder</li>
+<li>about 63 minutes (plus the one-time image conversion in the boot step), and basic C</li>
 </ul>
 <h3>What this was tested on</h3>
-<p>Apple-Silicon Mac, Docker Desktop, QNX SDP 8.0 (<code>ntox86_64-gcc 12.2.0</code>), the Quick Start Target Image run as an <strong>x86_64 guest under QEMU with TCG</strong> (software emulation, so it is slow but needs no root, no KVM and no extra drivers). All code is in this repository's <code>codelab/</code> folder.</p>
+<p>Written and run on 2026-11-16: Apple-Silicon Mac, Docker Desktop, QNX SDP 8.0 (<code>ntox86_64-gcc 12.2.0</code>), the Quick Start Target Image run as an <strong>x86_64 guest under QEMU with TCG</strong> (software emulation: slow, but it needs no root, no KVM and no extra drivers). Guest <code>uname</code>: <code>QNX qnxqemu 8.0.0 2026/06/05</code>. The complete source is in this folder's <code>src/</code>: you do not have to type the code that the steps below walk through. The commands were run in bash; <code>env.sh</code> also loads in zsh.</p>
 </section><section class="step" id="set-up-the-host-toolchain"><h2>Set up the host toolchain</h2><span class="dur">5:00 min</span>
 
 <p>SDP 8.0's host tools are Linux-only, so on a Mac the compiler lives in a <code>linux/amd64</code> container. The image only holds a few helper packages; the SDP itself stays on your Mac and is mounted in at the same path. Build the image once from this repository's <code>docker/Dockerfile</code>:</p>
@@ -76,14 +77,14 @@ table{border-collapse:collapse;margin:1rem 0;font-size:15px}td,th{border:1px sol
 docker image inspect telltale-qnx-host:local --format '{{.Os}}/{{.Architecture}}'
 </code></pre>
 <div class="lbl">Output (recorded)</div>
-<pre class="out"><code>sha256:f10a86d0df8c031deea73859e05560432d80bbcf777c600cb86036d6563305a5
+<pre class="out"><code>sha256:b090400ea1288be19d9e8add424c6626159d5681fdfbb11558a71bd467149a00
 linux/amd64
 </code></pre>
-<p><code>env.sh</code> defines three small shell functions used for the rest of the codelab. <code>source</code> it in every terminal you use (it works in bash and zsh):</p>
+<p><code>env.sh</code> defines four small shell functions used for the rest of the codelab. <code>source</code> it in every terminal you use:</p>
 <ul>
 <li><code>qnx &lt;cmd&gt;</code>: run <code>&lt;cmd&gt;</code> inside the container with the SDP environment loaded</li>
 <li><code>tgt &lt;cmd&gt;</code>: run <code>&lt;cmd&gt;</code> on the QNX guest over ssh</li>
-<li><code>tgtput &lt;files&gt;</code> / <code>tgtroot &lt;script&gt;</code>: copy files to the guest / run a script there as root</li>
+<li><code>tgtput &lt;files&gt;</code> / <code>tgtroot &lt;script&gt;</code>: copy files to <code>~/codelab</code> on the guest (on the guest, <code>~</code> is <code>/data/home/qnxuser</code>) / run a script there as root</li>
 </ul>
 <p>Check the cross-compiler answers:</p>
 <pre><code class="language-bash">source env.sh
@@ -92,24 +93,36 @@ qnx ntox86_64-gcc --version | head -1
 <div class="lbl">Output (recorded)</div>
 <pre class="out"><code>ntox86_64-gcc (QNX8.0.0-ra7e8d3cd2255b7b0fd7ed75b5fd7082edd813c9d-1008) 12.2.0
 </code></pre>
-</section><section class="step" id="boot-qnx-8-0-under-qemu"><h2>Boot QNX 8.0 under QEMU</h2><span class="dur">5:00 min</span>
+</section><section class="step" id="boot-qnx-8-0-under-qemu"><h2>Boot QNX 8.0 under QEMU</h2><span class="dur">6:00 min</span>
 
-<p>Boot the Quick Start image with the launch script in this repository. It is the image's own <code>mkqnximage --run</code> command adapted for macOS (TCG instead of KVM, no GPU window, user-mode networking so ssh is forwarded to <code>127.0.0.1:2222</code>), with the reasons in the script header:</p>
-<pre><code class="language-bash">../scripts/run_qemu.sh &amp;        # leave it running; the guest's serial console is /tmp/tt-qemu/serial.sock
+<p>Boot the Quick Start image with the launch script in this repository. It is the image's own <code>mkqnximage --run</code> command adapted for macOS (TCG instead of KVM, no GPU window, user-mode networking so ssh is forwarded to <code>127.0.0.1:2222</code>), with the reasons in the script header. The first time it runs it converts the image's 47 GiB raw disk to a qcow2 file (about 5 GB on disk, a few minutes) and checks the copy; after that it boots straight away. The command is long-running, so it is shown but not recorded; leave it running in its own terminal:</p>
+<pre><code class="language-bash">../scripts/run_qemu.sh          # the guest's serial console is the unix socket /tmp/tt-qemu/serial.sock
 </code></pre>
-<p>In our run, from launching that script to the guest answering ssh took about 16 seconds. The default login is <code>qnxuser</code> (password <code>qnxuser</code>). Wait for ssh and ask the guest who it is:</p>
+<p>The image's default login is <code>qnxuser</code> (password <code>qnxuser</code>). You will run a few dozen ssh commands, so install an ssh key once: the loop below retries until the guest's sshd answers, then asks for the password a single time (type <code>qnxuser</code>). Then export the key's path so <code>tgt</code> uses it:</p>
+<pre><code class="language-bash">KEY=~/.ssh/qnx_codelab
+[ -f $KEY ] || ssh-keygen -q -t ed25519 -N '' -f $KEY
+until ssh-copy-id -i $KEY.pub -p 2222 -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null \
+      -o LogLevel=ERROR qnxuser@127.0.0.1 2&gt;/dev/null; do sleep 3; done
+export CODELAB_KEY=$KEY
+</code></pre>
+<div class="lbl">Output (recorded)</div>
+<pre class="out"><code>
+Number of key(s) added:        1
+
+Now try logging into the machine, with: &quot;ssh -i ~/.ssh/qnx_codelab -p 2222 -o 'StrictHostKeyChecking=no' -o 'UserKnownHostsFile=/dev/null' -o 'LogLevel=ERROR' 'qnxuser@127.0.0.1'&quot;
+and check to make sure that only the key(s) you wanted were added.
+</code></pre>
+<p>Ask the guest who it is:</p>
 <pre><code class="language-bash">source env.sh
-until tgt true 2&gt;/dev/null; do sleep 2; done
 tgt 'uname -a; id -un'
 </code></pre>
 <div class="lbl">Output (recorded)</div>
 <pre class="out"><code>QNX qnxqemu 8.0.0 2026/06/05-16:26:03EDT x86pc x86_64
 qnxuser
 </code></pre>
-<p>If you would rather not type the password on every <code>tgt</code> call, install an ssh key once and <code>export CODELAB_KEY=&lt;private key path&gt;</code> (the recorded runs below used a key).</p>
 </section><section class="step" id="the-contract-counter-h"><h2>The contract: counter.h</h2><span class="dur">3:00 min</span>
 
-<p>The header is the only thing the server and its clients share. <code>devctl()</code> commands are 32-bit numbers built by the <code>__DIOF</code> / <code>__DIOT</code> / <code>__DION</code> macros, which encode a class, a command number and the data's type and direction. <code>_DCMD_MISC</code> is the class QNX reserves for non-QNX drivers; the command numbers are ours.</p>
+<p>The header is the only thing the server and its clients share. <code>devctl()</code> commands are 32-bit numbers built by the <code>__DIOF</code> / <code>__DIOT</code> / <code>__DION</code> macros, which encode a class, a command number, the size of the data and its direction. <code>_DCMD_MISC</code> is the class QNX recommends for non-QNX drivers; the command numbers are ours. The suffix says which way the data flows: <code>F</code> = from the device to the client, <code>T</code> = to the device from the client, <code>N</code> = no data.</p>
 <pre><code class="language-c">// src/counter.h
 /* counter.h - the contract between the /dev/counter resource manager and its clients. */
 #ifndef COUNTER_H
@@ -132,7 +145,7 @@ qnxuser
 <p>Resource-manager helpers like <code>iofunc_*</code> work on an <code>iofunc_attr_t</code>, the per-device attribute block. To keep our own data next to it, make our struct start with one. Two details matter:</p>
 <ol>
 <li><code>IOFUNC_ATTR_T</code> must be <code>#define</code>d <strong>before</strong> <code>&lt;sys/iofunc.h&gt;</code>, so the library's per-open (<code>ocb</code>) structure points at <em>our</em> struct.</li>
-<li><code>notify[3]</code> is the bookkeeping <code>iofunc_notify()</code> needs to remember which clients asked to be woken (input, output, out-of-band). We use it in the <code>ionotify()</code> step.</li>
+<li>The three static variables below are what <code>main()</code> fills in: the connect and I/O function tables and the one device's attribute. <code>notify[3]</code> is the bookkeeping <code>iofunc_notify()</code> needs to remember which clients asked to be woken (input, output, out-of-band). We use it in the <code>ionotify()</code> step.</li>
 </ol>
 <pre><code class="language-c">// src/counter.c
 /* Our attribute structure embeds the standard one first, so every iofunc_* helper still works on it.
@@ -150,6 +163,10 @@ struct counter_attr {
     uint64_t        value;
     int             unread;     /* value changed since the last complete read */
 };
+
+static resmgr_connect_funcs_t connect_funcs;
+static resmgr_io_funcs_t      io_funcs;
+static struct counter_attr    attr;
 </code></pre>
 </section><section class="step" id="read-and-write"><h2>read() and write()</h2><span class="dur">8:00 min</span>
 
@@ -205,7 +222,7 @@ static int io_write(resmgr_context_t *ctp, io_write_t *msg, iofunc_ocb_t *ocb)
 <p><code>counter_changed()</code>, near the top of the file, sets <code>unread</code> and calls <code>iofunc_notify_trigger()</code>; ignore it until the <code>ionotify()</code> step.</p>
 </section><section class="step" id="devctl"><h2>devctl()</h2><span class="dur">5:00 min</span>
 
-<p><code>devctl()</code> is a typed request/reply: the client sends a command plus a small struct, the server sends a struct back. Always give the standard devctls (<code>iofunc_devctl_default</code>) the first chance, then handle your own; the data lives right after the message header, at <code>_DEVCTL_DATA()</code>. The reply must be a <code>struct _io_devctl_reply</code> plus any returned bytes.</p>
+<p><code>devctl()</code> is a typed request/reply: the client sends a command plus a small struct, the server sends a struct back. Always give the standard devctls (<code>iofunc_devctl_default</code>) the first chance, then handle your own; the data lives right after the message header, at <code>_DEVCTL_DATA()</code>. The reply is a <code>struct _io_devctl_reply</code> plus any returned bytes. Note the size check on <code>ADD</code>: a client could send a struct of any size, so the server checks before it reads one.</p>
 <pre><code class="language-c">// src/counter.c
 static int io_devctl(resmgr_context_t *ctp, io_devctl_t *msg, iofunc_ocb_t *ocb)
 {
@@ -220,6 +237,7 @@ static int io_devctl(resmgr_context_t *ctp, io_devctl_t *msg, iofunc_ocb_t *ocb)
         nbytes = sizeof(uint64_t);
         break;
     case DCMD_COUNTER_ADD:
+        if (msg-&gt;i.nbytes != sizeof(int32_t)) return EINVAL;   /* the client's struct must be the size we expect */
         a-&gt;value += (uint64_t)(int64_t)*(int32_t *)_DEVCTL_DATA(msg-&gt;i);
         counter_changed(a);
         break;
@@ -276,7 +294,7 @@ int main(void)
 <p>Two handlers we skipped are short: <code>io_close_ocb()</code> drops a closing client's armed notifications so a dead client cannot be woken, and <code>io_notify()</code> is the <code>ionotify()</code> entry, covered below.</p>
 </section><section class="step" id="build-it-for-qnx-and-copy-it-over"><h2>Build it for QNX and copy it over</h2><span class="dur">3:00 min</span>
 
-<p>Three programs: the server (<code>counter</code>) and two clients (<code>counterctl</code>, <code>counterwatch</code>). <code>-Wall -Wextra -Werror</code> keeps the build honest. The <code>file</code> line proves the result is a QNX 8.0 binary (its interpreter is QNX's <code>ldqnx-64.so.2</code>), not a Mac or Linux one:</p>
+<p>Three programs: the server (<code>counter</code>) and two clients (<code>counterctl</code>, <code>counterwatch</code>). <code>-Wall -Wextra -Werror</code> keeps the build honest. The <code>file</code> line shows the result is a QNX binary (its interpreter is QNX's <code>ldqnx-64.so.2</code>), not a Mac or Linux one:</p>
 <pre><code class="language-bash">source env.sh
 mkdir -p out
 for p in counter counterctl counterwatch; do
@@ -299,9 +317,9 @@ tgt 'ls -l ~/codelab'
 </code></pre>
 <div class="lbl">Output (recorded)</div>
 <pre class="out"><code>total 72
--rwxr-xr-x  1 qnxuser qnxuser 14528 2026-11-16 01:02 counter
--rwxr-xr-x  1 qnxuser qnxuser  9536 2026-11-16 01:02 counterctl
--rwxr-xr-x  1 qnxuser qnxuser 13800 2026-11-16 01:02 counterwatch
+-rwxr-xr-x  1 qnxuser qnxuser 14528 2026-11-16 01:09 counter
+-rwxr-xr-x  1 qnxuser qnxuser  9536 2026-11-16 01:09 counterctl
+-rwxr-xr-x  1 qnxuser qnxuser 13800 2026-11-16 01:09 counterwatch
 </code></pre>
 </section><section class="step" id="run-it"><h2>Run it</h2><span class="dur">5:00 min</span>
 
@@ -312,7 +330,7 @@ tgt 'cd ~/codelab &amp;&amp; ./counter'
 <div class="lbl">Output (recorded)</div>
 <pre class="out"><code>resmgr_attach /dev/counter: Operation not permitted
 </code></pre>
-<p><code>Operation not permitted</code> is QNX 8.0's security model working as intended: registering <code>/dev/counter</code> needs the path-space ability, which <code>root</code> has. Start it as root, in the background:</p>
+<p><code>Operation not permitted</code> is QNX 8.0's security model working as intended: registering <code>/dev/counter</code> needs the path-space ability, which <code>root</code> has. Start it as root, in the background (<code>nohup</code> keeps it running after the ssh session ends):</p>
 <pre><code class="language-bash">source env.sh
 tgtroot 'slay counter 2&gt;/dev/null
 cd /data/home/qnxuser/codelab
@@ -322,7 +340,7 @@ tgt 'ls -l /dev/counter'
 </code></pre>
 <div class="lbl">Output (recorded)</div>
 <pre class="out"><code>counter: serving /dev/counter
-crw-rw-rw-  1 root root 0,   1 2026-11-16 01:02 /dev/counter
+crw-rw-rw-  1 root root 0,   1 2026-11-16 01:09 /dev/counter
 </code></pre>
 <p><code>/dev/counter</code> is now a file in the guest. Use it like one, with no special client library:</p>
 <pre><code class="language-bash">source env.sh
@@ -348,14 +366,21 @@ tgt '~/codelab/counterctl add 40; ~/codelab/counterctl get; ~/codelab/counterctl
 <pre class="out"><code>42
 0
 </code></pre>
-<p>The server is an ordinary process, one you can see, stop and restart like any other (as <code>qnxuser</code>, <code>pidin</code> does not list root's processes, so these commands run as root). Kill it and the name disappears from the path space; start it again and it is back with a fresh counter:</p>
+<p>The server is an ordinary process, one you can see, stop and restart like any other. <code>pidin</code> lists processes and <code>slay</code> kills one by name. Root's processes are not listed for <code>qnxuser</code>:</p>
+<pre><code class="language-bash">source env.sh
+tgt 'pidin -f an | grep &quot;[.]/counter&quot; || echo &quot;(no ./counter listed for qnxuser)&quot;'
+</code></pre>
+<div class="lbl">Output (recorded)</div>
+<pre class="out"><code>(no ./counter listed for qnxuser)
+</code></pre>
+<p>So run them as root. Kill the server and the name disappears from the path space (the <code>No such file</code> line is the expected result here):</p>
 <pre><code class="language-bash">source env.sh
 tgtroot 'pidin -f an | grep &quot;[.]/counter&quot;'
 tgtroot 'slay counter'
 tgt 'cat /dev/counter'
 </code></pre>
 <div class="lbl">Output (recorded)</div>
-<pre class="out"><code> 5320733 ./counter
+<pre class="out"><code> 7634973 ./counter
 cat: /dev/counter: No such file or directory
 </code></pre>
 <pre><code class="language-bash">source env.sh
@@ -368,10 +393,11 @@ tgt 'cat /dev/counter'
 <pre class="out"><code>counter: serving /dev/counter
 0
 </code></pre>
-</section><section class="step" id="ionotify-wait-without-polling"><h2>ionotify(): wait without polling</h2><span class="dur">10:00 min</span>
+</section><section class="step" id="ionotify-wait-without-polling"><h2>ionotify(): wait without polling</h2><span class="dur">12:00 min</span>
 
-<p>A client that wants to know when the counter changes has two bad options: poll in a loop (wastes CPU, adds latency) or block in <code>read()</code> (cannot do anything else). QNX's answer is <strong><code>ionotify()</code></strong>: the client says "send me this pulse when <code>/dev/counter</code> has input", and goes to sleep in <code>MsgReceivePulse()</code>, where it can also receive messages from anyone else.</p>
-<p>The server side has two parts. <code>io_notify()</code> tells the library which conditions are true <em>right now</em>; the library arms the client's event for the others. <code>counter_changed()</code> fires the armed events whenever the value changes:</p>
+<p>A client that wants to know when the counter changes has two bad options: poll in a loop (wastes CPU, adds latency) or block in <code>read()</code> (cannot do anything else). QNX's answer is <strong><code>ionotify()</code></strong>: the client says "send me this event when <code>/dev/counter</code> has input", and goes to sleep until it arrives.</p>
+<p>Some vocabulary first. A <strong>channel</strong> is a mailbox a process creates to receive on (<code>ChannelCreate</code>); a <strong>connection</strong> is a handle for sending to one (<code>ConnectAttach</code>; here the client connects to its own channel). A <strong>pulse</strong> is the smallest QNX message: a fixed-size, non-blocking packet with a small code and a value. A <strong><code>sigevent</code></strong> describes what to deliver; <code>SIGEV_PULSE_INIT</code> builds one that says "send this pulse to this connection". The server delivers it on the client's behalf when the condition becomes true, and the client picks it up with <code>MsgReceivePulse()</code> (or <code>MsgReceive()</code>, if the same thread must also serve messages from other clients).</p>
+<p>The server side has two parts. <code>io_notify()</code> tells the library which conditions are true <em>right now</em>; the library arms the client's event only if none of the conditions the client asked about is true. <code>counter_changed()</code> fires the armed events whenever the value changes. Arming is one-shot: after an event fires, the client must arm again, which is why the client below loops. The <code>unread</code> flag is per device, not per open file: whoever reads the value clears it for every watcher.</p>
 <pre><code class="language-c">// src/counter.c
 static int io_notify(resmgr_context_t *ctp, io_notify_t *msg, iofunc_ocb_t *ocb)
 {
@@ -389,7 +415,7 @@ static void counter_changed(struct counter_attr *a)
     iofunc_notify_trigger(a-&gt;notify, 1, IOFUNC_NOTIFY_INPUT);
 }
 </code></pre>
-<p>The client creates a channel, connects to it, and builds a pulse event. Then comes the QNX 8.0 detail the first version of this codelab got wrong: <strong>the event must be registered against the file descriptor with <code>MsgRegisterEvent()</code> before it is handed to <code>ionotify()</code></strong>. Without it everything appears to work (<code>ionotify()</code> returns 0, the server logs the trigger) and the pulse silently never arrives. It is called out in the <code>ionotify()</code> reference page, and took a debugging session to find. <code>POLLARM</code> is "tell me what is ready now, and arm the pulse only if nothing is", so the loop drains first and sleeps second:</p>
+<p>On the client, the part that is easy to miss: <strong>the event must be registered against the file descriptor with <code>MsgRegisterEvent()</code> before it is handed to <code>ionotify()</code></strong>. The <code>ionotify()</code> reference page says so ("The application must register the event by calling MsgRegisterEvent() with the fd passed to ionotify()"). Leave it out and <code>ionotify()</code> still succeeds, but the pulse never arrives; the run below shows exactly that. <code>POLLARM</code> means "tell me what is ready now, and arm the pulse only if nothing is", so the loop drains first and sleeps second. The <code>lseek()</code> rewinds the open file so each <code>read()</code> returns the value again, from offset 0:</p>
 <pre><code class="language-c">// src/counterwatch.c
 int main(int argc, char **argv)
 {
@@ -401,9 +427,11 @@ int main(int argc, char **argv)
     int coid = ConnectAttach(0, 0, chid, _NTO_SIDE_CHANNEL, 0);
     struct sigevent ev;
     SIGEV_PULSE_INIT(&amp;ev, coid, SIGEV_PULSE_PRIO_INHERIT, PULSE_CODE, 0);
-    /* QNX 8.0: an event handed to ionotify() must first be registered against that fd, otherwise the
-     * resource manager's MsgDeliverEvent() has nothing it is allowed to deliver and no pulse ever arrives. */
+#ifndef SKIP_REGISTER   /* -DSKIP_REGISTER builds the broken variant the codelab uses to show the pitfall */
+    /* The reference page for ionotify() says the event must be registered with MsgRegisterEvent() against
+     * the fd that is passed to ionotify(). Leave this out and ionotify() still succeeds, but no pulse comes. */
     if (MsgRegisterEvent(&amp;ev, fd) == -1) { perror(&quot;MsgRegisterEvent&quot;); return 1; }
+#endif
 
     printf(&quot;counterwatch: armed, waiting for %d change(s)\n&quot;, want);
     fflush(stdout);
@@ -422,28 +450,45 @@ int main(int argc, char **argv)
     return 0;
 }
 </code></pre>
-<p>Run the watcher for three changes. A background job changes the counter from a second terminal-worth of work (a <code>write</code>, then a <code>devctl</code>, then another <code>write</code>) while <code>counterwatch</code> sleeps in between:</p>
+<p>First the broken variant: the same program built with <code>-DSKIP_REGISTER</code>, which leaves out the one <code>MsgRegisterEvent()</code> call. We change the counter, wait, and check whether the watcher woke up:</p>
+<pre><code class="language-bash">source env.sh
+qnx qcc -Vgcc_ntox86_64 -std=gnu11 -Wall -Wextra -Werror -DSKIP_REGISTER -o out/counterwatch-noreg src/counterwatch.c
+tgtput out/counterwatch-noreg
+tgt 'cd ~/codelab; cat /dev/counter &gt; /dev/null; ./counterwatch-noreg 1 &gt; noreg.out 2&gt;&amp;1 &lt; /dev/null &amp;
+sleep 2; echo inc &gt; /dev/counter; sleep 4
+cat noreg.out; echo &quot;--- 4 s after the change, is it still waiting? ---&quot;; pidin -p counterwatch-noreg'
+tgt 'slay counterwatch-noreg' || true     # stop it
+</code></pre>
+<div class="lbl">Output (recorded)</div>
+<pre class="out"><code>counterwatch: armed, waiting for 1 change(s)
+--- 4 s after the change, is it still waiting? ---
+     pid tid name                         prio STATE          Blocked
+ 8626204   1 ./counterwatch-noreg          10r RECEIVE        1
+</code></pre>
+<p>It armed, the counter changed, and the watcher is still in <code>RECEIVE</code> state: no pulse. Now the real one, with the registration. While it sleeps we check what it is doing, then change the counter three times: a <code>write</code>, a <code>devctl</code>, another <code>write</code>:</p>
 <pre><code class="language-bash">source env.sh
 tgt 'cat /dev/counter &gt;/dev/null'            # mark the current value as seen
-( sleep 2; tgt 'echo inc &gt; /dev/counter'; sleep 1; tgt '~/codelab/counterctl add 5'; sleep 1; tgt 'echo inc &gt; /dev/counter' ) &amp;
+( sleep 1; tgt 'pidin -p counterwatch'; sleep 1; tgt 'echo inc &gt; /dev/counter'; sleep 1; tgt '~/codelab/counterctl add 5'; sleep 1; tgt 'echo inc &gt; /dev/counter' ) &amp;
 tgt '~/codelab/counterwatch 3'
 wait
 </code></pre>
 <div class="lbl">Output (recorded)</div>
 <pre class="out"><code>counterwatch: armed, waiting for 3 change(s)
-counterwatch: value is now 1
-counterwatch: value is now 6
+     pid tid name                         prio STATE          Blocked
+ 8392731   1 qnxuser/codelab/counterwatch  10r RECEIVE        1
+counterwatch: value is now 2
 counterwatch: value is now 7
+counterwatch: value is now 8
 </code></pre>
-<p>Three changes, three wake-ups, no polling: the watcher was blocked in the kernel between them. That is the whole mechanism behind <code>select()</code> and <code>poll()</code> on QNX too; they are built on <code>ionotify()</code>.</p>
+<p>Three changes, three wake-ups, no polling: between them the watcher sits in <code>RECEIVE</code>, blocked in the kernel (the <code>pidin</code> line was taken while it waited). <code>select()</code> and <code>poll()</code> on QNX are built on <code>ionotify()</code>, so the same server code serves them too.</p>
 </section><section class="step" id="pitfalls-and-what-to-try-next"><h2>Pitfalls and what to try next</h2><span class="dur">2:00 min</span>
 
-<p>Things that went wrong while writing this codelab, so they need not go wrong for you:</p>
+<p>Pitfalls:</p>
 <ul>
-<li><strong>No pulse arrives.</strong> You forgot <code>MsgRegisterEvent(&amp;ev, fd)</code>, or you armed with an event whose connection (<code>coid</code>) does not belong to the process that calls <code>MsgReceivePulse()</code>.</li>
+<li><strong>No pulse arrives.</strong> You forgot <code>MsgRegisterEvent(&amp;ev, fd)</code> (see the recorded run above), or registered it against the wrong fd.</li>
 <li><strong><code>cat /dev/counter</code> never ends.</strong> Your <code>read()</code> does not advance <code>ocb-&gt;offset</code> / return 0 at the end.</li>
 <li><strong><code>resmgr_attach: Operation not permitted</code>.</strong> Not root. Resource managers that must run as a normal user get the path-space ability from a security policy (<code>secpol</code>); see QNX's <em>Security policies</em> docs.</li>
 <li><strong><code>devctl()</code> seems to fail with <code>-1</code>.</strong> It does not: <code>devctl()</code> returns the <code>errno</code> value itself (0 on success).</li>
 <li><strong>Handler "returns" a stack buffer.</strong> The reply is sent after your handler returns; use <code>resmgr_msgwrite()</code> or static data.</li>
 </ul>
-<p>To go further: give each <em>open file</em> its own state with an extended <code>ocb</code>; run the receive loop from a thread pool (<code>thread_pool_create</code>) instead of one thread; give the server a security policy so it does not need to be root; or trigger from a timer so the counter is a heartbeat. The Telltale repository this codelab ships in uses the same building blocks (<code>resmgr_attach</code>, message passing, <code>ionotify</code>) for a safety monitor; its README has the details.</p></section></main></div></body></html>
+<p>To go further: give each <em>open file</em> its own state with an extended <code>ocb</code>; run the receive loop from a thread pool (<code>thread_pool_create</code>) instead of one thread; give the server a security policy so it does not need to be root; or trigger from a timer so the counter is a heartbeat. The Telltale repository this codelab ships in uses the same building blocks (<code>resmgr_attach</code>, message passing, <code>ionotify</code>) for an instrument-cluster monitor; its README has the details.</p></section></main></div></body></html>

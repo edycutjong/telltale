@@ -124,6 +124,8 @@ def to_html(md_text, title, meta):
 
 def main():
     src = read("codelab.md")
+    mins = sum(int(a) * 1 + int(b) / 60 for a, b in re.findall(r"^Duration: (\d+):(\d\d)$", src, flags=re.M))
+    src = src.replace("{{total}}", str(round(mins)))
     lines = src.splitlines()
     title = lines[0].lstrip("# ").strip()
     meta = {}

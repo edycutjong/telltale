@@ -28,7 +28,19 @@ def blocks(text):
         i += 1
 
 
+def setup_env():
+    """Recorded runs use a codelab-only ssh key (made by the `key` block) and answer ssh-copy-id's single
+    password prompt with the image's documented default, through SSH_ASKPASS. Readers just type it."""
+    os.environ.setdefault("CODELAB_KEY", os.path.expanduser("~/.ssh/qnx_codelab"))
+    ask = os.path.join(HERE, "out", "askpass.sh")
+    os.makedirs(os.path.dirname(ask), exist_ok=True)
+    open(ask, "w").write("#!/bin/sh\necho qnxuser\n")
+    os.chmod(ask, 0o700)
+    os.environ.update(SSH_ASKPASS=ask, SSH_ASKPASS_REQUIRE="force", DISPLAY=os.environ.get("DISPLAY", "none"))
+
+
 def main(argv):
+    setup_env()
     only = set(argv)
     os.makedirs(os.path.join(HERE, "transcripts"), exist_ok=True)
     text = open(os.path.join(HERE, "codelab.md")).read()
