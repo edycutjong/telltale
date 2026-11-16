@@ -2,6 +2,7 @@
 # tgt <command...>  runs a command on the QNX guest that scripts/run_qemu.sh forwards to 127.0.0.1:2222.
 # The QNX Everywhere QEMU image's default login is qnxuser (password: qnxuser). To avoid typing it on every
 # call, install an ssh key once, then export CODELAB_KEY=<path to that private key>.
+[ -z "${CODELAB_KEY:-}" ] && [ -f "$HOME/.ssh/qnx_codelab" ] && export CODELAB_KEY="$HOME/.ssh/qnx_codelab"
 tgt() {
   local k=(); [ -n "${CODELAB_KEY:-}" ] && k=(-i "$CODELAB_KEY")
   ssh "${k[@]}" -p 2222 -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null \

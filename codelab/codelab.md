@@ -1,11 +1,11 @@
 # Your first QNX resource manager on an Apple-Silicon Mac
 
-summary: Build, run and watch a /dev/counter resource manager on QNX 8.0 - read(), write(), devctl() and ionotify() pulses - cross-compiled on an M-series Mac and run on a QEMU guest. Each command block is followed by the output recorded when it was run on that guest.
+summary: Build, run and watch a /dev/counter resource manager on QNX 8.0 - read(), write(), devctl() and ionotify() pulses - cross-compiled on an M-series Mac and run on a QEMU guest. Each command block, except the long-running QEMU boot command, is followed by the output recorded when it was run on that guest.
 id: qnx-first-resmgr-apple-silicon
 categories: qnx, qnx-8.0, resource-manager, macos
 status: Published
 authors: The Telltale project
-duration: {{total}} minutes
+duration: about {{total}} minutes (estimated per step)
 
 ## Overview
 Duration: 5:00
@@ -32,7 +32,7 @@ You will build `/dev/counter`, a counter that any process can use:
 - the **QNX Software Development Platform 8.0** installed on the Mac (non-commercial license; follow QNX's own guide, [How to use macOS to develop for QNX 8.0](https://devblog.qnx.com/how-to-use-macos-to-develop-for-qnx-8-0/)), at `~/qnx800`, with its license directory `~/.qnx`; Docker Desktop must be allowed to bind-mount both (and the folder you clone into)
 - the **QNX Everywhere Quick Start Target Image** for QEMU ([getting started](https://www.qnx.com/developers/docs/qnxeverywhere/com.qnx.doc.target_images/topic/qsti_qemu/getting_started.html)): install the `com.qnx.qnx800.quickstart.qemu` package with QNX Software Center and run its `unpack_qemu_image.sh`; and `qemu-system-x86_64` (`brew install qemu`)
 - this repository, cloned: `git clone https://github.com/edycutjong/telltale.git && cd telltale/codelab`. Every path below is relative to that `codelab/` folder
-- about {{total}} minutes (plus the one-time image conversion in the boot step), and basic C
+- about {{total}} minutes (the per-step times are estimates; the one-time image conversion in the boot step comes on top), and basic C
 
 ### What this was tested on
 Written and run on 2026-11-16: Apple-Silicon Mac, Docker Desktop, QNX SDP 8.0 (`ntox86_64-gcc 12.2.0`), the Quick Start Target Image run as an **x86_64 guest under QEMU with TCG** (software emulation: slow, but it needs no root, no KVM and no extra drivers). Guest `uname`: `QNX qnxqemu 8.0.0 2026/06/05`. The complete source is in this folder's `src/`: you do not have to type the code that the steps below walk through. The commands were run in bash; `env.sh` also loads in zsh.
@@ -47,7 +47,11 @@ docker build -q --platform linux/amd64 -t telltale-qnx-host:local ../docker
 docker image inspect telltale-qnx-host:local --format '{{.Os}}/{{.Architecture}}'
 ```
 
-`env.sh` defines four small shell functions used for the rest of the codelab. `source` it in every terminal you use:
+`env.sh` defines four small shell functions used for the rest of the codelab. `source` it in every terminal you use. Here is the image definition it runs, for reference:
+
+{{file ../docker/Dockerfile}}
+
+The functions:
 
 - `qnx <cmd>`: run `<cmd>` inside the container with the SDP environment loaded
 - `tgt <cmd>`: run `<cmd>` on the QNX guest over ssh
@@ -63,19 +67,19 @@ qnx ntox86_64-gcc --version | head -1
 ## Boot QNX 8.0 under QEMU
 Duration: 6:00
 
-Boot the Quick Start image with the launch script in this repository. It is the image's own `mkqnximage --run` command adapted for macOS (TCG instead of KVM, no GPU window, user-mode networking so ssh is forwarded to `127.0.0.1:2222`), with the reasons in the script header. The first time it runs it converts the image's 47 GiB raw disk to a qcow2 file (about 5 GB on disk, a few minutes) and checks the copy; after that it boots straight away. The command is long-running, so it is shown but not recorded; leave it running in its own terminal:
+Boot the Quick Start image with the launch script in this repository. It is the image's own `mkqnximage --run` command adapted for macOS (TCG instead of KVM, no GPU window, user-mode networking so ssh is forwarded to `127.0.0.1:2222`), with the reasons in the script header. The first time it runs it converts the image's 47 GiB raw disk to a qcow2 file (about 5 GB on disk; about a minute on an SSD) and checks the copy; after that it boots straight away. The command is long-running, so it is shown but not recorded; leave it running in its own terminal:
 
 ```bash
 ../scripts/run_qemu.sh          # the guest's serial console is the unix socket /tmp/tt-qemu/serial.sock
 ```
 
-The image's default login is `qnxuser` (password `qnxuser`). You will run a few dozen ssh commands, so install an ssh key once: the loop below retries until the guest's sshd answers, then asks for the password a single time (type `qnxuser`). Then export the key's path so `tgt` uses it:
+The image's default login is `qnxuser` (password `qnxuser`). You will run a few dozen ssh commands, so install an ssh key once: the loop below retries until `ssh-copy-id` succeeds (the guest needs a moment before its sshd answers); when it asks for the password, type `qnxuser`. `env.sh` picks the key up automatically in any terminal once `~/.ssh/qnx_codelab` exists:
 
 ```bash run=key
 KEY=~/.ssh/qnx_codelab
 [ -f $KEY ] || ssh-keygen -q -t ed25519 -N '' -f $KEY
 until ssh-copy-id -i $KEY.pub -p 2222 -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null \
-      -o LogLevel=ERROR qnxuser@127.0.0.1 2>/dev/null; do sleep 3; done
+      -o LogLevel=ERROR qnxuser@127.0.0.1; do sleep 3; done
 export CODELAB_KEY=$KEY
 ```
 
@@ -180,7 +184,7 @@ sleep 1; cat counter.log'
 tgt 'ls -l /dev/counter'
 ```
 
-`/dev/counter` is now a file in the guest. Use it like one, with no special client library:
+`/dev/counter` is now a file in the guest. Use it like one, with no special client library. A freshly started server's counter is 0:
 
 ```bash run=try-rw
 source env.sh
@@ -194,7 +198,11 @@ source env.sh
 tgt 'echo bogus > /dev/counter; echo "exit status: $?"'
 ```
 
-Now the binary interface, through `counterctl`, which calls `devctl()`:
+Now the binary interface, through `counterctl`, which calls `devctl()` (client side: open the device, then `devctl(fd, command, &data, size, NULL)`; the return value is 0 or an errno):
+
+{{file src/counterctl.c}}
+
+Run it:
 
 ```bash run=try-devctl
 source env.sh
@@ -232,7 +240,7 @@ A client that wants to know when the counter changes has two bad options: poll i
 
 Some vocabulary first. A **channel** is a mailbox a process creates to receive on (`ChannelCreate`); a **connection** is a handle for sending to one (`ConnectAttach`; here the client connects to its own channel). A **pulse** is the smallest QNX message: a fixed-size, non-blocking packet with a small code and a value. A **`sigevent`** describes what to deliver; `SIGEV_PULSE_INIT` builds one that says "send this pulse to this connection". The server delivers it on the client's behalf when the condition becomes true, and the client picks it up with `MsgReceivePulse()` (or `MsgReceive()`, if the same thread must also serve messages from other clients).
 
-The server side has two parts. `io_notify()` tells the library which conditions are true *right now*; the library arms the client's event only if none of the conditions the client asked about is true. `counter_changed()` fires the armed events whenever the value changes. Arming is one-shot: after an event fires, the client must arm again, which is why the client below loops. The `unread` flag is per device, not per open file: whoever reads the value clears it for every watcher.
+The server side has two parts. `io_notify()` tells the library which conditions are true *right now*; for a `POLLARM` request, which is what the client below sends, the library arms the client's event only if none of the conditions the client asked about is true (see the `iofunc_notify()` reference page). `counter_changed()` fires the armed events whenever a `write()` or `devctl()` modifies the counter, even when the value ends up the same (for example `reset` at 0). Arming is one-shot: after an event fires, the client must arm again, which is why the client below loops. The `unread` flag is per device, not per open file: whoever reads the value clears it for every watcher.
 
 {{fn src/counter.c io_notify}}
 
@@ -250,11 +258,11 @@ qnx qcc -Vgcc_ntox86_64 -std=gnu11 -Wall -Wextra -Werror -DSKIP_REGISTER -o out/
 tgtput out/counterwatch-noreg
 tgt 'cd ~/codelab; cat /dev/counter > /dev/null; ./counterwatch-noreg 1 > noreg.out 2>&1 < /dev/null &
 sleep 2; echo inc > /dev/counter; sleep 4
-cat noreg.out; echo "--- 4 s after the change, is it still waiting? ---"; pidin -p counterwatch-noreg'
+cat noreg.out; echo "wake-ups seen: $(grep -c "value is now" noreg.out)"; pidin -p counterwatch-noreg'
 tgt 'slay counterwatch-noreg' || true     # stop it
 ```
 
-It armed, the counter changed, and the watcher is still in `RECEIVE` state: no pulse. Now the real one, with the registration. While it sleeps we check what it is doing, then change the counter three times: a `write`, a `devctl`, another `write`:
+The client printed that it armed, the counter changed, and the output shows zero wake-ups after four seconds: no pulse arrived (the watcher is in `RECEIVE` state either way; the proof is the empty wake-up count, which the working run below contrasts). Now the real one, with the registration. While it sleeps we check what it is doing, then change the counter three times: a `write`, a `devctl`, another `write`:
 
 ```bash run=watch
 source env.sh
@@ -264,7 +272,7 @@ tgt '~/codelab/counterwatch 3'
 wait
 ```
 
-Three changes, three wake-ups, no polling: between them the watcher sits in `RECEIVE`, blocked in the kernel (the `pidin` line was taken while it waited). `select()` and `poll()` on QNX are built on `ionotify()`, so the same server code serves them too.
+Three changes, three wake-ups, no polling: while it waits the watcher sits in `RECEIVE`, blocked in the kernel (the `pidin` line was taken before the first change). The timings use fixed sleeps: on a slow host the first value may print without a wait, and changes that arrive faster than the watcher re-arms coalesce into one wake-up that shows the latest value. `select()` and `poll()` on QNX are built on `ionotify()`, so the same server code serves them too.
 
 ## Pitfalls and what to try next
 Duration: 2:00

@@ -51,8 +51,9 @@ def directive(m):
         body = between(args[0], args[1], args[2])
     else:
         sys.exit(f"render: unknown directive {kind}")
-    lang = "c"
-    return f"```{lang}\n// {args[0]}\n{body}\n```"
+    lang = "dockerfile" if args[0].endswith("Dockerfile") else "c"
+    cm = "#" if lang == "dockerfile" else "//"
+    return f"```{lang}\n{cm} {args[0]}\n{body}\n```"
 
 
 def clean(out):
