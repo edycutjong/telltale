@@ -70,9 +70,9 @@
   <!-- legend: two runs -->
   <g font-family="ui-monospace, SFMono-Regular, Menlo, Consolas, monospace" font-size="12.5" font-weight="700">
     <path d="M618 40 H648" stroke="#C8321E" stroke-width="3" stroke-dasharray="7 5"/>
-    <text x="656" y="44" fill="#B32C1A">run without Telltale</text>
-    <path d="M832 32 V48" stroke="#1F7A4D" stroke-width="4" stroke-linecap="round"/>
-    <text x="842" y="44" fill="#1C6F46">run with Telltale</text>
+    <text x="656" y="44" fill="#B32C1A">monitor off</text>
+    <path d="M770 32 V48" stroke="#1F7A4D" stroke-width="4" stroke-linecap="round"/>
+    <text x="780" y="44" fill="#1C6F46">monitor armed · same drive</text>
   </g>
   <g stroke="#B9B1A0" fill="none">
     <path d="M610 58 H1056 M610 126 H1056 M610 194 H1056 M610 262 H1056" stroke-width="1"/>
@@ -121,7 +121,7 @@
   <rect x="1100" y="62" width="16" height="16" rx="3" fill="#26241F"/><rect x="1122" y="62" width="16" height="16" rx="3" fill="#26241F"/>
   <g><animate attributeName="opacity" dur="8s" repeatCount="indefinite" values="1;1;0;0;1;1" keyTimes="0;0.16;0.18;0.9;0.97;1"/>
     <path transform="translate(1107.5 196) scale(1.08)" d="M48.6-11L48.6-22.5L43-22.5L43-38.7L29.9-38.7L29.9-22.5L16.6-22.5L36.3-69L23.2-69L3.5-22.5L3.5-11L29.9-11L29.9 0L43 0L43-11ZM67.4-1.4C70.6 0.3 74.2 1.1 78.3 1.1C82.4 1.1 86.0 0.3 89.3-1.4C92.5-3.0 95.0-5.3 96.8-8.4C98.7-11.5 99.6-15.0 99.6-19.1L99.6-21.4C99.6-24.4 98.9-27.2 97.5-29.9C96.0-32.5 94.0-34.6 91.3-36.2C93.4-37.5 95.1-39.3 96.4-41.6C97.7-43.9 98.4-46.6 98.4-49.5L98.4-51.3C98.4-54.7 97.6-57.8 96-60.7C94.4-63.6 92.1-65.9 89.1-67.5C86.0-69.3 82.5-70.1 78.4-70.1C74.3-70.1 70.8-69.3 67.8-67.5C64.8-65.9 62.5-63.6 60.9-60.7C59.2-57.8 58.4-54.7 58.4-51.3L58.4-49.5C58.4-46.5 59.1-43.9 60.4-41.6C61.7-39.3 63.4-37.5 65.5-36.2C62.8-34.7 60.8-32.6 59.3-30.0C57.8-27.3 57.1-24.4 57.1-21.3L57.1-19C57.1-15 58.0-11.5 59.9-8.4C61.7-5.3 64.2-3.0 67.4-1.4ZM83.8-43.7C82.5-42.2 80.7-41.4 78.4-41.4C76.1-41.4 74.3-42.1 73-43.6C71.7-45.1 71-47 71-49.4L71-51.3C71-53.5 71.7-55.3 73.1-56.8C74.4-58.3 76.2-59 78.4-59C80.6-59 82.4-58.3 83.8-56.8C85.1-55.3 85.8-53.5 85.8-51.3L85.8-49.4C85.8-47.1 85.1-45.2 83.8-43.7ZM84.7-12.5C83.1-10.8 81-10 78.4-10C75.7-10 73.6-10.9 72.1-12.6C70.6-14.3 69.8-16.5 69.8-19.2L69.8-21.6C69.8-24.3 70.6-26.4 72.2-28.1C73.8-29.8 75.9-30.6 78.4-30.6C81-30.6 83.1-29.8 84.7-28.1C86.2-26.4 87-24.3 87-21.6L87-19.2C87-16.4 86.2-14.2 84.7-12.5Z" fill="#F4F1E8"/>
-    <ellipse cx="1164" cy="158" rx="68" ry="54" fill="none" stroke="#E5322D" stroke-width="4" transform="rotate(-6 1164 158)"/>
+    <ellipse cx="1164" cy="158" rx="64" ry="52" fill="none" stroke="#E5322D" stroke-width="4" transform="rotate(-6 1164 158)"/>
     <text x="1164" y="250" text-anchor="middle" font-family="ui-monospace, SFMono-Regular, Menlo, Consolas, monospace" font-size="12" font-weight="700" letter-spacing="1.5" fill="#F27E6E">FROZEN</text>
   </g>
   <g data-story="beat-3" opacity="0"><animate attributeName="opacity" dur="8s" repeatCount="indefinite" values="0;0;1;1;0;0" keyTimes="0;0.16;0.18;0.9;0.96;1"/>
