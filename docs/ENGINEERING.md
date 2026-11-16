@@ -18,7 +18,7 @@ load logged at start and end), including `tests/target/core_items.sh` 44/44 (`/d
 TRUTH_LOST + recovery, DISARM mid-incident, a vehicled restart that leaves a stale renderer to be killed, NO_DISPLAY with the
 safe layer read back true and no renderer window, the hidden incident card not composed, startup without truth, the restart
 cap with one record per incident, a renderer blank from boot, a crash after earlier incidents, a monitor restart, the incident
-in slog2), the secpol denials 22/22 (including the fault-on-start test hook ignored under the policy), and the engineering-mode case whose banner
+in slog2), the 22/22 secpol checks (13 of them denials, including the fault-on-start test hook ignored under the policy), and the engineering-mode case whose banner
 and incident card (and the card gone after `card_ms`) are read back from frames a separate process captured.
 Two failing runs are kept: [`20261115T141317Z`](../evidence/test-target/20261115T141317Z/summary.txt) (110 passed, 1 failed) caught a
 race where a frozen renderer was killed as "live-wrong" before its stall was classified, and

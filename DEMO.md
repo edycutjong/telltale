@@ -44,6 +44,6 @@ Or re-derive the tables from the committed rows with `scripts/bench.py` (no gues
 
 ## Conditions and limits
 - The bench driver runs on the Mac and the stamps are written on the target; host load1 during the runs was 1.8-35.9 and is logged per row. The `runmask` column reads `0xf` for every row although STARVE pins the renderer and hog to one CPU.
-- Bench runs had no security policy loaded; the policy is exercised by `make test-target` (a FREEZE run with every process in its secpol type, plus 22 denial checks). The renderer was respawned by a shell loop in the bench; `slm` supervision is exercised by the `slm-freeze` test case.
+- Bench runs had no security policy loaded; the policy is exercised by `make test-target` (a FREEZE run with every process in its secpol type, plus 22 secpol checks, 13 of them denials). The renderer was respawned by a shell loop in the bench; `slm` supervision is exercised by the `slm-freeze` test case.
 - The `exposure_ms` column reads 0.0 in the main rows (the bench-time monitor did not compute it). Regression checks at the current monitor, 5 per class, 25/25 detected: [`evidence/bench-regress-r04.csv`](evidence/bench-regress-r04.csv), `exposure_ms` 34.5-54.4 ms.
 - The 200 injections are a declared population, not general coverage. Not run: the B7 holdouts other than MISDRAW, and monitor CPU % per period.
