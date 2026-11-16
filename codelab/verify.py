@@ -50,7 +50,7 @@ def main(argv):
             continue
         t0 = time.time()
         r = subprocess.run(["bash", "-c", body], cwd=HERE, capture_output=True, text=True, timeout=900)
-        out = (r.stdout + r.stderr).rstrip("\n") + "\n"
+        out = (r.stdout + r.stderr).replace(os.path.expanduser("~"), "~").rstrip("\n") + "\n"
         open(os.path.join(HERE, "transcripts", name + ".txt"), "w").write(out)
         ok = r.returncode == 0 or allow
         print(f"{'ok  ' if ok else 'FAIL'} {name:12s} rc={r.returncode} {time.time()-t0:5.1f}s")
