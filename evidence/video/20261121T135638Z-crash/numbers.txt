@@ -1,0 +1,4 @@
+run 20261121T135638Z-crash  class CRASH  fault effective stamp 5793706662231 ns (cluster-bench.csv)
+incidents 1
+TT-BLK-0001 BLANK cause=crash shown=-1 truth=47 card_caught_ms=32.7 exposure_ms=76.5 restarts=0
+  after the fault: last true frame -7.9 ms  caught +24.8 ms  safe layer +68.6 ms  renderer killed -  renderer back +246.3 ms  true frame +315.4 ms

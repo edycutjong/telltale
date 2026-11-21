@@ -1,0 +1,12 @@
+# terminal session on the QNX 8.0 guest qnxqemu (QEMU TCG), recorded 2026-11-21T13:22:00Z, 4.8 s; output exactly as the target printed it
+root@qnxqemu:/tmp/tt# pidin -F "%a %b %N %p %J" | grep -E "vehicled|vehfeed|cluster|telltale"
+20303889   1 vehicled            10f RECEIVE       
+20320280   1 telltale            60f RECEIVE       
+20320280   2 telltale            15f RECEIVE       
+20320280   3 telltale            61f NANOSLEEP     
+20344861   1 cluster             15r RECEIVE       
+20344861   2 cluster             10r RECEIVE       
+20344861   3 cluster             20r REPLY         
+20344861   4 cluster             15r NANOSLEEP     
+20361244   1 vehfeed             45f NANOSLEEP     
+root@qnxqemu:/tmp/tt#

@@ -12,6 +12,7 @@ guest on 2026-11-21; host load average = `sysctl vm.loadavg` on the Mac running 
 | 20261121T130207Z-misdraw | 2 | the injected MISDRAW (caught, 19.7 ms) plus a later VALUE_MISMATCH 37 vs 35: the respawned renderer lagged at host load 24 | retaken at load 20 |
 | 20261121T130400Z-crash | 2 | one TICK_STALL before the crash at rising host load | retaken |
 | 20261121T130510Z-crash | 9 | the CRASH incident, then 8 self-resolved TICK_STALLs 16.8-24.7 s after the fault, during log collection at host load 47 (`telltale.log` was copied before them, so the first gate missed them) | the gate also counts `incidents.csv` rows |
+| 20261121T135526Z-crash | 2 | the crash, caught as BLANK in 3.0 ms (the renderer's window vanished), then a VALUE_MISMATCH 35 vs 33: the respawned renderer lagged at host load 16-22 | retaken |
 
 The bench numbers in `evidence/RESULTS.md` are unaffected: they come from the bench runs, not from these takes. Under a
 starved emulator the monitor does what it is built to do: a tick that really stops for more than `tick_stall_ms` is

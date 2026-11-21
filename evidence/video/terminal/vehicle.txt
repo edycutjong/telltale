@@ -1,0 +1,6 @@
+# terminal session on the QNX 8.0 guest qnxqemu (QEMU TCG), recorded 2026-11-21T13:21:59Z, 6.2 s; output exactly as the target printed it
+root@qnxqemu:/tmp/tt# cat /dev/vehicle
+seq=377 t_ns=3693699975052 trace_s=5.945 speed_kmh=43.58 gear=D lamps=0x00 denied=0
+root@qnxqemu:/tmp/tt# sleep 1; cat /dev/vehicle
+seq=469 t_ns=3695538157841 trace_s=7.784 speed_kmh=43.54 gear=D lamps=0x00 denied=0
+root@qnxqemu:/tmp/tt#
