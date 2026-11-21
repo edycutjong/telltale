@@ -20,7 +20,8 @@ re-derives that take's on-screen milliseconds with `tools/video_numbers.py` (the
 
 `terminal/` holds the three terminal sessions shown in the video as plain text, recorded live on the same guest:
 `vehicle.txt` (`cat /dev/vehicle`), `pidin.txt` (thread priorities, telltale at 60, FIFO) and `secpol.txt`
-(`tests/target/secpol_denies.sh` with the policy loaded, 22/22 passed; the video plays this 22.9 s run sped up and says so).
+(`tests/target/secpol_denies.sh` with the policy loaded, 22/22 passed; the video plays this 22.9 s run in 6.3 s and
+labels it on screen: sped up ×3.6).
 
 Bench figures in the video (p50/p95 per class, 200 faults, the ablation and the false-positive run) come from
 `evidence/RESULTS.md`, not from these takes.
