@@ -1,0 +1,39 @@
+telltale: conf period_ms=20
+telltale: conf W_ms=100
+telltale: conf tick_stall_ms=151
+telltale: conf truth_lost_ms=200
+telltale: conf restart_timeout_ms=4000
+telltale: conf mismatch_n=3
+telltale: conf truth_ok_n=5
+telltale: pid=15319064 uid=0 type=untyped prio=60
+telltale: period_ms=20 W_ms=100 tick_stall_ms=151 h_max=615 mismatch_n=3 unknown_kill_ms=755 restart_timeout_ms=4000 policy=none (uid/pid checks) slog2=telltale/incidents
+telltale: display 1280x768, tier G1-FULL (screen_read_display, display-manager context)
+telltale: BANNER x=371 w=538 mode=driver text="DISPLAY FAULT · SHOWING TRUE SPEED"
+telltale: renderer registered pid=15343645 draw_tid=3 window=tt-cluster-15343645
+telltale: window tt-cluster-15343645 found at 0,24
+telltale: ARMED renderer pid=15343645 (window tt-cluster-15343645)
+telltale: WAIT -> NORMAL
+telltale: DETECT TT-VAL-0001 VALUE_MISMATCH shown=84 truth=48 lamps_shown=0x01 lamps_truth=0x01 caught_ms=19.7
+telltale: BANNER x=146 w=987 mode=engineering text="ENGINEERING VIEW · DISPLAY FAULT CAUGHT · VALUE_MISMATCH · 20 ms"
+telltale: NORMAL -> SAFE-HOLD
+telltale: SAFE verified on glass TT-VAL-0001 (66.4 ms after detect, composed check)
+telltale: SIGKILL renderer pid 15343645 (live-wrong)
+telltale: SAFE-HOLD -> RESTARTING
+telltale: window tt-cluster-15343645 found at 0,24
+telltale: screen_read_window: No such file or directory
+telltale: SCREEN_STALL check started 73 ms ago
+telltale: renderer registered pid=15646749 draw_tid=3 window=tt-cluster-15646749
+telltale: window tt-cluster-15646749 found at 0,24
+telltale: INCIDENT TT-VAL-0001,VALUE_MISMATCH,live-wrong,84,48,2536915229429,2536934929021,19.7,2537001331435,2537129311017,2537430649599,2537468467274,1,86.1,15343645,15646749,0x01,0x01,2537001331435
+telltale: CARD shown TT-VAL-0001 at 868,144 404x188 rows="INCIDENT TT-VAL-0001|VALUE_MISMATCH · live-wrong|shown 84 · truth 48 km/h|caught 20 ms · restored 553 ms|restarted: pid 15343645 -> 15646749|service: cat /dev/telltale"
+telltale: RESTARTING -> NORMAL
+telltale: SCREEN_STALL check started 82 ms ago
+telltale: CARD hidden TT-VAL-0001 (new incident)
+telltale: DETECT TT-VAL-0002 VALUE_MISMATCH shown=37 truth=35 lamps_shown=0x01 lamps_truth=0x01 caught_ms=18.3
+telltale: BANNER x=148 w=983 mode=engineering text="ENGINEERING VIEW · DISPLAY FAULT CAUGHT · VALUE_MISMATCH · 18 ms"
+telltale: NORMAL -> SAFE-HOLD
+telltale: SAFE verified on glass TT-VAL-0002 (38.4 ms after detect, composed check)
+telltale: INCIDENT TT-VAL-0002,VALUE_MISMATCH,-,37,35,2538188890557,2538207234855,18.3,2538245669389,0,0,2538245669389,0,56.8,15646749,0,0x01,0x01,2538245669389
+telltale: CARD shown TT-VAL-0002 at 868,144 404x188 rows="INCIDENT TT-VAL-0002|VALUE_MISMATCH|shown 37 · truth 35 km/h|caught 18 ms · restored 57 ms|handed back, no restart|service: cat /dev/telltale"
+telltale: SAFE-HOLD -> NORMAL
+telltale: CARD hidden TT-VAL-0002 (timeout)

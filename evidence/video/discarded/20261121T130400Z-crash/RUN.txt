@@ -1,0 +1,1 @@
+run 20261121T130400Z class=crash inject=crash heal_at=- conf_extra=- at=12.221 accel=QEMU(TCG) policy=0 debug=2 cpu=any scope=all sup=script kernel_policy=policy_id:0

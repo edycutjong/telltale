@@ -1,0 +1,2 @@
+ttctl: pid=17805347 uid=0 type=untyped prio=0
+ttctl debug: ok

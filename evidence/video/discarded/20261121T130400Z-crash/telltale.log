@@ -1,0 +1,38 @@
+telltale: conf period_ms=20
+telltale: conf W_ms=100
+telltale: conf tick_stall_ms=151
+telltale: conf truth_lost_ms=200
+telltale: conf restart_timeout_ms=4000
+telltale: conf mismatch_n=3
+telltale: conf truth_ok_n=5
+telltale: pid=17661976 uid=0 type=untyped prio=60
+telltale: period_ms=20 W_ms=100 tick_stall_ms=151 h_max=615 mismatch_n=3 unknown_kill_ms=755 restart_timeout_ms=4000 policy=none (uid/pid checks) slog2=telltale/incidents
+telltale: display 1280x768, tier G1-FULL (screen_read_display, display-manager context)
+telltale: BANNER x=371 w=538 mode=driver text="DISPLAY FAULT · SHOWING TRUE SPEED"
+telltale: renderer registered pid=17686557 draw_tid=3 window=tt-cluster-17686557
+telltale: window tt-cluster-17686557 found at 0,24
+telltale: ARMED renderer pid=17686557 (window tt-cluster-17686557)
+telltale: WAIT -> NORMAL
+telltale: SCREEN_STALL check started 91 ms ago
+telltale: DETECT TT-FRZ-0001 TICK_STALL shown=51 truth=50 lamps_shown=0x10 lamps_truth=0x10 caught_ms=52.2
+telltale: BANNER x=189 w=901 mode=engineering text="ENGINEERING VIEW · DISPLAY FAULT CAUGHT · TICK_STALL · 52 ms"
+telltale: SCREEN_STALL check started 63 ms ago
+telltale: NORMAL -> SAFE-HOLD
+telltale: SAFE verified on glass TT-FRZ-0001 (218.6 ms after detect, composed check)
+telltale: SCREEN_STALL check started 74 ms ago
+telltale: INCIDENT TT-FRZ-0001,TICK_STALL,-,51,50,2636356303736,2636408464604,52.2,2636627040584,0,0,2636627040584,0,270.7,17686557,0,0x10,0x10,2636627040584
+telltale: CARD shown TT-FRZ-0001 at 868,144 404x188 rows="INCIDENT TT-FRZ-0001|TICK_STALL|shown 51 · truth 50 km/h|caught 52 ms · restored 271 ms|handed back, no restart|service: cat /dev/telltale"
+telltale: SAFE-HOLD -> NORMAL
+telltale: CARD hidden TT-FRZ-0001 (timeout)
+telltale: DETECT TT-BLK-0002 BLANK shown=-1 truth=48 lamps_shown=0x00 lamps_truth=0x01 caught_ms=24.0
+telltale: BANNER x=224 w=831 mode=engineering text="ENGINEERING VIEW · DISPLAY FAULT CAUGHT · BLANK · 24 ms"
+telltale: NORMAL -> SAFE-HOLD
+telltale: SAFE verified on glass TT-BLK-0002 (40.8 ms after detect, composed check)
+telltale: screen_read_window: Invalid argument
+telltale: renderer pid 17686557 is gone (crash)
+telltale: renderer registered pid=18071581 draw_tid=3 window=tt-cluster-18071581
+telltale: window tt-cluster-18071581 found at 0,24
+telltale: INCIDENT TT-BLK-0002,BLANK,crash,-1,48,2646928140335,2646952174874,24.0,2646993010071,0,2647162403840,2647198544340,0,64.9,17686557,18071581,0x00,0x01,2646993010071
+telltale: CARD shown TT-BLK-0002 at 868,144 404x188 rows="INCIDENT TT-BLK-0002|BLANK · crash|shown -- · truth 48 km/h|caught 24 ms · restored 270 ms|restarted: pid 17686557 -> 18071581|service: cat /dev/telltale"
+telltale: RESTARTING -> NORMAL
+telltale: CARD hidden TT-BLK-0002 (timeout)

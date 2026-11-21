@@ -1,0 +1,9 @@
+armed=1 state=NORMAL period_ms=20 W_ms=100 tick_stall_ms=151 checks=1756 faults=2 restarts=0 late=0 screen_stalls=3 renderer_pid=18071581 capture_errors=0
+truth_gaps=0 events_dropped=0
+last=TT-BLK-0002 verdict=BLANK cause=crash shown=-1 truth=48 caught_ms=24.0 (since last verified frame) recovered=yes
+
+id,verdict,cause,shown,truth,t_last_verified_ns,t_detect_ns,caught_ms,t_safe_visible_ns,t_kill_ns,t_register_ns,t_true_ns,restarts,exposure_ms,renderer_pid,new_pid,lamps_shown,lamps_truth,t_safe_true_ns
+TT-FRZ-0001,TICK_STALL,-,51,50,2636356303736,2636408464604,52.2,2636627040584,0,0,2636627040584,0,270.7,17686557,0,0x10,0x10,2636627040584
+TT-BLK-0002,BLANK,crash,-1,48,2646928140335,2646952174874,24.0,2646993010071,0,2647162403840,2647198544340,0,64.9,17686557,18071581,0x00,0x01,2646993010071
+
+seq=1417 t_ns=2659871755777 trace_s=25.181 speed_kmh=0.00 gear=D lamps=0x04 denied=0

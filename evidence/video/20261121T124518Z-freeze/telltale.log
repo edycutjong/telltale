@@ -1,0 +1,29 @@
+telltale: conf period_ms=20
+telltale: conf W_ms=100
+telltale: conf tick_stall_ms=151
+telltale: conf truth_lost_ms=200
+telltale: conf restart_timeout_ms=4000
+telltale: conf mismatch_n=3
+telltale: conf truth_ok_n=5
+telltale: pid=9060376 uid=0 type=untyped prio=60
+telltale: period_ms=20 W_ms=100 tick_stall_ms=151 h_max=615 mismatch_n=3 unknown_kill_ms=755 restart_timeout_ms=4000 policy=none (uid/pid checks) slog2=telltale/incidents
+telltale: display 1280x768, tier G1-FULL (screen_read_display, display-manager context)
+telltale: BANNER x=371 w=538 mode=driver text="DISPLAY FAULT · SHOWING TRUE SPEED"
+telltale: renderer registered pid=9084961 draw_tid=3 window=tt-cluster-9084961
+telltale: window tt-cluster-9084961 found at 0,24
+telltale: ARMED renderer pid=9084961 (window tt-cluster-9084961)
+telltale: WAIT -> NORMAL
+telltale: DETECT TT-FRZ-0001 TICK_STALL shown=48 truth=47 lamps_shown=0x01 lamps_truth=0x00 caught_ms=22.1
+telltale: BANNER x=189 w=901 mode=engineering text="ENGINEERING VIEW · DISPLAY FAULT CAUGHT · TICK_STALL · 22 ms"
+telltale: NORMAL -> SAFE-HOLD
+telltale: SAFE verified on glass TT-FRZ-0001 (57.9 ms after detect, composed check)
+telltale: cause hung (draw thread states 13,13,13)
+telltale: SIGKILL renderer pid 9084961 (hung)
+telltale: SAFE-HOLD -> RESTARTING
+telltale: renderer registered pid=9388059 draw_tid=3 window=tt-cluster-9388059
+telltale: window tt-cluster-9388059 found at 0,24
+telltale: INCIDENT TT-FRZ-0001,TICK_STALL,hung,48,47,1527882655638,1527904771838,22.1,1527962694697,1528004937008,1528261193142,1528362110699,1,80.0,9084961,9388059,0x01,0x00,1527962694697
+telltale: SCREEN_STALL check started 78 ms ago
+telltale: CARD shown TT-FRZ-0001 at 868,144 404x188 rows="INCIDENT TT-FRZ-0001|TICK_STALL · hung|shown 48 · truth 47 km/h|caught 22 ms · restored 479 ms|restarted: pid 9084961 -> 9388059|service: cat /dev/telltale"
+telltale: RESTARTING -> NORMAL
+telltale: CARD hidden TT-FRZ-0001 (timeout)

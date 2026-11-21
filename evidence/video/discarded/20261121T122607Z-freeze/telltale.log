@@ -1,0 +1,209 @@
+telltale: conf period_ms=20
+telltale: conf W_ms=100
+telltale: conf tick_stall_ms=151
+telltale: conf truth_lost_ms=200
+telltale: conf restart_timeout_ms=4000
+telltale: conf mismatch_n=3
+telltale: conf truth_ok_n=5
+telltale: pid=1343520 uid=0 type=untyped prio=60
+telltale: period_ms=20 W_ms=100 tick_stall_ms=151 h_max=615 mismatch_n=3 unknown_kill_ms=755 restart_timeout_ms=4000 policy=none (uid/pid checks) slog2=telltale/incidents
+telltale: display 1280x768, tier G1-FULL (screen_read_display, display-manager context)
+telltale: BANNER x=371 w=538 mode=driver text="DISPLAY FAULT · SHOWING TRUE SPEED"
+telltale: renderer registered pid=1368099 draw_tid=3 window=tt-cluster-1368099
+telltale: window tt-cluster-1368099 found at 0,24
+telltale: SCREEN_STALL check started 69 ms ago
+telltale: ARMED renderer pid=1368099 (window tt-cluster-1368099)
+telltale: WAIT -> NORMAL
+telltale: SCREEN_STALL check started 111 ms ago
+telltale: DETECT TT-FRZ-0001 TICK_STALL shown=52 truth=52 lamps_shown=0x10 lamps_truth=0x10 caught_ms=15.4
+telltale: NORMAL -> SAFE-HOLD
+telltale: SAFE verified on glass TT-FRZ-0001 (45.6 ms after detect, composed check)
+telltale: INCIDENT TT-FRZ-0001,TICK_STALL,-,52,52,368336628746,368352065143,15.4,368397654829,0,0,368397654829,0,61.0,1368099,0,0x10,0x10,368397654829
+telltale: SAFE-HOLD -> NORMAL
+telltale: SCREEN_STALL check started 77 ms ago
+telltale: SCREEN_STALL check started 106 ms ago
+telltale: DETECT TT-FRZ-0002 TICK_STALL shown=52 truth=52 lamps_shown=0x10 lamps_truth=0x10 caught_ms=109.3
+telltale: BANNER x=183 w=913 mode=engineering text="ENGINEERING VIEW · DISPLAY FAULT CAUGHT · TICK_STALL · 109 ms"
+telltale: NORMAL -> SAFE-HOLD
+telltale: SAFE verified on glass TT-FRZ-0002 (109.4 ms after detect, composed check)
+telltale: INCIDENT TT-FRZ-0002,TICK_STALL,-,52,52,372661193410,372770478909,109.3,372879890969,0,0,372879890969,0,218.7,1368099,0,0x10,0x10,372879890969
+telltale: SCREEN_STALL check started 74 ms ago
+telltale: CARD shown TT-FRZ-0002 at 868,144 404x188 rows="INCIDENT TT-FRZ-0002|TICK_STALL|shown 52 · truth 52 km/h|caught 109 ms · restored 219 ms|handed back, no restart|service: cat /dev/telltale"
+telltale: SAFE-HOLD -> NORMAL
+telltale: SCREEN_STALL check started 80 ms ago
+telltale: SCREEN_STALL check started 60 ms ago
+telltale: SCREEN_STALL check started 95 ms ago
+telltale: CARD hidden TT-FRZ-0002 (new incident)
+telltale: DETECT TT-FRZ-0003 TICK_STALL shown=52 truth=52 lamps_shown=0x10 lamps_truth=0x10 caught_ms=50.1
+telltale: BANNER x=189 w=901 mode=engineering text="ENGINEERING VIEW · DISPLAY FAULT CAUGHT · TICK_STALL · 50 ms"
+telltale: SCREEN_STALL check started 67 ms ago
+telltale: NORMAL -> SAFE-HOLD
+telltale: SAFE verified on glass TT-FRZ-0003 (197.5 ms after detect, composed check)
+telltale: SCREEN_STALL check started 80 ms ago
+telltale: INCIDENT TT-FRZ-0003,TICK_STALL,-,52,52,374597326062,374647398183,50.1,374844925257,0,0,374844925257,0,247.6,1368099,0,0x10,0x10,374844925257
+telltale: CARD shown TT-FRZ-0003 at 868,144 404x188 rows="INCIDENT TT-FRZ-0003|TICK_STALL|shown 52 · truth 52 km/h|caught 50 ms · restored 248 ms|handed back, no restart|service: cat /dev/telltale"
+telltale: SAFE-HOLD -> NORMAL
+telltale: SCREEN_STALL check started 112 ms ago
+telltale: SCREEN_STALL check started 110 ms ago
+telltale: SCREEN_STALL check started 62 ms ago
+telltale: SCREEN_STALL check started 60 ms ago
+telltale: SCREEN_STALL check started 103 ms ago
+telltale: SCREEN_STALL check started 68 ms ago
+telltale: CARD hidden TT-FRZ-0003 (timeout)
+telltale: SCREEN_STALL check started 65 ms ago
+telltale: SCREEN_STALL check started 100 ms ago
+telltale: DETECT TT-FRZ-0004 TICK_STALL shown=43 truth=43 lamps_shown=0x00 lamps_truth=0x00 caught_ms=17.5
+telltale: BANNER x=192 w=895 mode=engineering text="ENGINEERING VIEW · DISPLAY FAULT CAUGHT · TICK_STALL · 17 ms"
+telltale: NORMAL -> SAFE-HOLD
+telltale: SAFE verified on glass TT-FRZ-0004 (51.9 ms after detect, composed check)
+telltale: INCIDENT TT-FRZ-0004,TICK_STALL,-,43,43,380875866416,380893356680,17.5,380945243500,0,0,380945243500,0,69.4,1368099,0,0x00,0x00,380945243500
+telltale: SCREEN_STALL check started 107 ms ago
+telltale: CARD shown TT-FRZ-0004 at 868,144 404x188 rows="INCIDENT TT-FRZ-0004|TICK_STALL|shown 43 · truth 43 km/h|caught 17 ms · restored 69 ms|handed back, no restart|service: cat /dev/telltale"
+telltale: SAFE-HOLD -> NORMAL
+telltale: SCREEN_STALL check started 78 ms ago
+telltale: CARD hidden TT-FRZ-0004 (new incident)
+telltale: DETECT TT-FRZ-0005 TICK_STALL shown=43 truth=43 lamps_shown=0x00 lamps_truth=0x00 caught_ms=47.5
+telltale: BANNER x=188 w=903 mode=engineering text="ENGINEERING VIEW · DISPLAY FAULT CAUGHT · TICK_STALL · 48 ms"
+telltale: NORMAL -> SAFE-HOLD
+telltale: SAFE verified on glass TT-FRZ-0005 (85.0 ms after detect, composed check)
+telltale: SCREEN_STALL check started 64 ms ago
+telltale: INCIDENT TT-FRZ-0005,TICK_STALL,-,43,43,381402149862,381449658884,47.5,381534655727,0,0,381534655727,0,132.5,1368099,0,0x00,0x00,381534655727
+telltale: CARD shown TT-FRZ-0005 at 868,144 404x188 rows="INCIDENT TT-FRZ-0005|TICK_STALL|shown 43 · truth 43 km/h|caught 48 ms · restored 133 ms|handed back, no restart|service: cat /dev/telltale"
+telltale: SAFE-HOLD -> NORMAL
+telltale: SCREEN_STALL check started 103 ms ago
+telltale: SCREEN_STALL check started 81 ms ago
+telltale: CARD hidden TT-FRZ-0005 (new incident)
+telltale: DETECT TT-FRZ-0006 TICK_STALL shown=45 truth=45 lamps_shown=0x00 lamps_truth=0x00 caught_ms=9.3
+telltale: BANNER x=197 w=886 mode=engineering text="ENGINEERING VIEW · DISPLAY FAULT CAUGHT · TICK_STALL · 9 ms"
+telltale: NORMAL -> SAFE-HOLD
+telltale: SCREEN_STALL check started 79 ms ago
+telltale: SAFE verified on glass TT-FRZ-0006 (121.7 ms after detect, composed check)
+telltale: INCIDENT TT-FRZ-0006,TICK_STALL,-,45,45,383104936822,383114248487,9.3,383235985746,0,0,383235985746,0,131.0,1368099,0,0x00,0x00,383235985746
+telltale: CARD shown TT-FRZ-0006 at 868,144 404x188 rows="INCIDENT TT-FRZ-0006|TICK_STALL|shown 45 · truth 45 km/h|caught 9 ms · restored 131 ms|handed back, no restart|service: cat /dev/telltale"
+telltale: SAFE-HOLD -> NORMAL
+telltale: SCREEN_STALL check started 212 ms ago
+telltale: SCREEN_STALL check started 110 ms ago
+telltale: CARD hidden TT-FRZ-0006 (new incident)
+telltale: DETECT TT-FRZ-0007 TICK_STALL shown=48 truth=49 lamps_shown=0x00 lamps_truth=0x00 caught_ms=48.1
+telltale: BANNER x=188 w=903 mode=engineering text="ENGINEERING VIEW · DISPLAY FAULT CAUGHT · TICK_STALL · 48 ms"
+telltale: SCREEN_STALL check started 72 ms ago
+telltale: NORMAL -> SAFE-HOLD
+telltale: SAFE verified on glass TT-FRZ-0007 (230.8 ms after detect, composed check)
+telltale: INCIDENT TT-FRZ-0007,TICK_STALL,-,48,49,385096276763,385144336871,48.1,385375141387,0,0,385375141387,0,278.9,1368099,0,0x00,0x00,385375141387
+telltale: CARD shown TT-FRZ-0007 at 868,144 404x188 rows="INCIDENT TT-FRZ-0007|TICK_STALL|shown 48 · truth 49 km/h|caught 48 ms · restored 279 ms|handed back, no restart|service: cat /dev/telltale"
+telltale: SAFE-HOLD -> NORMAL
+telltale: SCREEN_STALL check started 115 ms ago
+telltale: SCREEN_STALL check started 64 ms ago
+telltale: CARD hidden TT-FRZ-0007 (new incident)
+telltale: DETECT TT-FRZ-0008 TICK_STALL shown=49 truth=48 lamps_shown=0x00 lamps_truth=0x01 caught_ms=116.3
+telltale: BANNER x=186 w=908 mode=engineering text="ENGINEERING VIEW · DISPLAY FAULT CAUGHT · TICK_STALL · 116 ms"
+telltale: NORMAL -> SAFE-HOLD
+telltale: SCREEN_STALL check started 60 ms ago
+telltale: SAFE verified on glass TT-FRZ-0008 (178.3 ms after detect, composed check)
+telltale: INCIDENT TT-FRZ-0008,TICK_STALL,-,49,48,385990406837,386106739863,116.3,386285020771,0,0,386285020771,0,294.6,1368099,0,0x00,0x01,386285020771
+telltale: CARD shown TT-FRZ-0008 at 868,144 404x188 rows="INCIDENT TT-FRZ-0008|TICK_STALL|shown 49 · truth 48 km/h|caught 116 ms · restored 295 ms|handed back, no restart|service: cat /dev/telltale"
+telltale: SAFE-HOLD -> NORMAL
+telltale: CARD hidden TT-FRZ-0008 (new incident)
+telltale: DETECT TT-VAL-0009 VALUE_MISMATCH shown=48 truth=43 lamps_shown=0x01 lamps_truth=0x01 caught_ms=446.6
+telltale: BANNER x=138 w=1004 mode=engineering text="ENGINEERING VIEW · DISPLAY FAULT CAUGHT · VALUE_MISMATCH · 447 ms"
+telltale: NORMAL -> SAFE-HOLD
+telltale: SAFE verified on glass TT-VAL-0009 (71.5 ms after detect, composed check)
+telltale: SCREEN_STALL check started 77 ms ago
+telltale: SCREEN_STALL check started 96 ms ago
+telltale: SCREEN_STALL check started 76 ms ago
+telltale: cause hung (draw thread states 13,13,13)
+telltale: SIGKILL renderer pid 1368099 (hung)
+telltale: SAFE-HOLD -> RESTARTING
+telltale: window tt-cluster-1368099 found at 0,24
+telltale: SCREEN_STALL check started 68 ms ago
+telltale: screen_read_window: No such file or directory
+telltale: SCREEN_STALL check started 75 ms ago
+telltale: SCREEN_STALL check started 134 ms ago
+telltale: SCREEN_STALL check started 65 ms ago
+telltale: renderer registered pid=1896465 draw_tid=3 window=tt-cluster-1896465
+telltale: window tt-cluster-1896465 found at 0,24
+telltale: SCREEN_STALL check started 81 ms ago
+telltale: SCREEN_STALL check started 70 ms ago
+telltale: INCIDENT TT-VAL-0009,VALUE_MISMATCH,hung,48,43,386285020771,386731656797,446.6,386803110669,387406583071,388027674291,388235965985,1,518.1,1368099,1896465,0x01,0x01,386803110669
+telltale: CARD shown TT-VAL-0009 at 868,144 404x188 rows="INCIDENT TT-VAL-0009|VALUE_MISMATCH · hung|shown 48 · truth 43 km/h|caught 447 ms · restored 1951 ms|restarted: pid 1368099 -> 1896465|service: cat /dev/telltale"
+telltale: RESTARTING -> NORMAL
+telltale: SCREEN_STALL check started 60 ms ago
+telltale: SCREEN_STALL check started 70 ms ago
+telltale: SCREEN_STALL check started 62 ms ago
+telltale: SCREEN_STALL check started 69 ms ago
+telltale: SCREEN_STALL check started 69 ms ago
+telltale: SCREEN_STALL check started 68 ms ago
+telltale: SCREEN_STALL check started 65 ms ago
+telltale: SCREEN_STALL check started 67 ms ago
+telltale: SCREEN_STALL check started 70 ms ago
+telltale: SCREEN_STALL check started 60 ms ago
+telltale: SCREEN_STALL check started 76 ms ago
+telltale: SCREEN_STALL check started 60 ms ago
+telltale: SCREEN_STALL check started 61 ms ago
+telltale: SCREEN_STALL check started 66 ms ago
+telltale: SCREEN_STALL check started 63 ms ago
+telltale: CARD hidden TT-VAL-0009 (timeout)
+telltale: SCREEN_STALL check started 79 ms ago
+telltale: SCREEN_STALL check started 67 ms ago
+telltale: SCREEN_STALL check started 66 ms ago
+telltale: SCREEN_STALL check started 61 ms ago
+telltale: SCREEN_STALL check started 66 ms ago
+telltale: SCREEN_STALL check started 64 ms ago
+telltale: SCREEN_STALL check started 71 ms ago
+telltale: SCREEN_STALL check started 83 ms ago
+telltale: SCREEN_STALL check started 71 ms ago
+telltale: SCREEN_STALL check started 83 ms ago
+telltale: SCREEN_STALL check started 60 ms ago
+telltale: SCREEN_STALL check started 70 ms ago
+telltale: SCREEN_STALL check started 78 ms ago
+telltale: SCREEN_STALL check started 66 ms ago
+telltale: SCREEN_STALL check started 60 ms ago
+telltale: SCREEN_STALL check started 84 ms ago
+telltale: SCREEN_STALL check started 63 ms ago
+telltale: SCREEN_STALL check started 89 ms ago
+telltale: SCREEN_STALL check started 74 ms ago
+telltale: SCREEN_STALL check started 75 ms ago
+telltale: SCREEN_STALL check started 86 ms ago
+telltale: SCREEN_STALL check started 62 ms ago
+telltale: SCREEN_STALL check started 62 ms ago
+telltale: SCREEN_STALL check started 104 ms ago
+telltale: DETECT TT-FRZ-0010 TICK_STALL shown=0 truth=0 lamps_shown=0x04 lamps_truth=0x04 caught_ms=148.1
+telltale: BANNER x=183 w=914 mode=engineering text="ENGINEERING VIEW · DISPLAY FAULT CAUGHT · TICK_STALL · 148 ms"
+telltale: NORMAL -> SAFE-HOLD
+telltale: SAFE verified on glass TT-FRZ-0010 (107.4 ms after detect, composed check)
+telltale: SCREEN_STALL check started 79 ms ago
+telltale: INCIDENT TT-FRZ-0010,TICK_STALL,-,0,0,401666713826,401814853402,148.1,401922226541,0,0,401922226541,0,255.5,1896465,0,0x04,0x04,401922226541
+telltale: CARD shown TT-FRZ-0010 at 868,144 404x188 rows="INCIDENT TT-FRZ-0010|TICK_STALL|shown 0 · truth 0 km/h|caught 148 ms · restored 256 ms|handed back, no restart|service: cat /dev/telltale"
+telltale: SAFE-HOLD -> NORMAL
+telltale: SCREEN_STALL check started 72 ms ago
+telltale: SCREEN_STALL check started 76 ms ago
+telltale: SCREEN_STALL check started 109 ms ago
+telltale: CARD hidden TT-FRZ-0010 (new incident)
+telltale: DETECT TT-FRZ-0011 TICK_STALL shown=0 truth=0 lamps_shown=0x04 lamps_truth=0x04 caught_ms=157.1
+telltale: BANNER x=184 w=911 mode=engineering text="ENGINEERING VIEW · DISPLAY FAULT CAUGHT · TICK_STALL · 157 ms"
+telltale: NORMAL -> SAFE-HOLD
+telltale: SAFE verified on glass TT-FRZ-0011 (159.2 ms after detect, composed check)
+telltale: INCIDENT TT-FRZ-0011,TICK_STALL,-,0,0,402401746377,402558867763,157.1,402718079888,0,0,402718079888,0,316.3,1896465,0,0x04,0x04,402718079888
+telltale: SCREEN_STALL check started 79 ms ago
+telltale: CARD shown TT-FRZ-0011 at 868,144 404x188 rows="INCIDENT TT-FRZ-0011|TICK_STALL|shown 0 · truth 0 km/h|caught 157 ms · restored 316 ms|handed back, no restart|service: cat /dev/telltale"
+telltale: SAFE-HOLD -> NORMAL
+telltale: SCREEN_STALL check started 74 ms ago
+telltale: SCREEN_STALL check started 65 ms ago
+telltale: SCREEN_STALL check started 81 ms ago
+telltale: SCREEN_STALL check started 63 ms ago
+telltale: SCREEN_STALL check started 74 ms ago
+telltale: SCREEN_STALL check started 70 ms ago
+telltale: SCREEN_STALL check started 92 ms ago
+telltale: CARD hidden TT-FRZ-0011 (new incident)
+telltale: DETECT TT-FRZ-0012 TICK_STALL shown=0 truth=0 lamps_shown=0x04 lamps_truth=0x04 caught_ms=44.1
+telltale: BANNER x=188 w=903 mode=engineering text="ENGINEERING VIEW · DISPLAY FAULT CAUGHT · TICK_STALL · 44 ms"
+telltale: SCREEN_STALL check started 81 ms ago
+telltale: NORMAL -> SAFE-HOLD
+telltale: SCREEN_STALL check started 69 ms ago
+telltale: SAFE verified on glass TT-FRZ-0012 (140.7 ms after detect, composed check)
+telltale: INCIDENT TT-FRZ-0012,TICK_STALL,-,0,0,404450292665,404494373591,44.1,404635115854,0,0,404635115854,0,184.8,1896465,0,0x04,0x04,404635115854
+telltale: CARD shown TT-FRZ-0012 at 868,144 404x188 rows="INCIDENT TT-FRZ-0012|TICK_STALL|shown 0 · truth 0 km/h|caught 44 ms · restored 185 ms|handed back, no restart|service: cat /dev/telltale"
+telltale: SAFE-HOLD -> NORMAL
+telltale: SCREEN_STALL check started 68 ms ago
+telltale: SCREEN_STALL check started 71 ms ago
+telltale: SCREEN_STALL check started 75 ms ago
