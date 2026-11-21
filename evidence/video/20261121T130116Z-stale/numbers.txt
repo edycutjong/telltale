@@ -1,0 +1,4 @@
+run 20261121T130116Z-stale  class STALE  fault effective stamp 2483086136507 ns (cluster-bench.csv)
+incidents 1
+TT-VAL-0001 VALUE_MISMATCH cause=live-wrong shown=48 truth=47 card_caught_ms=22.9 exposure_ms=93.7 restarts=1
+  after the fault: last true frame +113.3 ms  caught +136.2 ms  safe layer +207.0 ms  renderer killed +325.3 ms  renderer back +607.3 ms  true frame +652.9 ms

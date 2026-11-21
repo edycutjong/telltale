@@ -1,0 +1,4 @@
+run 20261121T130309Z-misdraw  class MISDRAW  fault effective stamp 2595334033277 ns (cluster-bench.csv)
+incidents 1
+TT-VAL-0001 VALUE_MISMATCH cause=live-wrong shown=84 truth=48 card_caught_ms=20.6 exposure_ms=49.2 restarts=1
+  after the fault: last true frame -10.9 ms  caught +9.7 ms  safe layer +38.3 ms  renderer killed +311.4 ms  renderer back +543.2 ms  true frame +639.3 ms

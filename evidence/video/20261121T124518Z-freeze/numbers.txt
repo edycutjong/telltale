@@ -1,0 +1,4 @@
+run 20261121T124518Z-freeze  class FREEZE  fault effective stamp 1527781394275 ns (cluster-bench.csv)
+incidents 1
+TT-FRZ-0001 TICK_STALL cause=hung shown=48 truth=47 card_caught_ms=22.1 exposure_ms=80.0 restarts=1
+  after the fault: last true frame +101.3 ms  caught +123.4 ms  safe layer +181.3 ms  renderer killed +223.5 ms  renderer back +479.8 ms  true frame +580.7 ms
