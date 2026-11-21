@@ -4,7 +4,7 @@ Telltale checks one thing: whether the number and lamps on an instrument cluster
 
 | Project | What it does (summarised from its Devpost page) | Boundary with Telltale |
 |---|---|---|
-| RearGuard | Keeps a rear-camera feed alive as its own QNX process, timed from the screen by a separate probe | Isolating a feed prevents a dead feed; it does not say whether the glass shows a wrong value. Telltale decodes digits and lamps from the pixels and compares them with the vehicle state. |
+| RearGuard | Keeps a rear-camera feed alive as its own QNX process, timed from the screen by a separate probe | Isolating the camera keeps the feed up when infotainment crashes or updates; its probe also reads the composed display to time when a camera frame appears, but it does not compare the value shown with vehicle state. Telltale decodes digits and lamps from the pixels and compares them with the vehicle state. |
 | SafeDash | Fail-safe digital cockpit and CAN-FD broker using adaptive partitioning and watchdog supervision | A watchdog supervises a CAN heartbeat; its page does not describe reading the display. Telltale catches a live renderer that draws a wrong number (MISDRAW, STALE), which a heartbeat cannot see. |
 | Vigil | Bedside alarm engine that never shows a stale number as live | Same concern in a medical setting, handled in the data path. Telltale checks the rendered pixels, after the renderer. |
 | PHANToM GRID | Automotive motion engine on QNX | Not a display check; Telltale makes no ISO 26262 / ASIL claim. |

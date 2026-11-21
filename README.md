@@ -8,7 +8,7 @@
 
 When a cluster freezes at 48 km/h and the car has stopped, nothing inside the renderer knows. Telltale is a separate process with its own security type: it reads the composed display from QNX Screen, decodes the digits and lamps, compares them with `/dev/vehicle`, and on a mismatch posts a safe layer with the true values, kills and respawns the renderer, verifies the new one, and hands the display back.
 
-**QNX primitives on the critical path:** resource managers (`/dev/vehicle`, `/dev/telltale`, `/dev/telltale-events`), message passing (devctl, pulses, `ionotify` on the renderer's data path), SCHED_FIFO 60 for the monitor, QNX Screen (`screen_read_display`, `screen_post_window`), `secpol` (a type each for the feeder, vehicled, renderer and monitor), `slog2` (incident records). `slm` can supervise the renderer (exercised by the on-target `slm-freeze` test); the bench and recorded runs respawn it with a shell loop.
+**QNX primitives on the critical path:** resource managers (`/dev/vehicle`, `/dev/telltale`, `/dev/telltale-events`), message passing (devctl, pulses, `ionotify` on the renderer's data path), SCHED_FIFO 60 for the monitor, QNX Screen (`screen_read_display`, `screen_post_window`), `secpol` (a type each for the feeder, vehicled, renderer and monitor; enforced in the on-target test suite, not loaded during the timing bench), `slog2` (incident records). `slm` can supervise the renderer (exercised by the on-target `slm-freeze` test); the bench and recorded runs respawn it with a shell loop.
 
 **Result, on QEMU (TCG), not hardware timing:** 200 injected faults in 4 classes, **0 missed**; detection p95 24.8 ms (BLANK) to 271.2 ms (STALE); 0 false positives in 91,029 checks of a 30-minute real drive; with the monitor off the glass is wrong for a median 29.9 s of a 30 s window. Not every target was met: see [DEMO.md](DEMO.md).
 
@@ -62,6 +62,7 @@ Reproduce every bench number: `scripts/bench_all.sh run` then `scripts/bench_all
 | Codelab: your first QNX 8.0 resource manager on an Apple-Silicon Mac (every step run on the QEMU guest) | [`codelab/`](codelab/README.md) |
 
 ## Honest limits
+- Not certified; Telltale makes no ISO 26262 or ASIL claim.
 - All timings are QEMU (TCG) on a loaded Mac, not hardware; QEMU ran without a visible display, so the glass is read back and captured to images by `ttshot`.
 - The monitor is not supervised: nothing restarts `telltale` if it dies.
 - Gear is drawn but not verified; speed digits, 6 lamps and the liveness tick are.
