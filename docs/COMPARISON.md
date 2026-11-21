@@ -9,7 +9,7 @@ Telltale checks one thing: whether the number and lamps on an instrument cluster
 | Vigil | Bedside alarm engine that never shows a stale number as live | Same concern in a medical setting, handled in the data path. Telltale checks the rendered pixels, after the renderer. |
 | PHANToM GRID | Automotive motion engine on QNX | Not a display check; Telltale makes no ISO 26262 / ASIL claim. |
 | cellguard | Stops a lab robot arm safely when a driver crashes or hangs | Supervises a driver and recovers a process; Telltale supervises what the display shows. |
-| Host-side QNX analysers qnxprobe, kevscope | A host static scanner for C and a host trace analyser, used before or after a run | They run on the host; Telltale runs on the QNX target and acts on a live display. |
+| qnxprobe, kevscope | A host static scanner for C and a host trace analyser, used before or after a run | They run on the host; Telltale runs on the QNX target and acts on a live display. |
 | knotwatch | Watches a running QNX 8.0 system and reports message-passing deadlocks from thread and connection state | It runs on the target too, but it reports deadlocks; it does not read what the display shows. |
 
 Not covered by Telltale: the physical path from the display controller to the panel, display-controller CRC/signature units (a different stage), and a mirrored display (per the QNX `screen_read_display` documentation it returns ENOTSUP). Timings are QEMU (TCG), not hardware. See [DEMO.md](../DEMO.md) and [ENGINEERING.md](ENGINEERING.md).
