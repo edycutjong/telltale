@@ -16,7 +16,7 @@ QOUT     := out/$(QNX_ARCH)
 QCC      := qcc -Vgcc_nto$(QNX_ARCH)
 QCFLAGS  := -std=gnu11 -O2 -Wall -Wextra -Werror
 SPIKES   := $(QOUT)/g1_readback $(QOUT)/g2_hello $(QOUT)/g3_secpol $(QOUT)/g4_timer $(QOUT)/g3_spike.bin
-TT_BINS  := $(QOUT)/vehicled $(QOUT)/vehfeed $(QOUT)/cluster $(QOUT)/telltale $(QOUT)/ttinject $(QOUT)/ttctl $(QOUT)/hog $(QOUT)/ttshot $(QOUT)/telltale.bin
+TT_BINS  := $(QOUT)/vehicled $(QOUT)/vehfeed $(QOUT)/cluster $(QOUT)/telltale $(QOUT)/ttinject $(QOUT)/ttctl $(QOUT)/hog $(QOUT)/ttshot $(QOUT)/ttrec $(QOUT)/telltale.bin
 QCOMMON  := src/common/ttsec.c src/common/disp.c
 QHDRS    := $(wildcard src/common/*.h)
 
@@ -97,7 +97,7 @@ $(QOUT)/telltale: src/telltale/telltale.c src/common/decode.c src/common/truth.c
 $(QOUT)/ttinject $(QOUT)/ttctl $(QOUT)/hog: $(QOUT)/%: src/tools/%.c $(QCOMMON) $(QHDRS) | $(QOUT)
 	$(QCC) $(QCFLAGS) -o $@ $< $(QCOMMON) -lsecpol
 
-$(QOUT)/ttshot: src/tools/ttshot.c $(QCOMMON) $(QHDRS) | $(QOUT)
+$(QOUT)/ttshot $(QOUT)/ttrec: $(QOUT)/%: src/tools/%.c $(QCOMMON) $(QHDRS) | $(QOUT)
 	$(QCC) $(QCFLAGS) -o $@ $< $(QCOMMON) -lscreen -lsecpol
 
 $(QOUT)/telltale.bin: secpol/telltale.pol | $(QOUT)

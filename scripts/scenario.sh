@@ -15,7 +15,10 @@
 #      TT_DISARM=1 runs `ttctl disarm` before the fault (observe-only monitor: the B2 ablation).
 #      TT_DEBUG=1 turns on engineering mode (`ttctl debug on`) and captures two display frames with ttshot (a separate
 #      process reading what Screen composed): banner.png once the engineering banner is up, card.png once the incident
-#      card is shown, card-hidden.png once it has been hidden again.
+#      card is shown, card-hidden.png once it has been hidden again. TT_DEBUG=2: engineering mode only (no ttshot frames).
+#      TT_REC=S records the composed display for up to S seconds (stopped at collection) with ttrec (a separate low-priority process, `on -p 9`,
+#      screen_read_display every TT_REC_MS=33 ms of the regions in REC_REGIONS or TT_REC_ARGS, changed tiles only, into RAM) -> rec.ttv + rec.txt in TT_REC_DIR
+#      (default the run dir); tools/ttv_decode.py turns it into PNG frames. Demo-video footage, not a bench input.
 set -euo pipefail
 cd "$(dirname "$0")/.."
 CLS=${1:?class}; AT=${2:-12.221}; SETTLE=${3:-12}
@@ -32,11 +35,19 @@ HP=${TT_HOG_PRIO:-40}
 # with the policy loaded the control and fault tools run in their own type (injector_t: telltale:control, cluster:fault)
 IJ=; [ "${TT_POLICY:-0}" = 1 ] && IJ="env TT_TYPE=injector_t"
 [ "${TT_DISARM:-0}" = 1 ] && $G sudo "cd /tmp/tt; $IJ ./ttctl disarm" > "$EV/disarm.txt" 2>&1
-if [ "${TT_DEBUG:-0}" = 1 ]; then
+if [ "${TT_DEBUG:-0}" = 2 ]; then   # engineering view only: no ttshot watcher loops (their grep-every-50-ms polling loads
+  $G sudo "cd /tmp/tt; $IJ ./ttctl debug on" > "$EV/debug.txt" 2>&1   # the QEMU guest; ttrec films the display instead)
+elif [ "${TT_DEBUG:-0}" = 1 ]; then
   $G sudo "cd /tmp/tt; rm -f log/*.ppm log/shot-*.txt; $IJ ./ttctl debug on
     ( (n=0; while ! grep -q 'mode=engineering' log/telltale.log && [ \$n -lt 600 ]; do sleep 0.05; n=\$((n+1)); done; sleep 0.3; ./ttshot log/banner.ppm) > log/shot-banner.txt 2>&1 < /dev/null & )
     ( (n=0; while ! grep -q 'CARD shown' log/telltale.log && [ \$n -lt 900 ]; do sleep 0.05; n=\$((n+1)); done; sleep 0.5; ./ttshot log/card.ppm) > log/shot-card.txt 2>&1 < /dev/null & )
     ( (n=0; while ! grep -q 'CARD hidden' log/telltale.log && [ \$n -lt 1200 ]; do sleep 0.05; n=\$((n+1)); done; sleep 0.3; ./ttshot log/card-hidden.ppm) > log/shot-card-hidden.txt 2>&1 < /dev/null & )" > "$EV/debug.txt" 2>&1
+fi
+# where the cluster can change (digits + safe-layer marker, tick, lamps, incident card, engineering banner): read only these,
+# the whole display every 150 frames -- keeps the recorder from perturbing the run it films (src/tools/ttrec.c)
+REC_REGIONS="150 544,192,352,288 544,480,224,96 64,64,1152,64@2 864,128,416,224@3 0,608,1280,96@3"
+if [ -n "${TT_REC:-}" ]; then
+  $G sudo "cd /tmp/tt; rm -f /dev/shmem/tt-rec.ttv log/rec.txt; (on -p 9 ./ttrec /dev/shmem/tt-rec.ttv ${TT_REC_MS:-33} $TT_REC ${TT_REC_ARGS:-$REC_REGIONS} > log/rec.txt 2>&1 < /dev/null &)" > /dev/null 2>&1
 fi
 if [ "$CLS" = starve ]; then
   HT=; [ "${TT_POLICY:-0}" = 1 ] && HT="env TT_TYPE=hog_t"
@@ -66,6 +77,11 @@ if [ "${TT_DEBUG:-0}" = 1 ]; then
   done
 fi
 $G get '/tmp/tt/ev/*.csv' "$EV/" 2>/dev/null || true
+if [ -n "${TT_REC:-}" ]; then
+  RD="${TT_REC_DIR:-$EV}"; mkdir -p "$RD"
+  $G sudo 'slay -f -Q ttrec >/dev/null 2>&1; n=0; while pidin arg | grep -q "[t]trec" && [ $n -lt 40 ]; do sleep 0.25; n=$((n+1)); done; true'
+  $G get /dev/shmem/tt-rec.ttv "$RD/rec.ttv" && $G get /tmp/tt/log/rec.txt "$RD/rec.txt" || echo "scenario: no ttrec recording" >&2
+fi
 KPOL=$($G sudo 'secpol -Q | head -1' 2>/dev/null | tr ' ' '_' || true)   # the kernel's policy state, not just the requested mode
 echo "run $RID class=$CLS inject=${TT_INJECT:-$CLS} heal_at=${TT_HEAL_AT:--} conf_extra=${TT_CONF_EXTRA:--} at=$AT accel=QEMU(TCG) policy=${TT_POLICY:-0} debug=${TT_DEBUG:-0} cpu=${TT_CPU:-any} scope=${TT_SCOPE:-all} sup=${TT_SUP:-script} kernel_policy=${KPOL:-unknown}$([ "$CLS" = starve ] && echo " hog_prio=$HP hog_ms=${TT_HOG_MS:-3000}")" > "$EV/RUN.txt"
 cat "$EV/inject.txt" 2>/dev/null || true   # STARVE runs have no inject.txt (set -e would exit 1 here)
