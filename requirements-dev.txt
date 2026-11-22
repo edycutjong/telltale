@@ -1,2 +1,3 @@
 # Host-side dev tooling only (lint). The host tools and tests themselves use the Python standard library.
 ruff==0.15.2
+pillow==12.2.0

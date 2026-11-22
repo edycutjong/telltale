@@ -9,7 +9,7 @@ pass=0; fail=0; cases=0
 for d in "$root"/*/; do
   n=$(basename "$d"); [ "$n" = core ] && continue
   [ -f "$d/incidents.csv" ] || continue
-  out=$(python3 scripts/check_run.py "$d" "${n##*-}")
+  out=$(python3 scripts/check_run.py "$d" "${n##*-}" || true)   # a FAIL line is counted below, not fatal here
   p=$(grep -c '^PASS' <<<"$out" || true); f=$(grep -c '^FAIL' <<<"$out" || true)
   echo "$n: $p pass, $f fail"
   pass=$((pass + p)); fail=$((fail + f)); cases=$((cases + 1))
