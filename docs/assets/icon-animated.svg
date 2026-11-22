@@ -33,7 +33,7 @@
   <g clip-path="url(#ai-lie)">
     <animate attributeName="opacity" dur="6s" repeatCount="indefinite" values="1;1;0;0;1;1" keyTimes="0;0.4;0.405;0.88;0.96;1"/>
     <path d="M214 168 H428 V388 H380 C336 384 316 322 290 270 C266 222 246 180 214 168 Z" fill="url(#ai-hatch)"/>
-    <path d="M214 168 H428" stroke="#C8321E" stroke-width="48" stroke-linecap="round" fill="none"/>
+    <path d="M236 168 H428" stroke="#C8321E" stroke-width="48" stroke-linecap="round" fill="none"/>
     <path d="M428 186 V372" stroke="#C8321E" stroke-width="22" stroke-linecap="round" fill="none"/>
   </g>
 
