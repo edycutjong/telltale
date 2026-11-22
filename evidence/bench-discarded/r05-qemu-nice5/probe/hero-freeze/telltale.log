@@ -1,0 +1,32 @@
+telltale: conf period_ms=20
+telltale: conf W_ms=100
+telltale: conf tick_stall_ms=151
+telltale: conf truth_lost_ms=200
+telltale: conf restart_timeout_ms=4000
+telltale: conf mismatch_n=3
+telltale: conf truth_ok_n=5
+telltale: pid=53145623 uid=0 type=untyped prio=60
+telltale: period_ms=20 W_ms=100 tick_stall_ms=151 h_max=615 mismatch_n=3 unknown_kill_ms=755 restart_timeout_ms=4000 policy=none (uid/pid checks) slog2=telltale/incidents
+telltale: display 1280x768, tier G1-FULL (screen_read_display, display-manager context)
+telltale: BANNER x=371 w=538 mode=driver text="DISPLAY FAULT · SHOWING TRUE SPEED"
+telltale: renderer registered pid=53170205 draw_tid=3 window=tt-cluster-53170205
+telltale: window tt-cluster-53170205 found at 0,24
+telltale: ARMED renderer pid=53170205 (window tt-cluster-53170205)
+telltale: WAIT -> NORMAL
+telltale: DETECT TT-VAL-0001 VALUE_MISMATCH shown=47 truth=48 lamps_shown=0x00 lamps_truth=0x00 caught_ms=69.0
+telltale: NORMAL -> SAFE-HOLD
+telltale: SAFE verified on glass TT-VAL-0001 (45.5 ms after detect, composed check)
+telltale: INCIDENT TT-VAL-0001,VALUE_MISMATCH,-,47,48,2125885855928,2125954835418,69.0,2126000357179,0,0,2126032024012,0,114.5,53170205,0,0x00,0x00,2126000357179
+telltale: SAFE-HOLD -> NORMAL
+telltale: DETECT TT-FRZ-0002 TICK_STALL shown=48 truth=47 lamps_shown=0x01 lamps_truth=0x00 caught_ms=19.4
+telltale: NORMAL -> SAFE-HOLD
+telltale: SAFE verified on glass TT-FRZ-0002 (59.0 ms after detect, composed check)
+telltale: cause hung (draw thread states 13,13,13)
+telltale: SIGKILL renderer pid 53170205 (hung)
+telltale: SAFE-HOLD -> RESTARTING
+telltale: window tt-cluster-53170205 found at 0,24
+telltale: screen_read_window: No such file or directory
+telltale: renderer registered pid=53329949 draw_tid=3 window=tt-cluster-53329949
+telltale: window tt-cluster-53329949 found at 0,24
+telltale: INCIDENT TT-FRZ-0002,TICK_STALL,hung,48,47,2127654117059,2127673508754,19.4,2127732550275,2127765646823,2127967436718,2128022537269,1,78.4,53170205,53329949,0x01,0x00,2127732550275
+telltale: RESTARTING -> NORMAL

@@ -12,3 +12,27 @@ restarted from run 1 with a clean output file. The discarded rows are kept so th
 **This supplements the pre-registered placement rule.** complexity.md section 2 fixed "|speed change| >= 1 km/h per 100 ms" (ladder: 1 -> 0.5, never
 loosened after a fault run). The window census still uses that rule (K = 21). The new rule is an additional observability filter on STALE only, and it
 was added after one fault run showed the defect; it narrows STALE to the 11 windows where the fault can be seen, it does not widen anything.
+
+# Set aside: two runs of regression r05 (2026-11-22, all 25 rows complete each time, `git_sha` f2b8002)
+
+Both runs of the 25-injection regression bench at the monitor with the final-review fixes (`f2b8002`) detected 25 of 25, 0
+missed, 0 problem rows, but on a slower guest than every earlier bench: the QEMU process had been started from a zsh `&` job,
+and zsh's BG_NICE option ran it at nice 5, so on a busy Mac it got less CPU than usual. Every Screen read slowed down: an
+armed NORMAL check took p50 7.0-7.3 ms (`check_us`, [`r05-qemu-nice5/probe/`](r05-qemu-nice5/probe/)) instead of the 3.5 ms
+of both on-target suite runs (`985ab29` and `f2b8002`), and the check that raises the safe layer (a full post, `safe_us` up
+to 43 ms) ran so long that the next composed read, the first that can show the layer, came 45-58 ms after detection instead
+of 21-33 ms: safe layer read back p50 53-59 ms after detection for FREEZE and STARVE in both runs and for STALE in the first
+(r04: 26.2-30.7 ms).
+
+- [`r05-hostload/`](r05-hostload/): the first run, also during a Time Machine backup (`host_load1` 11.4-36.1; r04: 5.7-21.0).
+  [`r05-hostload/ab/`](r05-hostload/ab/) replays one of its windows (FREEZE, onset 106.9 s, same slice) six times on that
+  guest, alternating the current monitor and the `985ab29` build (`ab/ab.sh`; `ck-*.txt` = the guest-side cksum of the binary
+  each run used; per-check logs kept): safe layer read back 55.7 / 57.5 / 57.5 ms after detection with the current monitor,
+  55.3 / 56.2 / 59.5 ms with `985ab29`. The slowdown is not the fix.
+- [`r05-qemu-nice5/`](r05-qemu-nice5/): the second run, after the backup had ended (`host_load1` 5.5-10.7), same niced
+  QEMU, FREEZE and STARVE still p50 53-54 ms. Its `probe/` holds three single runs on that guest (the suite's hero FREEZE and
+  the bench slice): `check_us` p50 7.0-7.3 ms there too.
+
+QEMU was then restarted at nice 0 (one probe on the bench slice: safe layer 29.3 ms after detection, NORMAL check p50 3.56 ms)
+and the regression re-run from run 1 (`evidence/bench-regress-r05*.csv`). These rows are kept so the re-runs are visible, not
+hidden.

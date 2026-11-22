@@ -1,0 +1,57 @@
+--- snapshot 1
+  811038   1 screen              10r SIGWAITINFO                                
+  811038   2 screen              15r CONDVAR        (0x1fbac17448)              
+  811038   3 screen              10r NANOSLEEP                                  
+  811038   4 screen              16r RECEIVE        1                           
+  811038   5 screen              10r RECEIVE        1                           
+  811038   6 screen              10r RECEIVE        1                           
+  811038   7 screen              16r RECEIVE        1                           
+  811038   8 screen              16r RECEIVE        1                           
+  811038   9 screen              60r RUNNING                                    
+  811038  10 screen              10r REPLY          180248                      
+30658592   1 telltale            60f REPLY          811038                      
+30658592   2 telltale            15f RECEIVE        1                           
+30658592   3 telltale            61f NANOSLEEP                                  
+30683171   1 cluster             15r RECEIVE        1                           
+30683171   2 cluster             10r READY                                      
+30683171   3 cluster             20r READY                                      
+30683171   4 cluster             15r NANOSLEEP                                  
+30806052   1 hog                 40f RUNNING                                    
+--- snapshot 2
+  811038   1 screen              10r SIGWAITINFO                                
+  811038   2 screen              15r CONDVAR        (0x1fbac17438)              
+  811038   3 screen              10r NANOSLEEP                                  
+  811038   4 screen              60r RUNNING                                    
+  811038   5 screen              10r RECEIVE        1                           
+  811038   6 screen              10r RECEIVE        1                           
+  811038   7 screen              16r RECEIVE        1                           
+  811038   8 screen              16r RECEIVE        1                           
+  811038   9 screen              16r RECEIVE        1                           
+  811038  10 screen              10r REPLY          180248                      
+30658592   1 telltale            60f REPLY          811038                      
+30658592   2 telltale            15f RECEIVE        1                           
+30658592   3 telltale            61f NANOSLEEP                                  
+30683171   1 cluster             15r RECEIVE        1                           
+30683171   2 cluster             10r READY                                      
+30683171   3 cluster             20r READY                                      
+30683171   4 cluster             15r READY                                      
+30806052   1 hog                 40f READY                                      
+--- snapshot 3
+  811038   1 screen              10r SIGWAITINFO                                
+  811038   2 screen              15r CONDVAR        (0x1fbac17438)              
+  811038   3 screen              10r NANOSLEEP                                  
+  811038   4 screen              60r RUNNING                                    
+  811038   5 screen              10r RECEIVE        1                           
+  811038   6 screen              10r RECEIVE        1                           
+  811038   7 screen              16r RECEIVE        1                           
+  811038   8 screen              16r RECEIVE        1                           
+  811038   9 screen              16r RECEIVE        1                           
+  811038  10 screen              10r REPLY          180248                      
+30658592   1 telltale            60f REPLY          811038                      
+30658592   2 telltale            15f RECEIVE        1                           
+30658592   3 telltale            61f NANOSLEEP                                  
+30683171   1 cluster             15r RECEIVE        1                           
+30683171   2 cluster             10r READY                                      
+30683171   3 cluster             20r READY                                      
+30683171   4 cluster             15r READY                                      
+30806052   1 hog                 40f READY                                      

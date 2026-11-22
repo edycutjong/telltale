@@ -1,0 +1,22 @@
+telltale: conf period_ms=20
+telltale: conf W_ms=100
+telltale: conf tick_stall_ms=151
+telltale: conf truth_lost_ms=200
+telltale: conf restart_timeout_ms=4000
+telltale: conf mismatch_n=3
+telltale: conf truth_ok_n=5
+telltale: pid=6664215 uid=0 type=untyped prio=60
+telltale: period_ms=20 W_ms=100 tick_stall_ms=151 h_max=615 mismatch_n=3 unknown_kill_ms=755 restart_timeout_ms=4000 policy=none (uid/pid checks) slog2=telltale/incidents
+telltale: display 1280x768, tier G1-FULL (screen_read_display, display-manager context)
+telltale: BANNER x=371 w=538 mode=driver text="DISPLAY FAULT · SHOWING TRUE SPEED"
+telltale: renderer registered pid=6688797 draw_tid=3 window=tt-cluster-6688797
+telltale: window tt-cluster-6688797 found at 0,24
+telltale: ARMED renderer pid=6688797 (window tt-cluster-6688797)
+telltale: WAIT -> NORMAL
+telltale: DETECT TT-FRZ-0001 TICK_STALL shown=0 truth=0 lamps_shown=0x00 lamps_truth=0x00 caught_ms=21.1
+telltale: NORMAL -> SAFE-HOLD
+telltale: SAFE verified on glass TT-FRZ-0001 (57.5 ms after detect, composed check)
+telltale: cause starved (draw thread states 2,2,2)
+telltale: cause unknown (draw thread states 2,2,12)
+telltale: INCIDENT TT-FRZ-0001,TICK_STALL,unknown,0,0,398241063532,398262178089,21.1,398319659830,0,0,401129566783,0,78.6,6688797,0,0x00,0x00,398319659830
+telltale: SAFE-HOLD -> NORMAL

@@ -1,0 +1,102 @@
+telltale: WAIT -> NORMAL
+telltale: DETECT TT-TRL-0001 TRUTH_LOST shown=52 truth=52 lamps_shown=0x10 lamps_truth=0x10 caught_ms=19.9
+telltale: NORMAL -> TRUTH-LOST
+telltale: TRUTH-LOST -> SAFE-HOLD
+telltale: INCIDENT TT-TRL-0001,TRUTH_LOST,-,52,52,550858046242,550877980182,19.9,550899553598,0,0,551424162746,0,566.1,23875612,0,0x10,0x10,0
+telltale: SAFE-HOLD -> NORMAL
+telltale: DETECT TT-TRL-0002 TRUTH_LOST shown=52 truth=52 lamps_shown=0x10 lamps_truth=0x10 caught_ms=19.7
+telltale: NORMAL -> TRUTH-LOST
+telltale: INCIDENT TT-TRL-0002,TRUTH_LOST,disarmed,52,52,552557158443,552576886198,19.7,552600958863,0,0,0,0,-1.0,23875612,0,0x10,0x10,0
+telltale: disarmed in TRUTH-LOST -> NORMAL
+telltale: /dev/vehicle: Bad file descriptor -- reconnecting
+telltale: DETECT TT-TRL-0003 TRUTH_LOST shown=52 truth=52 lamps_shown=0x10 lamps_truth=0x10 caught_ms=20.6
+telltale: NORMAL -> TRUTH-LOST
+telltale: reconnected to /dev/vehicle (truth window reset)
+telltale: TRUTH-LOST -> SAFE-HOLD
+telltale: SIGKILL renderer pid 23875612 (live-wrong)
+telltale: SAFE-HOLD -> RESTARTING
+telltale: INCIDENT TT-TRL-0003,TRUTH_LOST,live-wrong,52,52,557177333600,557197935142,20.6,557232368131,557611293164,557813422080,557844326894,1,418.9,23875612,25509916,0x10,0x10,557596185567
+telltale: RESTARTING -> NORMAL
+telltale: DETECT TT-BLK-0004 BLANK shown=-1 truth=0 lamps_shown=0x00 lamps_truth=0x00 caught_ms=18.0
+telltale: NORMAL -> SAFE-HOLD
+telltale: restart timeout (pid 25509916 did not register)
+telltale: RESTARTING -> NO-DISPLAY
+telltale: INCIDENT TT-BLK-0004,BLANK,disarmed,-1,0,558497234511,558515224702,18.0,558537909118,0,0,0,0,40.7,25509916,0,0x00,0x00,558537909118
+telltale: disarmed in NO-DISPLAY -> WAIT
+telltale: NO_DISPLAY
+telltale: WAIT -> NO-DISPLAY
+telltale: NO_TRUTH (no fresh vehicle sample after arm_grace_ms)
+telltale: WAIT -> TRUTH-LOST
+telltale: TRUTH-LOST -> NO-DISPLAY
+telltale: NO-DISPLAY -> NORMAL
+telltale: DETECT TT-BLK-0001 BLANK shown=-1 truth=52 lamps_shown=0x00 lamps_truth=0x10 caught_ms=17.9
+telltale: NORMAL -> SAFE-HOLD
+telltale: restarted renderer pid 27324451 not verified in 4000 ms -> SAFE-HOLD
+telltale: RESTARTING -> SAFE-HOLD
+telltale: SIGKILL renderer pid 27324451 (screen-blocked)
+telltale: SAFE-HOLD -> RESTARTING
+telltale: restarted renderer pid 28233763 not verified in 4000 ms -> SAFE-HOLD
+telltale: RESTARTING -> SAFE-HOLD
+telltale: SIGKILL renderer pid 28233763 (screen-blocked)
+telltale: SAFE-HOLD -> RESTARTING
+telltale: restarted renderer pid 29143075 not verified in 4000 ms -> SAFE-HOLD
+telltale: RESTARTING -> SAFE-HOLD
+telltale: SIGKILL renderer pid 29143075 (screen-blocked)
+telltale: SAFE-HOLD -> RESTARTING
+telltale: restarted renderer pid 30068771 not verified in 4000 ms -> SAFE-HOLD
+telltale: RESTARTING -> SAFE-HOLD
+telltale: INCIDENT TT-BLK-0001,BLANK,TT-GIVEUP,-1,52,575801435292,575819354419,17.9,575842565309,588669685717,576018897007,0,3,41.1,27009059,30068771,0x00,0x10,575842565309
+telltale: TT-GIVEUP
+telltale: SAFE-HOLD -> GIVEUP
+telltale: SIGKILL renderer pid 30068771 (TT-GIVEUP)
+telltale: SAFE-HOLD -> RESTARTING
+telltale: RESTARTING -> NORMAL
+telltale: WAIT -> NO-DISPLAY
+telltale: DETECT TT-FRZ-0001 TICK_STALL shown=-1 truth=52 lamps_shown=0x00 lamps_truth=0x10 caught_ms=9025.7
+telltale: renderer pid 31588387 not verified in NO-DISPLAY (TICK_STALL) -> SAFE-HOLD
+telltale: NO-DISPLAY -> SAFE-HOLD
+telltale: SIGKILL renderer pid 31588387 (screen-blocked)
+telltale: SAFE-HOLD -> RESTARTING
+telltale: restarted renderer pid 32878627 not verified in 4000 ms -> SAFE-HOLD
+telltale: RESTARTING -> SAFE-HOLD
+telltale: SIGKILL renderer pid 32878627 (screen-blocked)
+telltale: SAFE-HOLD -> RESTARTING
+telltale: restarted renderer pid 33787939 not verified in 4000 ms -> SAFE-HOLD
+telltale: RESTARTING -> SAFE-HOLD
+telltale: SIGKILL renderer pid 33787939 (screen-blocked)
+telltale: SAFE-HOLD -> RESTARTING
+telltale: restarted renderer pid 34660387 not verified in 4000 ms -> SAFE-HOLD
+telltale: RESTARTING -> SAFE-HOLD
+telltale: INCIDENT TT-FRZ-0001,TICK_STALL,TT-GIVEUP,-1,52,595742803523,604768485637,9025.7,604788932039,613374507056,605023947553,0,3,9046.1,31588387,34660387,0x00,0x10,604788932039
+telltale: TT-GIVEUP
+telltale: SAFE-HOLD -> GIVEUP
+telltale: SIGKILL renderer pid 34660387 (TT-GIVEUP)
+telltale: SAFE-HOLD -> RESTARTING
+telltale: RESTARTING -> NORMAL
+telltale: WAIT -> NO-DISPLAY
+telltale: DETECT TT-FRZ-0001 TICK_STALL shown=-1 truth=52 lamps_shown=0x00 lamps_truth=0x10 caught_ms=9025.7
+telltale: renderer pid 31588387 not verified in NO-DISPLAY (TICK_STALL) -> SAFE-HOLD
+telltale: NO-DISPLAY -> SAFE-HOLD
+telltale: SIGKILL renderer pid 31588387 (screen-blocked)
+telltale: SAFE-HOLD -> RESTARTING
+telltale: restarted renderer pid 32878627 not verified in 4000 ms -> SAFE-HOLD
+telltale: RESTARTING -> SAFE-HOLD
+telltale: SIGKILL renderer pid 32878627 (screen-blocked)
+telltale: SAFE-HOLD -> RESTARTING
+telltale: restarted renderer pid 33787939 not verified in 4000 ms -> SAFE-HOLD
+telltale: RESTARTING -> SAFE-HOLD
+telltale: SIGKILL renderer pid 33787939 (screen-blocked)
+telltale: SAFE-HOLD -> RESTARTING
+telltale: restarted renderer pid 34660387 not verified in 4000 ms -> SAFE-HOLD
+telltale: RESTARTING -> SAFE-HOLD
+telltale: INCIDENT TT-FRZ-0001,TICK_STALL,TT-GIVEUP,-1,52,595742803523,604768485637,9025.7,604788932039,613374507056,605023947553,0,3,9046.1,31588387,34660387,0x00,0x10,604788932039
+telltale: TT-GIVEUP
+telltale: SAFE-HOLD -> GIVEUP
+telltale: SIGKILL renderer pid 34660387 (TT-GIVEUP)
+telltale: SAFE-HOLD -> RESTARTING
+telltale: RESTARTING -> NORMAL
+telltale: DETECT TT-BLK-0002 BLANK shown=-1 truth=52 lamps_shown=0x00 lamps_truth=0x10 caught_ms=18.8
+telltale: NORMAL -> SAFE-HOLD
+telltale: INCIDENT TT-BLK-0002,BLANK,crash,-1,52,618586525873,618605347813,18.8,618626881193,0,618824397958,618858496647,0,40.4,35610659,35901475,0x00,0x10,618626881193
+telltale: RESTARTING -> NORMAL
+telltale: WAIT -> NORMAL

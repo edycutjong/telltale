@@ -1,0 +1,1 @@
+run hero class=freeze inject=freeze heal_at=- conf_extra=- at=12.221 accel=QEMU(TCG) policy=0 debug=0 cpu=any scope=all sup=script kernel_policy=policy_id:0

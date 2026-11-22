@@ -1,0 +1,3 @@
+vehicled: pid=6557713 uid=0 type=untyped prio=50
+vehicled: no security policy loaded: DCMD_VEH_SET guarded by uid 0
+vehicled: serving /dev/vehicle

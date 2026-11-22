@@ -1,0 +1,13 @@
+policy id:c0a91f16 (immutable)
+   16386   1 slm                 30r RECEIVE        2                            
+   16386   2 slm                 10r DEAD                                        
+   16386   3 slm                 30r CONDVAR        (0x3008f60f90)               
+36818961   1 vehicled            60f RECEIVE        1                            
+36835349   1 telltale            60f RECEIVE        2                            
+36835349   2 telltale            15f RECEIVE        1                            
+36835349   3 telltale            61f NANOSLEEP                                   
+36859938   1 cluster             15r RECEIVE        1                            
+36859938   2 cluster             10r RECEIVE        2                            
+36859938   3 cluster             20r NANOSLEEP                                   
+36859938   4 cluster             15r NANOSLEEP                                   
+36876314   1 vehfeed             45f NANOSLEEP                                   
