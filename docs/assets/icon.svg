@@ -1,8 +1,8 @@
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" width="512" height="512" role="img" aria-label="Telltale — a strip of tachograph chart: the black true-speed trace brakes to 0, the red displayed trace stays flat at 48 over a hatched gap, a green tick ends the lie">
   <title>Telltale</title>
-  <defs><linearGradient id="tt-paper" x1="0" y1="0" x2="1" y2="1"><stop offset="0%" stop-color="var(--bg-elevated-solid, #F7F3EA)"/><stop offset="100%" stop-color="var(--bg, #EFE9DC)"/></linearGradient><pattern id="tt-hatch" width="30" height="30" patternUnits="userSpaceOnUse" patternTransform="rotate(45)"><rect width="30" height="30" fill="var(--primary, #C8321E)" fill-opacity="0.13"/><rect width="11" height="30" fill="var(--primary, #C8321E)" fill-opacity="0.42"/></pattern></defs>
+  <defs><linearGradient id="tt-paper" x1="0" y1="0" x2="1" y2="1"><stop offset="0%" stop-color="var(--bg-elevated-solid, #F7F3EA)"/><stop offset="100%" stop-color="var(--bg, #EFE9DC)"/></linearGradient><pattern id="tt-hatch" width="30" height="30" patternUnits="userSpaceOnUse" patternTransform="rotate(45)"><rect width="30" height="30" fill="var(--primary, #C8321E)" fill-opacity="0.26"/><rect width="11" height="30" fill="var(--primary, #C8321E)" fill-opacity="0.58"/></pattern></defs>
   <!-- chart plate: a wax-paper chart card with a thin ink rim (self-plated: holds on GitHub light and dark) -->
-  <rect x="23" y="23" width="466" height="466" rx="112" fill="url(#tt-paper)" stroke="var(--ink, #1C1B19)" stroke-width="14"/>
+  <rect x="21" y="21" width="470" height="470" rx="112" fill="url(#tt-paper)" stroke="var(--ink, #1C1B19)" stroke-width="10"/>
   <!-- chart hairlines: 48 km/h, 0 km/h, and the time grid -->
   <path d="M76 168 H436 M76 388 H436" stroke="var(--rule, #B9B1A0)" stroke-width="4" fill="none"/>
   <path d="M148 96 V436 M260 96 V436 M372 96 V436" stroke="var(--rule, #B9B1A0)" stroke-width="3" stroke-opacity="0.5" fill="none"/>
@@ -13,5 +13,5 @@
   <!-- the truth: real speed rises, then brakes to 0 (shape of the hero stop) -->
   <path d="M84 194 C120 190 160 170 204 168 C240 168 262 214 290 270 C316 322 336 384 380 388 H428" stroke="var(--ink, #1C1B19)" stroke-width="48" stroke-linecap="round" stroke-linejoin="round" fill="none"/>
   <!-- the catch: green tick where the truth leaves the frozen value -->
-  <path d="M236 100 V262" stroke="var(--accent, #1F7A4D)" stroke-width="36" stroke-linecap="round" fill="none"/>
+  <path d="M236 78 V286" stroke="var(--accent, #1F7A4D)" stroke-width="36" stroke-linecap="round" fill="none"/>
 </svg>

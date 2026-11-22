@@ -17,7 +17,7 @@
   </style>
   <defs>
     <linearGradient id="ai-paper" x1="0" y1="0" x2="1" y2="1"><stop offset="0%" stop-color="#F7F3EA"/><stop offset="100%" stop-color="#EFE9DC"/></linearGradient>
-    <pattern id="ai-hatch" width="30" height="30" patternUnits="userSpaceOnUse" patternTransform="rotate(45)"><rect width="30" height="30" fill="#C8321E" fill-opacity="0.13"/><rect width="11" height="30" fill="#C8321E" fill-opacity="0.42"/></pattern>
+    <pattern id="ai-hatch" width="30" height="30" patternUnits="userSpaceOnUse" patternTransform="rotate(45)"><rect width="30" height="30" fill="#C8321E" fill-opacity="0.26"/><rect width="11" height="30" fill="#C8321E" fill-opacity="0.58"/></pattern>
     <filter id="ai-glow" filterUnits="userSpaceOnUse" x="150" y="20" width="172" height="330"><feGaussianBlur stdDeviation="16"/></filter>
     <filter id="ai-pen" x="-100%" y="-100%" width="300%" height="300%"><feGaussianBlur stdDeviation="5"/></filter>
     <path id="ai-truth" d="M84 194 C120 190 160 170 204 168 C240 168 262 214 290 270 C316 322 336 384 380 388 H428"/>
@@ -25,7 +25,7 @@
   </defs>
 
   <!-- brand layer: chart card + hairlines (always visible) -->
-  <rect x="23" y="23" width="466" height="466" rx="112" fill="url(#ai-paper)" stroke="#1C1B19" stroke-width="14"/>
+  <rect x="21" y="21" width="470" height="470" rx="112" fill="url(#ai-paper)" stroke="#1C1B19" stroke-width="10"/>
   <path d="M76 168 H436 M76 388 H436" stroke="#B9B1A0" stroke-width="4" fill="none"/>
   <path d="M148 96 V436 M260 96 V436 M372 96 V436" stroke="#B9B1A0" stroke-width="3" stroke-opacity="0.5" fill="none"/>
 
@@ -51,8 +51,8 @@
   <circle data-story="beat-3" cx="236" cy="181" r="12" fill="none" stroke="#1F7A4D" stroke-width="6" opacity="0">
     <animate attributeName="r" dur="6s" repeatCount="indefinite" values="12;12;110;110" keyTimes="0;0.21;0.37;1"/><animate attributeName="opacity" dur="6s" repeatCount="indefinite" values="0;0;0.7;0;0" keyTimes="0;0.21;0.23;0.37;1"/>
   </circle>
-  <path data-story="beat-4" class="breath" d="M236 100 V262" stroke="#1F7A4D" stroke-width="72" stroke-linecap="round" fill="none" filter="url(#ai-glow)" opacity="0"/>
-  <path data-story="beat-3" d="M236 100 V262" stroke="#1F7A4D" stroke-width="36" stroke-linecap="round" fill="none" pathLength="100" stroke-dasharray="100 100" opacity="0">
+  <path data-story="beat-4" class="breath" d="M236 78 V286" stroke="#1F7A4D" stroke-width="72" stroke-linecap="round" fill="none" filter="url(#ai-glow)" opacity="0"/>
+  <path data-story="beat-3" d="M236 78 V286" stroke="#1F7A4D" stroke-width="36" stroke-linecap="round" fill="none" pathLength="100" stroke-dasharray="100 100" opacity="0">
     <animate attributeName="stroke-dashoffset" dur="6s" repeatCount="indefinite" values="100;100;0;0" keyTimes="0;0.19;0.23;1"/><animate attributeName="opacity" dur="6s" repeatCount="indefinite" values="0;0;1;1;0;0" keyTimes="0;0.19;0.2;0.88;0.96;1"/>
   </path>
 </svg>
