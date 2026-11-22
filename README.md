@@ -13,6 +13,7 @@
   <br/>
 
   [![Site](https://img.shields.io/badge/🚀_Site-telltale.edycu.dev-06b6d4?style=for-the-badge)](https://telltale.edycu.dev)
+  [![Judge guide](https://img.shields.io/badge/⚖️_Judge_guide-2_minutes-22c55e?style=for-the-badge)](JUDGE.md)
   [![Pitch deck](https://img.shields.io/badge/📊_Pitch_deck-10_slides-ef4444?style=for-the-badge)](https://telltale.edycu.dev/pitch/)
   [![Codelab](https://img.shields.io/badge/🧪_Codelab-first_QNX_resource_manager-f59e0b?style=for-the-badge)](https://telltale.edycu.dev/codelab/)
   [![Built for QNX Global Hackathon](https://img.shields.io/badge/Devpost-QNX_Global_Hackathon-8b5cf6?style=for-the-badge)](https://qnx.devpost.com/)
