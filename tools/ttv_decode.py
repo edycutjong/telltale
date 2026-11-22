@@ -18,8 +18,10 @@ def read_frames(data):
     if data[:4] != b"TTV1":
         raise ValueError("not a TTV1 file")
     w, h, tile = struct.unpack_from("<III", data, 4)
+    if not tile or not w or not h or w % tile or h % tile:
+        raise ValueError(f"bad TTV1 geometry {w}x{h}, tile {tile}")
     yield (w, h, tile)
-    off, tsz = 16, tile * tile * 4
+    off, tsz, tw, th = 16, tile * tile * 4, w // tile, h // tile
     while off + 12 <= len(data):
         t_ns, n = struct.unpack_from("<QI", data, off)
         off += 12
@@ -29,6 +31,8 @@ def read_frames(data):
         tiles = []
         for _ in range(n):
             tx, ty = struct.unpack_from("<HH", data, off)
+            if tx >= tw or ty >= th:
+                raise ValueError(f"tile {tx},{ty} outside the {tw}x{th} tile grid at byte {off}")
             tiles.append((tx, ty, data[off + 4:off + 4 + tsz]))
             off += 4 + tsz
         yield (t_ns, tiles)
@@ -62,7 +66,11 @@ def main(argv):
     if len(argv) != 3:
         print(__doc__.strip().splitlines()[2].strip(), file=sys.stderr)
         return 1
-    w, h, tile, index, _ = decode(argv[1], argv[2])
+    try:
+        w, h, tile, index, _ = decode(argv[1], argv[2])
+    except ValueError as e:   # a corrupt or foreign file: say what is wrong, no traceback
+        print(f"ttv_decode: {argv[1]}: {e}", file=sys.stderr)
+        return 1
     if not index:
         print(f"ttv_decode: {argv[1]} holds no complete frame", file=sys.stderr)
         return 1

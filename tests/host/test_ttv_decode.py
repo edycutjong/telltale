@@ -67,6 +67,14 @@ class TtvTest(unittest.TestCase):
         self.assertEqual(len(items), 2)   # header + the one complete frame
         self.assertIn("5 trailing bytes", err.getvalue())
 
+    def test_tile_outside_the_grid_is_refused(self):
+        with self.assertRaises(ValueError):
+            list(ttv_decode.read_frames(encode(32, 32, [(1, [(1, 0, (0, 0, 0))])])))   # 32x32 = one tile: tx 1 is outside
+
+    def test_bad_geometry_is_refused(self):
+        with self.assertRaises(ValueError):
+            next(ttv_decode.read_frames(b"TTV1" + struct.pack("<III", 40, 32, 32)))   # width not a multiple of the tile
+
     def test_bad_magic(self):
         with self.assertRaises(ValueError):
             next(ttv_decode.read_frames(b"NOPE" + bytes(12)))

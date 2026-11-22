@@ -12,7 +12,7 @@ the digits and lamps, and checks them against `/dev/vehicle`. On a lie it puts a
 top, decides hung vs starved from the renderer's thread states, kills and respawns a hung or wrong renderer, verifies
 the new one, and hands the display back. 20 ms is the configured check period (`period_ms`), not a measured figure.
 Recorded runs per fault class: [`evidence/runs/`](../evidence/runs/). Tests: `make test-host` = C checks (test_disp 12, test_decode 91,
-test_text 17, test_rcap 28) + 110 Python tests (10 need Pillow, 2 of those numpy too: `pip install -r requirements-dev.txt`). `make test-target`: 163 passed, 0 failed on the QEMU (TCG) guest at
+test_text 17, test_rcap 28) + 112 Python tests (10 need Pillow, 2 of those numpy too: `pip install -r requirements-dev.txt`). `make test-target`: 163 passed, 0 failed on the QEMU (TCG) guest at
 commit 985ab29 ([`evidence/test-target/20261115T232225Z/summary.txt`](../evidence/test-target/20261115T232225Z/summary.txt), host
 load logged at start and end), including `tests/target/core_items.sh` 44/44 (`/dev/vehicle`, `ttctl`, `/dev/telltale`,
 TRUTH_LOST + recovery, DISARM mid-incident, a vehicled restart that leaves a stale renderer to be killed, NO_DISPLAY with the

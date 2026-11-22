@@ -54,7 +54,7 @@ The monitor does no machine learning on purpose: the check is a deterministic gl
 | Build | SDP Linux host tools in a `linux/amd64` Docker container on macOS ([`docker/`](docker/), [`scripts/qcc.sh`](scripts/qcc.sh)) |
 | Target | QNX Everywhere Quick Start image, x86_64 guest under QEMU with TCG on an Apple-Silicon Mac (`scripts/run_qemu.sh`), Screen on the image's software virtual display. No Raspberry Pi or other hardware was used |
 | Languages | C (monitor, cluster, resource managers), Python 3.11+ (host tests, bench reports) |
-| Host tests | any POSIX `cc`, Python 3.11+ and `pip install -r requirements-dev.txt` (ruff, Pillow, numpy; without Pillow and numpy, 10 of the 110 Python tests skip: 8 need Pillow, 2 need both) |
+| Host tests | any POSIX `cc`, Python 3.11+ and `pip install -r requirements-dev.txt` (ruff, Pillow, numpy; without Pillow and numpy, 10 of the 112 Python tests skip: 8 need Pillow, 2 need both) |
 
 ## 🏆 QNX Integration
 - **Resource managers:** `/dev/vehicle`, `/dev/telltale`, `/dev/telltale-events`.
