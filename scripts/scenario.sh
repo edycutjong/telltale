@@ -45,7 +45,7 @@ elif [ "${TT_DEBUG:-0}" = 1 ]; then
 fi
 # where the cluster can change, in display coordinates (window at 0,24 + src/common/layout.h): the tens and units digit cells
 # and the safe-layer marker, the gear strip, the lamp row, the incident card, the engineering banner and the liveness tick
-# (1264,728). Only these are read every frame or two, the whole display every 150 frames (~5 s), to keep the recorder's extra
+# (1264,728). Only these are read, every 1 to 3 frames (@N), the whole display every 150 frames (~5 s), to keep the recorder's extra
 # Screen work small (src/tools/ttrec.c). Not in a region, so refreshed only by that whole-display read: the hundreds digit cell
 # (x 415-543; the hero drive stays below 100 km/h). The tick tile was added after the demo-video takes of 2026-11-21: in
 # those takes the tick refreshed only with the whole-display read.
@@ -85,8 +85,13 @@ if [ -n "${TT_REC:-}" ]; then
   RD="${TT_REC_DIR:-$EV}"; mkdir -p "$RD"
   $G sudo 'slay -f -Q ttrec >/dev/null 2>&1; n=0; while pidin arg | grep -q "[t]trec" && [ $n -lt 40 ]; do sleep 0.25; n=$((n+1)); done; true'
   $G get /dev/shmem/tt-rec.ttv "$RD/rec.ttv" && $G get /tmp/tt/log/rec.txt "$RD/rec.txt" || echo "scenario: no ttrec recording" >&2
+  if ! grep -q 'status=ok$' "$RD/rec.txt" 2>/dev/null; then   # the recorder ran in the background: its last line is its verdict
+    echo "scenario: ttrec did not finish cleanly ($(tail -1 "$RD/rec.txt" 2>/dev/null)): do not cut footage from $RD/rec.ttv" >&2
+    REC_BAD=1
+  fi
 fi
 KPOL=$($G sudo 'secpol -Q | head -1' 2>/dev/null | tr ' ' '_' || true)   # the kernel's policy state, not just the requested mode
 echo "run $RID class=$CLS inject=${TT_INJECT:-$CLS} heal_at=${TT_HEAL_AT:--} conf_extra=${TT_CONF_EXTRA:--} at=$AT accel=QEMU(TCG) policy=${TT_POLICY:-0} debug=${TT_DEBUG:-0} cpu=${TT_CPU:-any} scope=${TT_SCOPE:-all} sup=${TT_SUP:-script} kernel_policy=${KPOL:-unknown}$([ "$CLS" = starve ] && echo " hog_prio=$HP hog_ms=${TT_HOG_MS:-3000}")" > "$EV/RUN.txt"
 cat "$EV/inject.txt" 2>/dev/null || true   # STARVE runs have no inject.txt (set -e would exit 1 here)
 grep -E 'DETECT|cause|SIGKILL|INCIDENT|->|gone|safe' "$EV/telltale.log" || true
+if [ "${REC_BAD:-0}" = 1 ]; then exit 4; fi   # logs are collected either way; a bad recording fails the run at the end

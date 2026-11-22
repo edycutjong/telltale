@@ -12,6 +12,8 @@
  * A tile outside every region can lag by up to <full_every> frames (it is only refreshed by the whole-display read).
  * Stops after <seconds>, or on SIGTERM/SIGINT (slay's default signal; the file is complete up to the last frame).
  * Exit status: 0 = recording complete, 1 = bad arguments, 2 = setup failed, 3 = a read, write or the final close failed.
+ * The summary line on stdout ends "status=ok" or "status=FAILED": a backgrounded recorder's exit status is lost, the line
+ * is not (scripts/scenario.sh checks it before footage is cut).
  * SPDX-License-Identifier: Apache-2.0 */
 #include <errno.h>
 #include <signal.h>
@@ -70,7 +72,7 @@ int main(int argc, char **argv)
         struct region *q = &g[ng]; q->every = 1;
         if (sscanf(argv[i], "%d,%d,%d,%d@%d", &q->r[0], &q->r[1], &q->r[2], &q->r[3], &q->every) < 4 || q->every < 1 ||
             q->r[0] < 0 || q->r[1] < 0 || q->r[0] % TILE || q->r[1] % TILE || q->r[2] % TILE || q->r[3] % TILE || q->r[2] < TILE || q->r[3] < TILE ||
-            q->r[0] + q->r[2] > dsz[0] || q->r[1] + q->r[3] > dsz[1]) {
+            q->r[2] > dsz[0] - q->r[0] || q->r[3] > dsz[1] - q->r[1]) {   /* no signed overflow: x, y >= 0 here */
             fprintf(stderr, "ttrec: bad region %s (x,y,w,h[@every], multiples of %d, inside %dx%d)\n", argv[i], TILE, dsz[0], dsz[1]);
             return 1;
         }
@@ -86,8 +88,9 @@ int main(int argc, char **argv)
     FILE *f = fopen(argv[1], "wb");
     if (!f) { perror(argv[1]); return 2; }
     setvbuf(f, NULL, _IOFBF, 1 << 20);
-    fwrite("TTV1", 1, 4, f);
-    if (put_u32(f, (uint32_t)W) || put_u32(f, (uint32_t)dsz[1]) || put_u32(f, TILE)) { perror("ttrec: write"); return 2; }
+    if (fwrite("TTV1", 1, 4, f) != 4 || put_u32(f, (uint32_t)W) || put_u32(f, (uint32_t)dsz[1]) || put_u32(f, TILE)) {
+        perror("ttrec: write"); fclose(f); return 3;   /* a write failed: 3, as documented above */
+    }
     signal(SIGTERM, on_sig); signal(SIGINT, on_sig);
 
     struct timespec next; clock_gettime(CLOCK_MONOTONIC, &next);
@@ -136,7 +139,7 @@ int main(int argc, char **argv)
         else clock_nanosleep(CLOCK_MONOTONIC, TIMER_ABSTIME, &next, NULL);
     }
     if (fclose(f) != 0) { perror("ttrec: close"); err = 1; }   /* the buffered tail is written here: a full RAM disk shows up now */
-    printf("ttrec: %s display %dx%d, %d region(s) + whole display every %d, %lu frames, %lu reads, %lu tiles, %lu late (period %d ms)\n",
-           argv[1], W, dsz[1], ng - 1, g[0].every, frames, reads, tiles, late, period_ms);
+    printf("ttrec: %s display %dx%d, %d region(s) + whole display every %d, %lu frames, %lu reads, %lu tiles, %lu late (period %d ms) status=%s\n",
+           argv[1], W, dsz[1], ng - 1, g[0].every, frames, reads, tiles, late, period_ms, err ? "FAILED" : "ok");
     return err ? 3 : 0;
 }
