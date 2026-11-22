@@ -56,7 +56,7 @@ test-target:
 	scripts/test_target.sh
 
 lint:
-	ruff check scripts tests tools
+	ruff check scripts tests tools codelab
 
 target:
 	@if command -v qcc >/dev/null 2>&1; then $(MAKE) target-sdp; \

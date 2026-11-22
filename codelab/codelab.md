@@ -112,7 +112,7 @@ Duration: 8:00
 
 Every handler gets the message (`msg`), the per-open state (`ocb`) and a context (`ctp`) for replying. Our `read()` formats the value as text. Two QNX idioms:
 
-- **`ocb->offset`** is the file position. Returning the text once and then 0 bytes is what makes `cat` stop; without it `cat` would loop forever.
+- **`ocb->offset`** is the file position. Returning the text once and then 0 bytes is what makes `cat` stop; without it `cat` would loop forever. It is a 64-bit value any client can set with `lseek()`, so the handler checks it at full width before using it as an index into the text.
 - The reply bytes go to the client with `resmgr_msgwrite()`, and the handler returns `_RESMGR_NPARTS(0)` with the byte count set by `_IO_SET_READ_NBYTES`. (A stack buffer cannot be returned through the IOV, because the reply is sent after the handler returns.)
 
 {{fn src/counter.c io_read}}

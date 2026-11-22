@@ -189,7 +189,7 @@ static struct counter_attr    attr;
 
 <p>Every handler gets the message (<code>msg</code>), the per-open state (<code>ocb</code>) and a context (<code>ctp</code>) for replying. Our <code>read()</code> formats the value as text. Two QNX idioms:</p>
 <ul>
-<li><strong><code>ocb-&gt;offset</code></strong> is the file position. Returning the text once and then 0 bytes is what makes <code>cat</code> stop; without it <code>cat</code> would loop forever.</li>
+<li><strong><code>ocb-&gt;offset</code></strong> is the file position. Returning the text once and then 0 bytes is what makes <code>cat</code> stop; without it <code>cat</code> would loop forever. It is a 64-bit value any client can set with <code>lseek()</code>, so the handler checks it at full width before using it as an index into the text.</li>
 <li>The reply bytes go to the client with <code>resmgr_msgwrite()</code>, and the handler returns <code>_RESMGR_NPARTS(0)</code> with the byte count set by <code>_IO_SET_READ_NBYTES</code>. (A stack buffer cannot be returned through the IOV, because the reply is sent after the handler returns.)</li>
 </ul>
 <pre><code class="language-c">// src/counter.c
@@ -201,10 +201,11 @@ static int io_read(resmgr_context_t *ctp, io_read_t *msg, iofunc_ocb_t *ocb)
 
     char text[32];
     int len = snprintf(text, sizeof text, &quot;%llu\n&quot;, (unsigned long long)ocb-&gt;attr-&gt;value);
-    int off = (int)ocb-&gt;offset, n = 0;
-    if (off &lt; len) {
+    int n = 0;
+    if (ocb-&gt;offset &gt;= 0 &amp;&amp; ocb-&gt;offset &lt; len) {      /* compare at full width: a client may lseek() anywhere */
+        int off = (int)ocb-&gt;offset;
         n = len - off;
-        if (n &gt; (int)msg-&gt;i.nbytes) n = (int)msg-&gt;i.nbytes;
+        if ((size_t)n &gt; msg-&gt;i.nbytes) n = (int)msg-&gt;i.nbytes;
         resmgr_msgwrite(ctp, text + off, n, 0);       /* copy into the client's buffer */
         ocb-&gt;offset += n;
         if (off + n &gt;= len) ocb-&gt;attr-&gt;unread = 0;    /* the client has seen the whole value */
@@ -337,9 +338,9 @@ tgt 'ls -l ~/codelab'
 </code></pre>
 <div class="lbl">Output (recorded)</div>
 <pre class="out"><code>total 72
--rwxr-xr-x  1 qnxuser qnxuser 14560 2026-11-22 06:24 counter
--rwxr-xr-x  1 qnxuser qnxuser  9536 2026-11-22 06:24 counterctl
--rwxr-xr-x  1 qnxuser qnxuser 13800 2026-11-22 06:24 counterwatch
+-rwxr-xr-x  1 qnxuser qnxuser 14560 2026-11-22 06:44 counter
+-rwxr-xr-x  1 qnxuser qnxuser  9536 2026-11-22 06:44 counterctl
+-rwxr-xr-x  1 qnxuser qnxuser 13800 2026-11-22 06:44 counterwatch
 </code></pre>
 </section><section class="step" id="run-it"><h2>Run it</h2><span class="dur">5:00 min</span>
 
@@ -360,7 +361,7 @@ tgt 'ls -l /dev/counter'
 </code></pre>
 <div class="lbl">Output (recorded)</div>
 <pre class="out"><code>counter: serving /dev/counter
-crw-rw-rw-  1 root root 0,   1 2026-11-22 06:24 /dev/counter
+crw-rw-rw-  1 root root 0,   1 2026-11-22 06:44 /dev/counter
 </code></pre>
 <p><code>/dev/counter</code> is now a file in the guest. Use it like one, with no special client library. A freshly started server's counter is 0:</p>
 <pre><code class="language-bash">source env.sh
@@ -434,7 +435,7 @@ tgtroot 'slay counter'
 tgt 'cat /dev/counter'
 </code></pre>
 <div class="lbl">Output (recorded)</div>
-<pre class="out"><code>15044636 ./counter
+<pre class="out"><code>17637404 ./counter
 cat: /dev/counter: No such file or directory
 </code></pre>
 <pre><code class="language-bash">source env.sh
@@ -517,7 +518,7 @@ tgt 'slay counterwatch-noreg' || true     # stop it
 <pre class="out"><code>counterwatch: armed, waiting for 1 change(s)
 wake-ups seen: 0
      pid tid name                         prio STATE          Blocked
-15675418   1 ./counterwatch-noreg          10r RECEIVE        1
+18268186   1 ./counterwatch-noreg          10r RECEIVE        1
 </code></pre>
 <p>The client printed that it armed, the counter changed, and the output shows zero wake-ups after four seconds: no pulse arrived (the watcher is in <code>RECEIVE</code> state either way; the proof is the empty wake-up count, which the working run below contrasts). Now the real one, with the registration. While it sleeps we check what it is doing, then change the counter three times: a <code>write</code>, a <code>devctl</code>, another <code>write</code>:</p>
 <pre><code class="language-bash">source env.sh
@@ -529,7 +530,7 @@ wait
 <div class="lbl">Output (recorded)</div>
 <pre class="out"><code>counterwatch: armed, waiting for 3 change(s)
      pid tid name                         prio STATE          Blocked
-15896601   1 qnxuser/codelab/counterwatch  10r RECEIVE        1
+18407449   1 qnxuser/codelab/counterwatch  10r RECEIVE        1
 counterwatch: value is now 2
 counterwatch: value is now 7
 counterwatch: value is now 8

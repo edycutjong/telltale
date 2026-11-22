@@ -9,7 +9,10 @@ Directives in codelab.md:
 and, after every ```bash run=NAME block, the output recorded by verify.py in transcripts/NAME.txt.
 Code and output are never typed by hand: they are copied from the files that were compiled and run.
 """
-import html, os, re, sys
+import html
+import os
+import re
+import sys
 import markdown
 
 HERE = os.path.dirname(os.path.abspath(__file__))
@@ -23,8 +26,8 @@ def read(rel):
 def fn_text(path, name):
     lines = read(path).splitlines()
     pat = re.compile(r"^[A-Za-z_][\w \*]*\b%s\(" % re.escape(name))
-    for i, l in enumerate(lines):
-        if pat.match(l) and not l.rstrip().endswith(";"):
+    for i, ln in enumerate(lines):
+        if pat.match(ln) and not ln.rstrip().endswith(";"):
             j = i
             while lines[j] != "}":
                 j += 1
@@ -34,7 +37,7 @@ def fn_text(path, name):
 
 def between(path, start, end):
     lines = read(path).splitlines()
-    i = next(k for k, l in enumerate(lines) if l.startswith(start))
+    i = next(k for k, ln in enumerate(lines) if ln.startswith(start))
     j = next(k for k in range(i + 1, len(lines)) if lines[k].startswith(end))
     return "\n".join(lines[i:j]).rstrip()
 
@@ -58,7 +61,7 @@ def directive(m):
 
 def clean(out):
     out = out.replace(HOME, "~")
-    return "\n".join(l.rstrip() for l in out.rstrip("\n").splitlines())
+    return "\n".join(ln.rstrip() for ln in out.rstrip("\n").splitlines())
 
 
 def expand(text):

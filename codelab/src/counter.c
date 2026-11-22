@@ -48,10 +48,11 @@ static int io_read(resmgr_context_t *ctp, io_read_t *msg, iofunc_ocb_t *ocb)
 
     char text[32];
     int len = snprintf(text, sizeof text, "%llu\n", (unsigned long long)ocb->attr->value);
-    int off = (int)ocb->offset, n = 0;
-    if (off < len) {
+    int n = 0;
+    if (ocb->offset >= 0 && ocb->offset < len) {      /* compare at full width: a client may lseek() anywhere */
+        int off = (int)ocb->offset;
         n = len - off;
-        if (n > (int)msg->i.nbytes) n = (int)msg->i.nbytes;
+        if ((size_t)n > msg->i.nbytes) n = (int)msg->i.nbytes;
         resmgr_msgwrite(ctp, text + off, n, 0);       /* copy into the client's buffer */
         ocb->offset += n;
         if (off + n >= len) ocb->attr->unread = 0;    /* the client has seen the whole value */

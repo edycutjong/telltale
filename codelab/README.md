@@ -192,7 +192,7 @@ _Duration: 8:00_
 
 Every handler gets the message (`msg`), the per-open state (`ocb`) and a context (`ctp`) for replying. Our `read()` formats the value as text. Two QNX idioms:
 
-- **`ocb->offset`** is the file position. Returning the text once and then 0 bytes is what makes `cat` stop; without it `cat` would loop forever.
+- **`ocb->offset`** is the file position. Returning the text once and then 0 bytes is what makes `cat` stop; without it `cat` would loop forever. It is a 64-bit value any client can set with `lseek()`, so the handler checks it at full width before using it as an index into the text.
 - The reply bytes go to the client with `resmgr_msgwrite()`, and the handler returns `_RESMGR_NPARTS(0)` with the byte count set by `_IO_SET_READ_NBYTES`. (A stack buffer cannot be returned through the IOV, because the reply is sent after the handler returns.)
 
 ```c
@@ -205,10 +205,11 @@ static int io_read(resmgr_context_t *ctp, io_read_t *msg, iofunc_ocb_t *ocb)
 
     char text[32];
     int len = snprintf(text, sizeof text, "%llu\n", (unsigned long long)ocb->attr->value);
-    int off = (int)ocb->offset, n = 0;
-    if (off < len) {
+    int n = 0;
+    if (ocb->offset >= 0 && ocb->offset < len) {      /* compare at full width: a client may lseek() anywhere */
+        int off = (int)ocb->offset;
         n = len - off;
-        if (n > (int)msg->i.nbytes) n = (int)msg->i.nbytes;
+        if ((size_t)n > msg->i.nbytes) n = (int)msg->i.nbytes;
         resmgr_msgwrite(ctp, text + off, n, 0);       /* copy into the client's buffer */
         ocb->offset += n;
         if (off + n >= len) ocb->attr->unread = 0;    /* the client has seen the whole value */
@@ -367,9 +368,9 @@ Output (recorded):
 
 ```text
 total 72
--rwxr-xr-x  1 qnxuser qnxuser 14560 2026-11-22 06:24 counter
--rwxr-xr-x  1 qnxuser qnxuser  9536 2026-11-22 06:24 counterctl
--rwxr-xr-x  1 qnxuser qnxuser 13800 2026-11-22 06:24 counterwatch
+-rwxr-xr-x  1 qnxuser qnxuser 14560 2026-11-22 06:44 counter
+-rwxr-xr-x  1 qnxuser qnxuser  9536 2026-11-22 06:44 counterctl
+-rwxr-xr-x  1 qnxuser qnxuser 13800 2026-11-22 06:44 counterwatch
 ```
 
 ## Run it
@@ -403,7 +404,7 @@ Output (recorded):
 
 ```text
 counter: serving /dev/counter
-crw-rw-rw-  1 root root 0,   1 2026-11-22 06:24 /dev/counter
+crw-rw-rw-  1 root root 0,   1 2026-11-22 06:44 /dev/counter
 ```
 
 `/dev/counter` is now a file in the guest. Use it like one, with no special client library. A freshly started server's counter is 0:
@@ -510,7 +511,7 @@ tgt 'cat /dev/counter'
 Output (recorded):
 
 ```text
-15044636 ./counter
+17637404 ./counter
 cat: /dev/counter: No such file or directory
 ```
 
@@ -615,7 +616,7 @@ Output (recorded):
 counterwatch: armed, waiting for 1 change(s)
 wake-ups seen: 0
      pid tid name                         prio STATE          Blocked
-15675418   1 ./counterwatch-noreg          10r RECEIVE        1
+18268186   1 ./counterwatch-noreg          10r RECEIVE        1
 ```
 
 The client printed that it armed, the counter changed, and the output shows zero wake-ups after four seconds: no pulse arrived (the watcher is in `RECEIVE` state either way; the proof is the empty wake-up count, which the working run below contrasts). Now the real one, with the registration. While it sleeps we check what it is doing, then change the counter three times: a `write`, a `devctl`, another `write`:
@@ -633,7 +634,7 @@ Output (recorded):
 ```text
 counterwatch: armed, waiting for 3 change(s)
      pid tid name                         prio STATE          Blocked
-15896601   1 qnxuser/codelab/counterwatch  10r RECEIVE        1
+18407449   1 qnxuser/codelab/counterwatch  10r RECEIVE        1
 counterwatch: value is now 2
 counterwatch: value is now 7
 counterwatch: value is now 8

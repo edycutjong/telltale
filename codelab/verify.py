@@ -7,7 +7,11 @@
 A block fails the run on a non-zero exit unless its info string also says `allow-fail`. Needs: Docker +
 the SDP (env.sh), a booted guest on 127.0.0.1:2222, and CODELAB_KEY if you use an ssh key.
 """
-import os, re, subprocess, sys, time
+import os
+import re
+import subprocess
+import sys
+import time
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 FENCE = re.compile(r"^```bash (?P<info>run=\S+.*)$")
@@ -23,7 +27,8 @@ def blocks(text):
             body = []
             i += 1
             while not lines[i].startswith("```"):
-                body.append(lines[i]); i += 1
+                body.append(lines[i])
+                i += 1
             yield name, "allow-fail" in info, "\n".join(body) + "\n"
         i += 1
 
@@ -55,7 +60,8 @@ def main(argv):
         ok = r.returncode == 0 or allow
         print(f"{'ok  ' if ok else 'FAIL'} {name:12s} rc={r.returncode} {time.time()-t0:5.1f}s")
         if not ok:
-            failed.append(name); print(out)
+            failed.append(name)
+            print(out)
     return 1 if failed else 0
 
 
