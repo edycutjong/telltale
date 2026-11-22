@@ -41,11 +41,15 @@ $(HOSTBIN)/test_text: tests/host/test_text.c src/common/text.c src/common/text.h
 $(HOSTBIN)/test_rcap: tests/host/test_rcap.c src/common/rcap.h | $(HOSTBIN)
 	$(CC) $(CFLAGS) -o $@ tests/host/test_rcap.c
 
-test-host-c: $(HOSTBIN)/test_disp $(HOSTBIN)/test_decode $(HOSTBIN)/test_text $(HOSTBIN)/test_rcap
+$(HOSTBIN)/test_handback: tests/host/test_handback.c src/common/handback.h | $(HOSTBIN)
+	$(CC) $(CFLAGS) -o $@ tests/host/test_handback.c
+
+test-host-c: $(HOSTBIN)/test_disp $(HOSTBIN)/test_decode $(HOSTBIN)/test_text $(HOSTBIN)/test_rcap $(HOSTBIN)/test_handback
 	$(HOSTBIN)/test_disp
 	$(HOSTBIN)/test_decode
 	$(HOSTBIN)/test_text
 	$(HOSTBIN)/test_rcap
+	$(HOSTBIN)/test_handback
 
 test-host-py:
 	$(PYTHON) -m unittest discover -s tests/host -p 'test_*.py' -v

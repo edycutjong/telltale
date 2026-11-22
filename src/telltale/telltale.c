@@ -35,6 +35,7 @@
 #include "../common/glyphs.h"
 #include "../common/truth.h"
 #include "../common/rcap.h"
+#include "../common/handback.h"
 #include "../common/disp.h"
 #include "../common/text.h"
 
@@ -436,13 +437,27 @@ static void safe_show(const struct veh_state *s, int lost, int pos[2])
     safe_ns += tt_now_ns() - t;
 }
 static int safe_last_v = -2, safe_last_lamps = -1;
+/* safe_dirty: a Screen call on the safe layer failed, so what is on glass is unknown (the window may be partly raised, or
+ * show older content): the next safe_show() redoes the whole raise and full post, and safe_hide() runs even though
+ * safe_visible is 0. Failures are logged once per run of failures (stdout + slog2), and the recovery once. */
+static int safe_dirty, safe_err_logged;
+static void safe_fail(const char *what)
+{
+    int e = errno;
+    safe_dirty = 1;
+    if (safe_err_logged) return;
+    safe_err_logged = 1;
+    printf("telltale: SAFE_LAYER %s failed: %s -- retried on the next check\n", what, strerror(e)); fflush(stdout);
+    if (slog) slog2f(slog, 0, SLOG2_WARNING, "SAFE_LAYER %s failed: %s", what, strerror(e));
+}
 static void safe_show_(const struct veh_state *s, int lost, int pos[2])
 {
     uint32_t *px = safe_px; int st = safe_st;
     int c[3], v = lost || !s ? -1 : disp_kmh(s->speed_kmh), lamps = s && !lost ? s->lamps : 0;
-    /* Screen's software composition of a post costs ~35 ms on QEMU TCG: post only when the content changes */
+    /* Screen's software composition of a post costs ~35 ms on QEMU TCG: post only when the content changes
+     * (never skipped after a failed Screen call: safe_dirty) */
     int bchg = banner_update(v < 0);
-    if (safe_visible && v == safe_last_v && lamps == safe_last_lamps && !bchg) return;
+    if (safe_visible && !safe_dirty && v == safe_last_v && lamps == safe_last_lamps && !bchg) return;
     safe_last_v = v; safe_last_lamps = lamps;
     tt_cells_for(v, c);
     for (int i = 0; i < L_DIGIT_N; i++)
@@ -451,27 +466,29 @@ static void safe_show_(const struct veh_state *s, int lost, int pos[2])
         tt_fill(px + (long)L_LAMP_Y * st + L_LAMP[i].x, st, L_LAMP_S, L_LAMP_S, s && !lost && ((s->lamps >> i) & 1) ? L_LAMP[i].rgb : PAL_GLASS);
     int full[4] = {0, 0, L_SAFE_W, L_SAFE_H};
     int dirty[12] = {L_DIGIT_X0, L_DIGIT_Y, L_DIGIT_N * GLYPH_W, GLYPH_H, 0, L_LAMP_Y, L_LAMP_W, L_LAMP_H, 0, L_BANNER_Y, L_SAFE_W, L_BANNER_H};
-    if (!safe_visible) {            /* raise: VISIBLE + top z (hidden = invisible, safe_hide / safe_off) */
+    if (!safe_visible || safe_dirty) {   /* raise: VISIBLE + top z (hidden = invisible, safe_hide / safe_off) */
         int z = SAFE_Z_UP, vis = 1;
-        screen_set_window_property_iv(safe_win, SCREEN_PROPERTY_VISIBLE, &vis);   /* undo safe_off() */
-        screen_set_window_property_iv(safe_win, SCREEN_PROPERTY_POSITION, pos);
-        screen_set_window_property_iv(safe_win, SCREEN_PROPERTY_ZORDER, &z);
-        safe_visible = 1;
-        screen_post_window(safe_win, safe_buf, 1, full, 0);
-        screen_flush_context(ctx_app, 0);
-    } else screen_post_window(safe_win, safe_buf, bchg ? 3 : 2, dirty, 0);
+        const char *bad = screen_set_window_property_iv(safe_win, SCREEN_PROPERTY_VISIBLE, &vis) ? "raise (visible)"   /* undo safe_off() */
+                        : screen_set_window_property_iv(safe_win, SCREEN_PROPERTY_POSITION, pos) ? "raise (position)"
+                        : screen_set_window_property_iv(safe_win, SCREEN_PROPERTY_ZORDER, &z) ? "raise (z-order)"
+                        : screen_post_window(safe_win, safe_buf, 1, full, 0) ? "raise (post)"
+                        : screen_flush_context(ctx_app, 0) ? "raise (flush)" : NULL;
+        if (bad) { safe_visible = 0; safe_fail(bad); return; }   /* marked up only when every call succeeded */
+        safe_visible = 1; safe_dirty = 0;
+    } else if (screen_post_window(safe_win, safe_buf, bchg ? 3 : 2, dirty, 0) != 0) { safe_fail("post"); return; }
+    if (safe_err_logged) { safe_err_logged = 0; printf("telltale: SAFE_LAYER posted again after a failure\n"); fflush(stdout); }
 }
 
 static void safe_hide(void)
 {
-    if (!safe_visible) return;
+    if (!safe_visible && !safe_dirty) return;   /* after a failed raise the window may be partly up: hide it anyway */
     /* invisible, not only under the cluster: when the renderer's window vanishes (crash) the composed read must see
      * empty glass, never the stale truth of an earlier incident still painted in this buffer */
     int z = SAFE_Z_DOWN, vis = 0;
     screen_set_window_property_iv(safe_win, SCREEN_PROPERTY_ZORDER, &z);
     screen_set_window_property_iv(safe_win, SCREEN_PROPERTY_VISIBLE, &vis);
     screen_flush_context(ctx_app, 0);
-    safe_visible = 0;
+    safe_visible = 0; safe_dirty = 0;
 }
 
 static void safe_off(void)   /* disarm: really invisible, also when no opaque renderer window is there to cover it */
@@ -480,7 +497,7 @@ static void safe_off(void)   /* disarm: really invisible, also when no opaque re
     screen_set_window_property_iv(safe_win, SCREEN_PROPERTY_ZORDER, &z);
     screen_set_window_property_iv(safe_win, SCREEN_PROPERTY_VISIBLE, &vis);
     screen_flush_context(ctx_app, 0);
-    safe_visible = 0;
+    safe_visible = 0; safe_dirty = 0;
 }
 
 /* ---------- incident card (engineering mode): monitor-owned top-z window, ui.md S4 ----------
@@ -964,7 +981,9 @@ int main(void)
         /* renderer-sourced read (its own window; readable while the safe layer covers it) */
         enum verdict wv = V_NONE; struct shot ws = {SPD_UNREADABLE, -1, -1, 0, 0};
         readerr = 0;                             /* per check: set only when THIS check's window read failed */
-        uint64_t t_win0 = tt_now_ns(), win_ns = 0; safe_ns = 0;
+        /* t_verified: when this check's frame was verified, the hand-back stamp (t_true). The end of the composed capture
+         * when no window is read (WAIT); after a window read, the end of that read and its judgement */
+        uint64_t t_win0 = tt_now_ns(), win_ns = 0, t_verified = t_cap_end; safe_ns = 0;
         if (st == ST_HOLD || st == ST_RESTART || st == ST_NODISPLAY || st == ST_TRUTHLOST || st == ST_GIVEUP) {
             int wb[4] = {L_BLOCK_X, L_BLOCK_Y, L_BLOCK_W, L_BLOCK_H}, wt[4] = {L_TICK_X, L_TICK_Y, L_TICK_S, L_TICK_S};
             int wl[4] = {L_LAMP_X, L_LAMP_Y, L_LAMP_W, L_LAMP_H};
@@ -975,6 +994,7 @@ int main(void)
                 ws.lamps = tt_lamps_decode(pwl, swl, cfg.lamp_thr);
                 int a, b;
                 wv = truth_fresh ? judge(&ws, t_lo, tt_now_ns(), stalled, &a, &b) : V_TRUTH_LOST;
+                t_verified = tt_now_ns();
             } else {
                 printf("telltale: screen_read_window: %s\n", strerror(errno)); fflush(stdout);
                 rwin = NULL;
@@ -998,7 +1018,7 @@ int main(void)
             snprintf(inc.id, sizeof inc.id, "TT-%s-%04d", VCODE[V], ++seq_inc); snprintf(inc.cause, sizeof inc.cause, "-"); inc_open = 1; banner_inc = &inc; card_hide("new incident"); \
             pthread_mutex_lock(&g_mtx); g.faults++; g.open_inc = inc; g.have_open = 1; pthread_mutex_unlock(&g_mtx); \
             printf("telltale: DETECT %s %s shown=%d truth=%d lamps_shown=0x%02x lamps_truth=0x%02x caught_ms=%.1f\n", inc.id, VN[V], inc.shown, inc.truth, inc.lamps_shown, lt ? lt->lamps : 0, (inc.t_detect - inc.t_last_verified) / 1e6); fflush(stdout); } while (0)
-#define CLOSE() do { if (inc_open) { inc.t_true = t_cap_end; inc_write(&inc); open_publish(NULL); inc_open = 0; banner_inc = NULL; \
+#define CLOSE() do { if (inc_open) { inc.t_true = t_verified; inc_write(&inc); open_publish(NULL); inc_open = 0; banner_inc = NULL; \
             if (dbg_on) card_show(&inc, rpos); } } while (0)
 
         enum state prev = st;
@@ -1051,7 +1071,9 @@ int main(void)
                 printf("telltale: cause %s cleared (tick moving again)\n", CN[cause]); fflush(stdout);
                 cause = C_NONE; mismatch_cnt = 0;
             }
-            if (wv == V_PASS && !stalled) {             /* renderer-sourced frame true and its tick moving: hand back */
+            /* renderer-sourced frame true, no stall, and a genuine tick move since detection: hand back (handback.h; a late
+             * check restarts the stall clock without a move, so "not stalled" alone could hand back a frozen frame) */
+            if (tt_handback_ok(wv == V_PASS, stalled, t_tick_real, inc.t_detect)) {
                 safe_hide(); st = ST_NORMAL; t_last_verified = t_cap_end; CLOSE(); break;
             }
             int kill_now = 0;
