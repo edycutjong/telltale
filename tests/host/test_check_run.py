@@ -77,6 +77,59 @@ class CheckRunTest(unittest.TestCase):
             log.write_text(log.read_text().replace("|shown ", "|shown 1", 1))   # card row 2 no longer matches incidents.csv
         self.assertFalse(all(ok for ok, _ in self._tampered(edit)))
 
+    @staticmethod
+    def _failed(res, prefix):
+        return [m for ok, m in res if not ok and m.startswith(prefix)]
+
+    @unittest.skipUnless(HAVE_PIL, "Pillow not installed")
+    def test_debug_text_replaced_by_solid_bars_fails(self):
+        # the text's extent and colours survive (amber band, lit pixels, stripe): only the rendered-text check can see it
+        from PIL import Image
+
+        def edit(run):
+            img = Image.open(run / "banner.png").convert("RGB")
+            img.paste(C.GLASS, (150, C.BANNER[1] + 22, 1130, C.BANNER[1] + 44))     # a bar where the letters were
+            img.save(run / "banner.png")
+            img = Image.open(run / "card.png").convert("RGB")
+            for i in range(6):
+                y = C.CARD[1] + C.CARD_PAD + 4 + i * C.CARD_PITCH
+                img.paste(C.LIT, (C.CARD[0] + C.CARD_PAD, y, C.CARD[0] + 300, y + 12))
+            img.save(run / "card.png")
+        res = self._tampered(edit)
+        self.assertTrue(self._failed(res, "banner text in the frame"), res)
+        self.assertTrue(self._failed(res, "card text in the frame"), res)
+        self.assertFalse(self._failed(res, "card read back:"))   # the old colour/geometry check alone would have passed
+
+    @unittest.skipUnless(HAVE_PIL, "Pillow not installed")
+    def test_debug_frame_showing_another_value_fails(self):
+        # the frames show a different restored time than incidents.csv (the log still agrees): the frame check catches it
+        from PIL import Image
+
+        def edit(run):
+            img = Image.open(run / "card.png").convert("RGB")
+            rows = ["INCIDENT TT-VAL-0001", "VALUE_MISMATCH", "shown 48 \u00b7 truth 47 km/h", "caught 20 ms \u00b7 restored 1678 ms",
+                    "handed back, no restart", "service: cat /dev/telltale"]          # the run's card says 1679 ms
+            want = C.expected_card(rows)
+            for y, line in enumerate(want):
+                for x, rgb in enumerate(line):
+                    img.putpixel((C.CARD[0] + x, C.CARD[1] + y), rgb)
+            img.save(run / "card.png")
+        res = self._tampered(edit)
+        self.assertTrue(self._failed(res, "card text in the frame"), res)
+        self.assertFalse(self._failed(res, "incident card logged"))
+
+    @unittest.skipUnless(HAVE_PIL, "Pillow not installed")
+    def test_debug_rendering_reproduces_the_capture_exactly(self):
+        from PIL import Image
+        img = Image.open(DEBUG_RUN / "card.png").convert("RGB")
+        rows = ["INCIDENT TT-VAL-0001", "VALUE_MISMATCH", "shown 48 \u00b7 truth 47 km/h", "caught 20 ms \u00b7 restored 1679 ms",
+                "handed back, no restart", "service: cat /dev/telltale"]
+        self.assertEqual(C.frame_diff(img, C.CARD, C.expected_card(rows)), 0)
+        img = Image.open(DEBUG_RUN / "banner.png").convert("RGB")
+        text = "ENGINEERING VIEW \u00b7 DISPLAY FAULT CAUGHT \u00b7 VALUE_MISMATCH \u00b7 20 ms"
+        self.assertEqual(C.frame_diff(img, C.BANNER, C.expected_banner(text)), 0)
+        self.assertGreater(C.frame_diff(img, C.BANNER, C.expected_banner(text.replace("20 ms", "26 ms"))), 0)
+
     @unittest.skipUnless(HAVE_PIL, "Pillow not installed")
     def test_debug_card_never_hidden_in_frame_fails(self):
         def edit(run):
@@ -86,6 +139,41 @@ class CheckRunTest(unittest.TestCase):
     @unittest.skipUnless(HAVE_PIL, "Pillow not installed")
     def test_debug_without_frames_fails(self):
         self.assertFalse(all(ok for ok, _ in self._tampered(lambda run: (run / "banner.png").unlink())))
+
+    def _clean(self, edit):
+        d = Path(tempfile.mkdtemp())
+        self.addCleanup(shutil.rmtree, d)
+        run = d / "run"
+        shutil.copytree(RUNS / "p1b-131213-none", run)
+        edit(run)
+        return C.check(run, "none")
+
+    def test_clean_run_with_a_failing_check_after_arming_fails(self):
+        # >= 1000 passing checks, then an armed VALUE_MISMATCH whose incident never closed (no record written yet)
+        def edit(run):
+            lines = (run / "checks.csv").read_text().splitlines()
+            f = lines[-1].split(",")
+            f[5] = "VALUE_MISMATCH"
+            (run / "checks.csv").write_text("\n".join(lines + [",".join(f)]) + "\n")
+        res = self._clean(edit)
+        self.assertEqual([m for ok, m in res if not ok][0][:43], "clean drive after arming: 1 checks other th")
+
+    def test_clean_run_with_an_open_incident_at_collection_fails(self):
+        def edit(run):
+            st = run / "status.txt"
+            st.write_text(st.read_text().replace("state=NORMAL", "state=SAFE-HOLD").replace("faults=0", "faults=1"))
+        self.assertFalse(all(ok for ok, _ in self._clean(edit)))
+
+    def test_clean_run_without_status_fails(self):
+        self.assertFalse(all(ok for ok, _ in self._clean(lambda run: (run / "status.txt").unlink())))
+
+    def test_clean_run_wait_after_arming_fails(self):
+        def edit(run):
+            lines = (run / "checks.csv").read_text().splitlines()
+            f = lines[-1].split(",")
+            f[3] = "WAIT"
+            (run / "checks.csv").write_text("\n".join(lines + [",".join(f)]) + "\n")
+        self.assertFalse(all(ok for ok, _ in self._clean(edit)))
 
     def test_missing_dir_fails(self):
         res = C.check(RUNS / "does-not-exist", "freeze")

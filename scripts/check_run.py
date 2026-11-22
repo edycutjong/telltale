@@ -6,7 +6,12 @@
   so a current row cut short cannot pass as an older schema and skip the truth-on-glass checks)
   class: freeze blank stale misdraw crash lampdrop starve accept debug none
   debug = the accept sequence in engineering mode: the banner text and the incident card must be logged with this
-  incident's values AND be present in the frames ttshot read back from the composed display (banner.png, card.png).
+  incident's values AND be present in the frames ttshot read back from the composed display (banner.png, card.png): the
+  banner and each card row are rendered here from this incident's incidents.csv values with the monitor's own glyph atlas
+  (src/common/textfont.h, the blend of src/common/text.c) and must equal the captured pixels.
+  none = a clean drive: no incident record, the monitor's status at collection NORMAL with faults=0 (no incident open
+  either: a record is only written when an incident closes), >= 1000 armed NORMAL checks passed, and no check after
+  arming that is anything other than an armed NORMAL PASS.
 
 Reads <run-dir>/incidents.csv (the monitor's incident rows) and inject.txt / hog.log (the fault command time).
 Prints one PASS/FAIL line per assertion; exit 0 iff all pass.
@@ -45,11 +50,82 @@ EXPECT = {
 WIN_Y = 24
 BANNER = (0, WIN_Y + 600, 1280, 64)
 CARD = (868, WIN_Y + 120, 404, 188)
+CARD_PAD, CARD_PITCH = 12, 28                                   # layout.h L_CARD_PAD, L_CARD_PITCH
 AMBER, CARD_BG, LIT = (0xF2, 0xA9, 0x00), (0x1A, 0x19, 0x16), (0xF4, 0xF1, 0xE8)
+GLASS, MUTED = (0x0E, 0x0D, 0x0B), (0x8A, 0x85, 0x7A)           # palette.h PAL_GLASS, PAL_MUTED
+TEXTFONT = Path(__file__).resolve().parent.parent / "src" / "common" / "textfont.h"
 
 
 def near(p, c, tol=24):
     return all(abs(a - b) <= tol for a, b in zip(p, c))
+
+
+def load_font(name: str) -> dict:
+    """tt_font_<name> from src/common/textfont.h: line height, advance / ink offset / ink width per glyph, 4-bit coverage."""
+    src = TEXTFONT.read_text()
+
+    def arr(field: str) -> list[int]:
+        m = re.search(r"static const (?:unsigned char|signed char|unsigned) tf_" + name + "_" + field + r"\[TT_FONT_N\] = \{([^}]*)\};", src)
+        return [int(x) for x in m.group(1).split(",")]
+    data = re.search(r"static const char tf_" + name + r"_data\[\] =(.*?);", src, re.S).group(1)
+    h = int(re.search(r"const struct tt_font tt_font_" + name + r" = \{(\d+),", src).group(1))
+    return {"h": h, "adv": arr("adv"), "xo": arr("xo"), "w": arr("w"), "off": arr("off"), "data": "".join(re.findall(r'"([0-9a-f]*)"', data))}
+
+
+def glyphs(s: str):
+    """src/common/text.c next_glyph(): ASCII 32..126, U+00B7 = index 95, any other byte draws nothing."""
+    b, i = s.encode("utf-8"), 0
+    while i < len(b):
+        c, i = b[i], i + 1
+        if 32 <= c <= 126:
+            yield c - 32
+        elif c == 0xC2 and i < len(b) and b[i] == 0xB7:
+            i += 1
+            yield 95
+
+
+def text_width(f: dict, s: str) -> int:
+    return sum(f["adv"][g] for g in glyphs(s))
+
+
+def draw_text(canvas: list[list[tuple]], x: int, y: int, f: dict, s: str, fg: tuple, bg: tuple) -> None:
+    """src/common/text.c tt_text_draw(): coverage a (0..15) blends fg over bg per channel, (bg*(15-a) + fg*a + 7) / 15."""
+    h, w = len(canvas), len(canvas[0])
+    for g in glyphs(s):
+        cov, gx = f["data"][f["off"][g]:], x + f["xo"][g]
+        for r in range(f["h"]):
+            if not 0 <= y + r < h:
+                continue
+            for c in range(f["w"][g]):
+                a = int(cov[r * f["w"][g] + c], 16)
+                if a and 0 <= gx + c < w:
+                    canvas[y + r][gx + c] = tuple((b_ * (15 - a) + f_ * a + 7) // 15 for f_, b_ in zip(fg, bg))
+        x += f["adv"][g]
+
+
+def frame_diff(img, box: tuple[int, int, int, int], want: list[list[tuple]], tol: int = 8) -> int:
+    """Pixels of the captured frame inside box that differ from the expected rendering by more than tol on any channel."""
+    x0, y0, w, h = box
+    px = img.crop((x0, y0, x0 + w, y0 + h)).load()
+    return sum(1 for y in range(h) for x in range(w) if any(abs(a - b) > tol for a, b in zip(px[x, y], want[y][x])))
+
+
+def expected_banner(text: str) -> list[list[tuple]]:
+    """telltale.c banner_update(): amber band, text centred, glass-coloured, vertically centred in the band."""
+    f, (_, _, w, h) = load_font("banner"), BANNER
+    canvas = [[AMBER] * w for _ in range(h)]
+    draw_text(canvas, (w - text_width(f, text)) // 2, (h - f["h"]) // 2, f, text, GLASS, AMBER)
+    return canvas
+
+
+def expected_card(rows: list[str]) -> list[list[tuple]]:
+    """telltale.c card_show(): card background, 4 px amber stripe, six rows (amber, four lit, muted) at pad + i * pitch."""
+    f, (_, _, w, h) = load_font("card"), CARD
+    canvas = [[CARD_BG] * w for _ in range(h)]
+    canvas[:4] = [[AMBER] * w for _ in range(4)]
+    for i, (row, fg) in enumerate(zip(rows, (AMBER, LIT, LIT, LIT, LIT, MUTED))):
+        draw_text(canvas, CARD_PAD, CARD_PAD + i * CARD_PITCH, f, row, fg, CARD_BG)
+    return canvas
 
 
 def check_debug(run: Path, r: dict[str, str]) -> list[tuple[bool, str]]:
@@ -90,6 +166,9 @@ def check_debug(run: Path, r: dict[str, str]) -> list[tuple[bool, str]]:
         ok = bool(cols) and abs(cols[0] - lx) <= 4 and abs(cols[-1] + 1 - (lx + lw)) <= 6 and 0.6 <= amber < 0.98
         out.append((ok, f"banner read back: amber {amber:.2f}, text spans x {cols[0] if cols else '-'}..{cols[-1] + 1 if cols else '-'}"
                         f" vs drawn {lx}..{lx + lw} (+-4/6 px)"))
+        bad = frame_diff(img, BANNER, expected_banner(want_banner))
+        out.append((bad == 0, f"banner text in the frame = this incident's banner rendered with the monitor's atlas: "
+                              f"{bad} of {BANNER[2] * BANNER[3]} px differ (want 0)"))
     else:
         out.append((False, "banner.png captured (ttshot)"))
     if cp.exists():
@@ -100,6 +179,9 @@ def check_debug(run: Path, r: dict[str, str]) -> list[tuple[bool, str]]:
         lit = sum(near(px[x, y], LIT, 6) for x in range(w) for y in range(h))
         stripe = all(near(px[x, y], AMBER) for x in range(w) for y in range(4))
         out.append((bg >= 0.6 and lit >= 200 and stripe, f"card read back: background {bg:.2f}, {lit} lit text px, amber top stripe {stripe}"))
+        bad = frame_diff(img, CARD, expected_card([want_rows[i] for i in range(6)]))
+        out.append((bad == 0, f"card text in the frame = this incident's 6 rows rendered with the monitor's atlas: "
+                              f"{bad} of {CARD[2] * CARD[3]} px differ (want 0)"))
     else:
         out.append((False, "card.png captured (ttshot)"))
     hp = run / "card-hidden.png"
@@ -154,12 +236,30 @@ def check(run: Path, cls: str, width: int | None = None) -> list[tuple[bool, str
     inc = read_incidents(run, width)
     if cls == "none":
         out.append((len(inc) == 0, f"clean drive: {len(inc)} incidents (want 0)"))
+        # an incident record is written only when the incident closes: one still open at collection leaves incidents.csv
+        # empty, so the monitor's own status (ttctl status, taken at collection) must say NORMAL with faults=0
+        sp = run / "status.txt"
+        st = sp.read_text(errors="replace") if sp.is_file() else ""
+        ms, mf = re.search(r"\bstate=(\S+)", st), re.search(r"\bfaults=(\d+)", st)
+        out.append((bool(ms and mf) and ms.group(1) == "NORMAL" and mf.group(1) == "0",
+                    f"monitor status at collection: state={ms.group(1) if ms else '?'} faults={mf.group(1) if mf else '?'} "
+                    f"(want NORMAL, 0: no incident open or closed)"))
         # zero incidents only counts if the drive was checked: the monitor's per-check log must hold armed NORMAL checks
         # that passed (>= 1000 = 20 s at period_ms 20; the 56 s hero drive gives ~3,000)
         cp = run / "checks.csv"
-        rows = list(csv.DictReader(cp.open())) if cp.is_file() else []
+        rows = []
+        if cp.is_file():
+            with cp.open(newline="") as fh:
+                rows = list(csv.DictReader(fh))
+        rows = [x for x in rows if None not in x.values() and x.get("verdict")]   # a row cut short by the copy is not a check
         ok_n = sum(1 for x in rows if x.get("armed") == "1" and x.get("state") == "NORMAL" and x.get("verdict") == "PASS")
         out.append((ok_n >= 1000, f"clean drive was checked: {ok_n} armed NORMAL checks passed in checks.csv (want >= 1000)"))
+        # ... and nothing else once armed: every check from the first non-WAIT row on is an armed NORMAL PASS (the pre-arm
+        # WAIT rows before the first true frame are the boot warm-up the bench also excludes)
+        first = next((i for i, x in enumerate(rows) if x.get("state") != "WAIT"), len(rows))
+        other = [x for x in rows[first:] if not (x.get("armed") == "1" and x.get("state") == "NORMAL" and x.get("verdict") == "PASS")]
+        out.append((not other, f"clean drive after arming: {len(other)} checks other than an armed NORMAL PASS (want 0)"
+                               + (f", first: {other[0].get('state')}/{other[0].get('verdict')} at {other[0].get('t_cap_start_ns')}" if other else "")))
         return out
     verdicts, causes, kill = EXPECT[cls]
     if not inc:
