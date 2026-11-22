@@ -1,3 +1,3 @@
-# Host-side dev tooling only (lint). The host tools and tests themselves use the Python standard library.
+# Host-side dev tooling: ruff (lint) and Pillow (check_run.py reads the display frames ttshot captured).
 ruff==0.15.2
-pillow==12.2.0
+pillow==13.0.0
