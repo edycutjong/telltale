@@ -11,7 +11,7 @@
 # NOTE: the policy push is immutable until the guest reboots, and an untyped Screen cannot be restarted under it,
 # so the policy cases run last (Screen must already be running, unpinned: scripts/guest_screen.sh '' any).
 set -uo pipefail
-cd "$(dirname "$0")/.."
+cd "$(dirname "$0")/.." || exit 1
 TS=$(date -u +%Y%m%dT%H%M%SZ); export TT_EVROOT=evidence/test-target/$TS; mkdir -p "$TT_EVROOT"
 SUM="$TT_EVROOT/summary.txt"; : > "$SUM"
 echo "git: $(git rev-parse --short HEAD)$(git diff --quiet HEAD -- src secpol scripts tests Makefile || echo ' (uncommitted source changes)')" | tee -a "$SUM"
@@ -21,9 +21,17 @@ pass=0; fail=0
 run_case() {   # run_case <name> <class> <at> <settle> [env...]
   local name=$1 cls=$2 at=$3 settle=$4; shift 4
   env "$@" TT_RUN_ID="$name" scripts/scenario.sh "$cls" "$at" "$settle" > /dev/null 2>&1
-  local out; out=$(python3 scripts/check_run.py "$TT_EVROOT/$name-$cls" "$cls")
+  local out rc=0 p f; out=$(python3 scripts/check_run.py "$TT_EVROOT/$name-$cls" "$cls" 2>&1) || rc=$?
   echo "$out" | tee -a "$SUM"
-  pass=$((pass + $(echo "$out" | grep -c '^PASS'))); fail=$((fail + $(echo "$out" | grep -c '^FAIL')))
+  p=$(grep -c '^PASS' <<<"$out" || true); f=$(grep -c '^FAIL' <<<"$out" || true)
+  if [ "$f" -eq 0 ] && { [ "$p" -eq 0 ] || [ "$rc" -ne 0 ]; }; then   # a checker crash is a failure, never a pass
+    echo "FAIL $name-$cls: check_run.py gave no verdict (exit $rc)" | tee -a "$SUM"; f=1
+  fi
+  pass=$((pass + p)); fail=$((fail + f))
+}
+require_total() {   # a target script must reach its own last line "<label>: n/n passed", or it did not finish
+  grep -Eq "^$1: [0-9]+/[0-9]+ passed\$" <<<"$2" && return 0
+  echo "FAIL $1: no '$1: n/m passed' line (the script did not finish)" | tee -a "$SUM"; fail=$((fail + 1))
 }
 AT=12.221   # hero drive: braking through 48 km/h (data/trace-hero.meta inject_at_s)
 for c in freeze blank stale misdraw crash; do run_case "t" "$c" "$AT" 12; done
@@ -42,11 +50,13 @@ for f in telltale.log telltale2.log core-telltale.txt core-telltale-a.txt core-t
   scripts/guest.sh get "/tmp/tt/log/$f" "$TT_EVROOT/core/" 2>/dev/null || { echo "FAIL evidence not collected: core/$f" | tee -a "$SUM"; fail=$((fail + 1)); }
 done
 pass=$((pass + $(echo "$out" | grep -c '^PASS'))); fail=$((fail + $(echo "$out" | grep -c '^FAIL')))
+require_total core "$out"
 if [ "${1:-}" != --no-policy ]; then
   run_case pol freeze "$AT" 12 TT_POLICY=1
   out=$(scripts/guest.sh sudo 'sh /tmp/tt/secpol_denies.sh' 2>&1)
   echo "$out" | tee "$TT_EVROOT/secpol.txt" | tee -a "$SUM"
   pass=$((pass + $(echo "$out" | grep -c '^PASS'))); fail=$((fail + $(echo "$out" | grep -c '^FAIL')))
+  require_total secpol "$out"
 fi
 hostload end
 echo "test-target: $pass passed, $fail failed  (QEMU (TCG) x86_64 guest; logs $TT_EVROOT)" | tee -a "$SUM"

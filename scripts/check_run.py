@@ -15,9 +15,13 @@ import re
 import sys
 from pathlib import Path
 
+# incidents.csv has no header row; this list IS the schema and equals telltale.c EV_HEADER (tests/host/test_incident_schema.py).
+# Older recorded runs wrote fewer columns: 16 (before the lamp fields) and 18 (before t_safe_true_ns, a2a round 04).
+# A row of any other width is schema drift and raises; check() asserts the truth-on-glass stamp only where it exists.
 COLS = ["id", "verdict", "cause", "shown", "truth", "t_last_verified_ns", "t_detect_ns", "caught_ms",
         "t_safe_visible_ns", "t_kill_ns", "t_register_ns", "t_true_ns", "restarts", "exposure_ms",
-        "renderer_pid", "new_pid", "lamps_shown", "lamps_truth"]
+        "renderer_pid", "new_pid", "lamps_shown", "lamps_truth", "t_safe_true_ns"]
+SCHEMA_WIDTHS = (16, 18, len(COLS))
 
 # class -> (verdicts allowed, causes allowed or None, kill expected: True/False/None)
 EXPECT = {
@@ -27,7 +31,7 @@ EXPECT = {
     "blank": ({"BLANK", "UNREADABLE", "VALUE_MISMATCH"}, {"BLANK", "UNREADABLE"}, True),
     "stale": ({"VALUE_MISMATCH"}, {"live-wrong"}, True),
     "misdraw": ({"VALUE_MISMATCH"}, {"live-wrong"}, True),
-    "crash": ({"TICK_STALL", "BLANK", "UNREADABLE", "NO_DISPLAY", "VALUE_MISMATCH"}, {"crash"}, None),
+    "crash": ({"TICK_STALL", "BLANK", "UNREADABLE", "VALUE_MISMATCH"}, {"crash"}, None),
     "lampdrop": ({"VALUE_MISMATCH"}, {"live-wrong"}, True),
     "starve": ({"TICK_STALL", "VALUE_MISMATCH"}, {"starved"}, False),   # mismatch first if the speed moves
     "accept": ({"VALUE_MISMATCH"}, None, False),
@@ -121,7 +125,10 @@ def read_incidents(run: Path) -> list[dict[str, str]]:
     for line in path.read_text().splitlines():
         if not line.strip() or line.startswith("id,"):
             continue
-        rows.append(dict(zip(COLS, line.split(","))))
+        f = line.split(",")
+        if len(f) not in SCHEMA_WIDTHS:
+            raise ValueError(f"{path}: {len(f)} fields, want one of {SCHEMA_WIDTHS} (incident CSV schema drift)")
+        rows.append(dict(zip(COLS, f)))
     return rows
 
 
@@ -136,8 +143,10 @@ def fault_time_ns(run: Path) -> int | None:
 
 
 def check(run: Path, cls: str) -> list[tuple[bool, str]]:
-    inc = read_incidents(run)
     out: list[tuple[bool, str]] = []
+    if not (run / "incidents.csv").is_file():   # a run that left no incident log proves nothing, not even "clean"
+        return [(False, f"{run / 'incidents.csv'} exists (the monitor's incident log was collected)")]
+    inc = read_incidents(run)
     if cls == "none":
         out.append((len(inc) == 0, f"clean drive: {len(inc)} incidents (want 0)"))
         return out
@@ -167,6 +176,13 @@ def check(run: Path, cls: str) -> list[tuple[bool, str]]:
     if t_fault is not None:   # the spec's "missed" bound: no detection within 2 s of the fault
         out.append((t_detect - t_fault < MISS_NS, f"detected {(t_detect - t_fault) / 1e6:.0f} ms after the fault command (< 2000 ms)"))
     out.append((int(r["t_safe_visible_ns"]) > t_detect, "safe layer read back visible after detection"))
+    if "t_safe_true_ns" in r:   # current schema: the correction itself verified on glass, and exposure ends there
+        t_st, t_last = int(r["t_safe_true_ns"]), int(r["t_last_verified_ns"])
+        out.append((t_st > t_detect, "truth verified on glass: a composed read of the safe layer equal to the truth after detection (t_safe_true set)"))
+        end = t_st if t_st else int(r["t_true_ns"])
+        want = (end - t_last) / 1e6 if end > t_last else -1.0
+        out.append((abs(float(r["exposure_ms"]) - want) <= 0.051,
+                    f"exposure_ms {r['exposure_ms']} = last verified frame -> truth on glass ({want:.2f} ms; rows print 0.1 ms)"))
     killed = int(r["t_kill_ns"]) > 0
     if kill is True:
         out.append((killed, "renderer killed (t_kill set)"))

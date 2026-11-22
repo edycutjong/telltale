@@ -7,7 +7,9 @@ name: CI/CD Pipeline
 # Stage 6 is the only place a release is cut, and it needs every other stage: a red or cancelled run tags nothing.
 # The QNX cross-build (qcc) cannot run here: the QNX SDP is only downloadable behind a myQNX login and licence
 # (see CONTRIBUTING.md). The target is exercised by `make test-target` on a QEMU guest; its raw logs are committed
-# under evidence/test-target/ and Stage 4 re-asserts them on every push. CodeQL runs in codeql.yml.
+# under evidence/test-target/. Stage 4 re-asserts the run README.md cites on every push: the claim matches its summary,
+# the code under test is unchanged since the recorded commit, every case and core/secpol line is re-checked.
+# CodeQL runs in codeql.yml (Python + the host-buildable C; the QNX-only sources need the SDP).
 
 on:
   push:
@@ -94,18 +96,16 @@ jobs:
     runs-on: ubuntu-24.04
     steps:
       - uses: actions/checkout@v7
+        with:
+          fetch-depth: 0   # the replay diffs the code under test against the commit the run was recorded at
       - uses: actions/setup-python@v7
         with:
           python-version: "3.12"
           cache: pip
           cache-dependency-path: requirements-dev.txt
       - run: pip install -r requirements-dev.txt
-      - name: Replay evidence/test-target through scripts/check_run.py
+      - name: README's on-target claim = the cited run, code unchanged since, every assertion re-checked
         run: scripts/replay_target_run.sh
-      - name: Newest recorded run says 0 failed
-        run: |
-          s=$(ls -d evidence/test-target/*/ | sort | tail -1)summary.txt
-          tail -n 1 "$s"; tail -n 1 "$s" | grep -q ' 0 failed'
 
   # ── STAGE 5: Reproducibility / performance gate ───────────
   perf:

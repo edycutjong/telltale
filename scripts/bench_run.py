@@ -189,7 +189,7 @@ def first_int(path: Path, key: str) -> int | None:
 def read_incidents(run: Path) -> list[dict]:
     cols = ["id", "verdict", "cause", "shown", "truth", "t_last_verified_ns", "t_detect_ns", "caught_ms",
             "t_safe_visible_ns", "t_kill_ns", "t_register_ns", "t_true_ns", "restarts", "exposure_ms",
-            "renderer_pid", "new_pid", "lamps_shown", "lamps_truth"]
+            "renderer_pid", "new_pid", "lamps_shown", "lamps_truth", "t_safe_true_ns"]   # = telltale.c EV_HEADER
     p = run / "incidents.csv"
     out = []
     if p.exists():
