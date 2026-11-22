@@ -19,8 +19,10 @@ on:
   workflow_dispatch:
 
 concurrency:
-  group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
-  cancel-in-progress: ${{ github.event_name == 'pull_request' }}   # every main commit gets a full verdict
+  # PRs: one group per PR, a newer push cancels the older run. Pushes: one group per run. GitHub keeps at most one PENDING
+  # run per group and cancels the older pending one, so a shared main group would drop a commit's verdict in a burst.
+  group: ${{ github.workflow }}-${{ github.event_name == 'pull_request' && format('pr-{0}', github.event.pull_request.number) || format('run-{0}', github.run_id) }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
 permissions:
   contents: read
@@ -132,8 +134,8 @@ jobs:
     if: github.event_name == 'push' && github.ref == 'refs/heads/main'
     permissions:
       contents: write        # this job only: push the tag and create the Release
-    concurrency:
-      group: release-main
+    concurrency:                 # serializes tagging. A release job still pending when a newer one queues is cancelled;
+      group: release-main        # the newer tag then contains its commits (the checks below handle either order)
       cancel-in-progress: false
     steps:
       - uses: actions/checkout@v7
@@ -142,9 +144,17 @@ jobs:
 
       - name: Compute next version from conventional commits
         id: ver
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
           set -euo pipefail
           git fetch --tags --force origin
+          EXACT=$(git tag --points-at HEAD --list 'v[0-9]*' | sort -V | tail -n 1)
+          if [ -n "$EXACT" ]; then   # tagged by an earlier attempt: publish its Release if that step failed, never re-bump
+            if gh release view "$EXACT" >/dev/null 2>&1; then echo "HEAD is $EXACT, already released"; echo "skip=true" >> "$GITHUB_OUTPUT"; exit 0; fi
+            echo "HEAD is tagged $EXACT without a GitHub Release: publishing it"
+            echo "next=$EXACT" >> "$GITHUB_OUTPUT"; echo "skip=false" >> "$GITHUB_OUTPUT"; exit 0
+          fi
           if [ -n "$(git tag --contains HEAD)" ]; then   # a newer run already released a descendant of this commit
             echo "HEAD is already in $(git tag --contains HEAD | head -1)"; echo "skip=true" >> "$GITHUB_OUTPUT"; exit 0
           fi
@@ -158,14 +168,15 @@ jobs:
           # a breaking change is a "type!:" subject or a "BREAKING CHANGE:" footer line in a body
           SUBJ=$(git log --format=%s ${RANGE:+"$RANGE"})
           BODY=$(git log --format=%b ${RANGE:+"$RANGE"})
-          if [ -z "$(echo "$SUBJ" | tr -d '[:space:]')" ]; then
+          if [ -z "${SUBJ//[[:space:]]/}" ]; then
             echo "skip=true" >> "$GITHUB_OUTPUT"; exit 0
           fi
 
           BUMP="none"
-          { echo "$SUBJ" | grep -qE '^[a-z]+(\(.+\))?!:' || echo "$BODY" | grep -qE '^BREAKING CHANGE:'; } && BUMP="major"
-          [ "$BUMP" = none ] && echo "$SUBJ" | grep -qE '^feat(\(.+\))?:'        && BUMP="minor"
-          [ "$BUMP" = none ] && echo "$SUBJ" | grep -qE '^(fix|perf)(\(.+\))?:'  && BUMP="patch"
+          # here-strings, not echo | grep -q: under pipefail an early grep exit can SIGPIPE the echo and hide a match
+          { grep -qE '^[a-z]+(\(.+\))?!:' <<<"$SUBJ" || grep -qE '^BREAKING CHANGE:' <<<"$BODY"; } && BUMP="major"
+          [ "$BUMP" = none ] && grep -qE '^feat(\(.+\))?:' <<<"$SUBJ"        && BUMP="minor"
+          [ "$BUMP" = none ] && grep -qE '^(fix|perf)(\(.+\))?:' <<<"$SUBJ"  && BUMP="patch"
           if [ "$BUMP" = none ]; then
             echo "No releasable commits since ${LAST:-the beginning}."
             echo "skip=true" >> "$GITHUB_OUTPUT"; exit 0
@@ -186,11 +197,12 @@ jobs:
         if: steps.ver.outputs.skip == 'false'
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          V: ${{ steps.ver.outputs.next }}
         run: |
           set -euo pipefail
           git config user.name  "github-actions[bot]"
           git config user.email "github-actions[bot]@users.noreply.github.com"
-          git tag -a "${{ steps.ver.outputs.next }}" -m "${{ steps.ver.outputs.next }}"
-          git push origin "${{ steps.ver.outputs.next }}"
-          gh release create "${{ steps.ver.outputs.next }}" \
-            --generate-notes --title "${{ steps.ver.outputs.next }}"
+          git rev-parse -q --verify "refs/tags/$V" >/dev/null || git tag -a "$V" -m "$V"
+          [ "$(git rev-parse "$V^{commit}")" = "$(git rev-parse HEAD)" ] || { echo "::error::$V does not point at HEAD"; exit 1; }
+          git push origin "refs/tags/$V"
+          gh release view "$V" >/dev/null 2>&1 || gh release create "$V" --generate-notes --title "$V"
