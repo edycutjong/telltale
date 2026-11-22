@@ -39,8 +39,8 @@ fi
 echo "claim: $n passed, 0 failed at $sha ($root)"
 
 # 2. the system under test is the code and the input that ran. Not frozen: the harness (scripts/test_target.sh, scenario.sh,
-#    check_run.py, deploy.sh, guest.sh), the Makefile (changed since 985ab29 only to add the ttrec target) and
-#    src/tools/ttrec.c (demo footage). The binaries on the guest are not hashed by the recorded run; their source is.
+#    check_run.py, deploy.sh, guest.sh), the Makefile (build rules, host tests) and src/tools/ttrec.c (demo footage).
+#    The binaries on the guest are not hashed by the recorded run; their source is.
 FROZEN="src/telltale src/cluster src/vehicled src/vehfeed src/common src/tools/ttinject.c src/tools/ttctl.c src/tools/hog.c
         src/tools/ttshot.c secpol scripts/target tests/target data/trace-hero.csv data/scenario-hero.csv"
 # shellcheck disable=SC2086

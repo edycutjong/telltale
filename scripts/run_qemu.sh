@@ -17,6 +17,8 @@
 #   - serial console on a unix socket (+ log file) so scripts can drive it headless.
 #
 # Usage: scripts/run_qemu.sh [extra qemu args]       (runs in the foreground; use & or nohup)
+#        Keep QEMU at normal priority for any timing run: zsh starts `&` jobs at nice 5 (BG_NICE), and a niced QEMU on a busy
+#        Mac ran every Screen read about 2x slower (evidence/bench-discarded/README.md). `unsetopt BG_NICE` first, or use a terminal.
 # Env:   QSTI_DIR   unpacked QSTI runtime dir (default $HOME/qnx800/images/qemu/qemu)
 #        TT_RUN     runtime dir for sockets/logs (default /tmp/tt-qemu)
 #        TT_SMP     guest CPUs (default 4)   TT_RAM (default 3G)

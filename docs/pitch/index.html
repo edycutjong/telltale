@@ -261,7 +261,7 @@ body.debug-contrast .slide :is(h1,h2,h3,p,li,span,b,q,code) { outline: 1px solid
   <p class="lab">Two numbers · QEMU (TCG), not hardware</p>
   <h2>Milliseconds, not half a minute.</h2>
   <div class="duel">
-    <div class="tr"><div class="n">53.2<small> ms</small></div><p>last true frame to truth on the glass, one incident (regression runs: 34.5–54.4)</p></div>
+    <div class="tr"><div class="n">53.2<small> ms</small></div><p>last true frame to truth on the glass, one incident (regression runs at f2b8002: 39.4–53.5)</p></div>
     <div class="li"><div class="n">29.9<small> s</small></div><p>of 30, wrong with the monitor off (median of 40 runs)</p></div>
   </div>
   <div class="foot"><b>Tell<em>tale</em></b><span>incidents.csv · bench-ablation.csv · QEMU TCG</span></div>
@@ -339,7 +339,7 @@ RESTARTING -> NORMAL</pre></div>
     <div class="pr big"><h3>Screen read-back</h3><p>Every 20 ms, against the cluster's own glyph atlas.</p><code>screen_read_display</code><img src="../assets/readback/digits.png" width="600" height="300" alt="Telltale — crop of a real read-back: the digits 42 on the glass during a hold." loading="lazy"></div>
     <ol class="plist"><li><b>Resource manager</b><code>/dev/vehicle</code></li><li><b>Message passing</b><code>devctl · ionotify</code></li><li><b>secpol</b><code>22/22 checks</code></li><li><b>Priorities</b><code>SCHED_FIFO 60</code></li></ol>
   </div>
-  <div class="foot"><b>Tell<em>tale</em></b><span>on-target suite 163 passed / 0 failed at 985ab29 · secpol 13 denials of 22 checks</span></div>
+  <div class="foot"><b>Tell<em>tale</em></b><span>on-target suite 190 passed / 0 failed at f2b8002 · secpol 13 denials of 22 checks</span></div>
   <aside class="notes">Each primitive is load-bearing. Without Screen read-back there is nothing to check; without the resource manager there is no independent truth; secpol types and the monitor's priority are what keep a broken renderer away from the monitor. A starved renderer with a readable window is not killed. The on-target suite exercises the policy; the bench and the incident on slide 6 ran without it loaded.</aside>
 </section>
 
@@ -370,7 +370,7 @@ RESTARTING -> NORMAL</pre></div>
       <div class="links"><div><span>Source</span>github.com/edycutjong/telltale</div><div><span>Site · codelab</span>telltale.edycu.dev</div><div><span>Category</span>Automotive &amp; Mobility</div></div></div>
     <div class="qr"><svg width="290" height="290" class="segno"><path transform="scale(10)" class="qrline" stroke="#1c1b19" d="M0 0.5h7m2 0h1m1 0h2m4 0h2m3 0h7m-29 1h1m5 0h1m1 0h1m3 0h1m2 0h1m1 0h2m3 0h1m5 0h1m-29 1h1m1 0h3m1 0h1m1 0h1m3 0h4m4 0h1m1 0h1m1 0h3m1 0h1m-29 1h1m1 0h3m1 0h1m2 0h2m1 0h4m1 0h1m1 0h1m2 0h1m1 0h3m1 0h1m-29 1h1m1 0h3m1 0h1m3 0h2m1 0h3m1 0h1m1 0h1m2 0h1m1 0h3m1 0h1m-29 1h1m5 0h1m2 0h1m2 0h3m4 0h2m1 0h1m5 0h1m-29 1h7m1 0h1m1 0h1m1 0h1m1 0h1m1 0h1m1 0h1m1 0h1m1 0h7m-20 1h3m1 0h1m2 0h2m-17 1h3m1 0h2m12 0h1m6 0h2m-27 1h1m6 0h3m1 0h1m3 0h4m1 0h2m1 0h2m2 0h1m-28 1h1m1 0h2m1 0h2m1 0h1m2 0h2m3 0h2m1 0h1m1 0h1m2 0h3m-28 1h4m4 0h4m1 0h1m1 0h2m3 0h1m2 0h1m4 0h1m-29 1h4m2 0h2m1 0h3m3 0h1m1 0h1m3 0h1m1 0h1m2 0h3m-28 1h1m1 0h3m1 0h2m2 0h1m1 0h1m1 0h2m1 0h2m2 0h2m1 0h2m1 0h1m-28 1h2m2 0h3m1 0h1m1 0h2m1 0h2m1 0h3m1 0h1m1 0h3m1 0h2m-29 1h1m1 0h1m1 0h1m4 0h2m1 0h2m2 0h3m1 0h3m1 0h2m1 0h2m-29 1h2m1 0h4m1 0h1m1 0h1m4 0h4m2 0h1m2 0h2m1 0h2m-27 1h1m2 0h1m1 0h1m3 0h2m3 0h1m3 0h1m2 0h1m-24 1h1m2 0h9m1 0h1m1 0h2m3 0h1m1 0h2m-22 1h1m2 0h1m1 0h1m2 0h1m6 0h1m3 0h3m1 0h4m-28 1h1m2 0h1m1 0h2m2 0h2m4 0h9m1 0h1m-19 1h1m5 0h1m1 0h1m1 0h3m3 0h2m1 0h2m-29 1h7m3 0h2m1 0h2m2 0h1m1 0h2m1 0h1m1 0h1m1 0h1m-27 1h1m5 0h1m1 0h4m2 0h1m3 0h1m1 0h1m3 0h1m2 0h2m-29 1h1m1 0h3m1 0h1m2 0h1m4 0h1m3 0h1m1 0h7m-27 1h1m1 0h3m1 0h1m1 0h2m2 0h2m2 0h4m4 0h1m2 0h1m-28 1h1m1 0h3m1 0h1m1 0h1m1 0h3m2 0h2m3 0h1m2 0h1m4 0h1m-29 1h1m5 0h1m1 0h4m2 0h1m1 0h1m3 0h1m3 0h2m1 0h1m-28 1h7m2 0h1m1 0h5m2 0h3m2 0h1m3 0h1"/></svg><p>telltale.edycu.dev</p></div>
   </div>
-  <div class="foot"><b>Tell<em>tale</em></b><span>Apache-2.0 · suite and incident at 985ab29 · bench builds in each CSV's git_sha column</span></div>
+  <div class="foot"><b>Tell<em>tale</em></b><span>Apache-2.0 · suite at f2b8002 · incident at 985ab29 · bench builds in each CSV's git_sha column</span></div>
   <aside class="notes">Thank the judges, point them at the repo and DEMO.md, and offer the codelab as the way in.</aside>
 </section>
 

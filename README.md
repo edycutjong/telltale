@@ -8,7 +8,7 @@
   </picture>
 
   <p><strong>QNX primitives on the critical path:</strong> resource managers (<code>/dev/vehicle</code>, <code>/dev/telltale</code>) · message passing (devctl, pulses, <code>ionotify</code>) · QNX Screen read-back (<code>screen_read_display</code>) · <code>SCHED_FIFO</code> 60 · <code>secpol</code> types (enforced in the on-target suite, not loaded during the timing bench) · <code>slog2</code> incident records.</p>
-  <p><strong>Result, on QEMU (TCG), not hardware timing:</strong> 200 injected faults in 4 classes, <strong>0 missed</strong> (bench built at <code>7592e40</code>; re-checked 25/25 at the current monitor <code>985ab29</code>); 0 false positives in 91,029 checks of a 30-minute real drive; median 29.9 s wrong glass with the monitor off.</p>
+  <p><strong>Result, on QEMU (TCG), not hardware timing:</strong> 200 injected faults in 4 classes, <strong>0 missed</strong> (bench built at <code>7592e40</code>; re-checked 25/25 at the current monitor <code>f2b8002</code>); 0 false positives in 91,029 checks of a 30-minute real drive; median 29.9 s wrong glass with the monitor off.</p>
 
   <br/>
 
@@ -51,12 +51,12 @@ When a cluster freezes at 48 km/h and the car has stopped, nothing inside the re
 Telltale is a separate process with its own security type: it reads the composed display from QNX Screen, decodes the digits and lamps, compares them with `/dev/vehicle`, and on a mismatch posts a safe layer with the true values. A hung, wrong or blank renderer is then killed and respawned; a starved one is left running. The display is handed back only after a verified true frame.
 
 ## 🏗️ Architecture & Tech Stack
-<p align="center"><img src="docs/assets/architecture.png" alt="Telltale architecture on QNX 8.0. vehfeed replays real comma2k19 CAN speed into vehicled, the /dev/vehicle resource manager (devctl SET). The cluster renderer reads it (ionotify pulse + devctl GET) and posts its window to QNX Screen (screen_post_window). telltale, a separate process at SCHED_FIFO 60 woken by a timer pulse every 20 ms (configured), reads the digit, lamp and tick regions of the composed display back (screen_read_display), decodes them and compares them with /dev/vehicle (devctl GET_SINCE). On a fault: 1 a safe layer with the true speed and lamps, 2 SIGKILL of a hung, wrong or blank renderer (a starved renderer whose window is readable is not killed), 3 after a kill, respawn by slm or a shell loop, 4 hand-back once its own window reads true and no tick stall is seen (screen_read_window; a check that starts 266 ms or more after the previous one restarts the stall clock, a known limit in docs/ENGINEERING.md), 5 an incident in slog2 and /dev/telltale-events. Example from an on-target run: incident TT-VAL-0001, the glass showed 48 while /dev/vehicle said 47." width="100%"></p>
+<p align="center"><img src="docs/assets/architecture.png" alt="Telltale architecture on QNX 8.0. vehfeed replays real comma2k19 CAN speed into vehicled, the /dev/vehicle resource manager (devctl SET). The cluster renderer reads it (ionotify pulse + devctl GET) and posts its window to QNX Screen (screen_post_window). telltale, a separate process at SCHED_FIFO 60 woken by a timer pulse every 20 ms (configured), reads the digit, lamp and tick regions of the composed display back (screen_read_display), decodes them and compares them with /dev/vehicle (devctl GET_SINCE). On a fault: 1 a safe layer with the true speed and lamps, 2 SIGKILL of a hung, wrong or blank renderer (a starved renderer whose window is readable is not killed), 3 after a kill, respawn by slm or a shell loop, 4 hand-back once its own window reads true and no tick stall is seen (screen_read_window), after a genuine tick move since the fault was caught, 5 an incident in slog2 and /dev/telltale-events. Example from an on-target run: incident TT-VAL-0001, the glass showed 48 while /dev/vehicle said 47." width="100%"></p>
 
 1. `vehfeed` replays real CAN speed from the comma2k19 drive dataset (MIT) into `vehicled`, the `/dev/vehicle` resource manager.
 2. `cluster` draws speed digits (a D-DIN glyph atlas), 6 lamps and a liveness tick with QNX Screen.
 3. `telltale` runs every 20 ms (the configured `period_ms`, not a measured figure): `screen_read_display` of the composed digit, lamp and tick regions, decode, compare with the vehicle state.
-4. On `VALUE_MISMATCH`, `TICK_STALL` or a blank: safe layer first, then a cause check through `/proc` (hung vs starved). A hung, wrong or blank renderer is killed and respawned (wrong or blank: after `mismatch_n` = 3 such checks of its own window); a starved one whose window is readable is left running (0 of 50 STARVE runs restarted at `7592e40`, 0 of 5 at `985ab29`). Then a verified hand-back: the renderer's own window reads true and no tick stall is seen (a check that starts 266 ms or more after the previous one restarts that stall clock, so it can hand back without a new tick: a known limit, not seen in the recorded runs). The rarer paths (a stall of unclassifiable cause, no readable window) are in [`docs/ENGINEERING.md`](docs/ENGINEERING.md#known-limits-measured).
+4. On `VALUE_MISMATCH`, `TICK_STALL` or a blank: safe layer first, then a cause check through `/proc` (hung vs starved). A hung, wrong or blank renderer is killed and respawned (wrong or blank: after `mismatch_n` = 3 such checks of its own window); a starved one whose window is readable is left running (0 of 50 STARVE runs restarted at `7592e40`, 0 of 5 at `f2b8002`). Then a verified hand-back: the renderer's own window reads true, no tick stall is seen, and its tick has genuinely moved since the fault was caught (a check that starts 266 ms or more after the previous one restarts the stall clock, which does not count as a move). The rarer paths (a stall of unclassifiable cause, no readable window) are in [`docs/ENGINEERING.md`](docs/ENGINEERING.md#known-limits-measured).
 
 The monitor does no machine learning on purpose: the check is a deterministic glyph decode, so the same frame gives the same verdict.
 
@@ -86,17 +86,17 @@ All timings are QEMU (TCG), not hardware. Not every target was met: see [DEMO.md
 | Detection p95 | 24.8 ms (BLANK) to 271.2 ms (STALE) |
 | False positives | 0 in 91,029 checks (first 30 minutes of a real 31-minute drive) |
 | Wrong glass, monitor off | median 29.9 s of a 30 s window |
-| On-target suite | 163 passed / 0 failed at `985ab29` |
-| Built at | B1 faults `7592e40` · crash `5edab0a` · MISDRAW `f15744a` · ablation `d3d5892` · regression 25/25 and on-target suite `985ab29`, the current monitor (see [DEMO.md](DEMO.md#which-build-ran-each-bench)) |
+| On-target suite | 190 passed / 0 failed at `f2b8002` |
+| Built at | B1 faults `7592e40` · crash `5edab0a` · MISDRAW `f15744a` · ablation `d3d5892` · regression 25/25 and on-target suite `f2b8002`, the current monitor (see [DEMO.md](DEMO.md#which-build-ran-each-bench)) |
 
-**CI/CD Pipeline, 6 stages:** Quality (ruff; Python tests on 3.11-3.13 for pushes to main, 3.12 on pull requests), Security (gitleaks over the full history), Build (host C under gcc and clang; the QNX sources need the SDP, so CI cannot cross-build them), E2E replay (the cited on-target run: its summary matches this README, the code under test is unchanged since `985ab29`, and every recorded assertion is re-checked), Reproducibility (`evidence/RESULTS.md` and `report.html` regenerate byte-identical), Release (a semver tag only after every other stage passes). CodeQL runs in its own workflow over the Python and the host-buildable C (decode, truth, disp, text, rcap); the QNX-only sources are not in its database.
+**CI/CD Pipeline, 6 stages:** Quality (ruff; Python tests on 3.11-3.13 for pushes to main, 3.12 on pull requests), Security (gitleaks over the full history), Build (host C under gcc and clang; the QNX sources need the SDP, so CI cannot cross-build them), E2E replay (the cited on-target run: its summary matches this README, the code under test is unchanged since `f2b8002`, and every recorded assertion is re-checked), Reproducibility (`evidence/RESULTS.md` and `report.html` regenerate byte-identical), Release (a semver tag only after every other stage passes). CodeQL runs in its own workflow over the Python and the host-buildable C (decode, truth, disp, text, rcap, handback); the QNX-only sources are not in its database.
 
 ### Evidence
 | What | Where |
 |---|---|
 | Bench tables, raw rows, reproduce steps | [DEMO.md](DEMO.md), [`evidence/RESULTS.md`](evidence/RESULTS.md), [`evidence/report.html`](evidence/report.html) |
 | One recorded run per fault class | [`evidence/runs/`](evidence/runs/) |
-| On-target test summary | [`evidence/test-target/20261115T232225Z/summary.txt`](evidence/test-target/20261115T232225Z/summary.txt) |
+| On-target test summary | [`evidence/test-target/20261122T172933Z/summary.txt`](evidence/test-target/20261122T172933Z/summary.txt) |
 | Two failing test runs kept | [`20261115T141317Z`](evidence/test-target/20261115T141317Z/summary.txt), [`20261115T204528Z`](evidence/test-target/20261115T204528Z/summary.txt) |
 | Every component, test and known limit | [`docs/ENGINEERING.md`](docs/ENGINEERING.md) |
 | Developer-experience notes on the QNX toolchain | [`docs/DX-REPORT.md`](docs/DX-REPORT.md) |
@@ -132,7 +132,7 @@ Re-run every bench: `scripts/bench_all.sh run` (into a fresh `evidence/rerun-<UT
 ```sh
 make test-host                    # C + Python, no QNX needed
 scripts/replay_target_run.sh      # re-checks the committed on-target run, no QNX needed (CI Stage 4)
-make test-target                  # on-target suite, 163 passed / 0 failed at 985ab29
+make test-target                  # on-target suite, 190 passed / 0 failed at f2b8002
 ```
 
 ## 📽️ Demo Materials
