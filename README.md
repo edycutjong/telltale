@@ -7,7 +7,7 @@
     <img src="docs/assets/readme-hero-animated.svg" alt="Telltale — reads back what the cluster shows: Glass: 48 km/h, truth 0 at the stop. Without Telltale the red trace stays flat; with it, a green tick ends the lie." width="100%">
   </picture>
 
-  <p><strong>QNX primitives on the critical path:</strong> resource managers (<code>/dev/vehicle</code>, <code>/dev/telltale</code>) · message passing (devctl, pulses, <code>ionotify</code>) · QNX Screen read-back (<code>screen_read_display</code>) · <code>SCHED_FIFO</code> 60 · <code>secpol</code> types · <code>slog2</code> incident records.</p>
+  <p><strong>QNX primitives on the critical path:</strong> resource managers (<code>/dev/vehicle</code>, <code>/dev/telltale</code>) · message passing (devctl, pulses, <code>ionotify</code>) · QNX Screen read-back (<code>screen_read_display</code>) · <code>SCHED_FIFO</code> 60 · <code>secpol</code> types (enforced in the on-target suite, not loaded during the timing bench) · <code>slog2</code> incident records.</p>
   <p><strong>Result, on QEMU (TCG), not hardware timing:</strong> 200 injected faults in 4 classes, <strong>0 missed</strong> (bench built at <code>7592e40</code>; re-checked 25/25 at the current monitor <code>985ab29</code>); 0 false positives in 91,029 checks of a 30-minute real drive; median 29.9 s wrong glass with the monitor off.</p>
 
   <br/>
@@ -36,7 +36,7 @@
 When a cluster freezes at 48 km/h and the car has stopped, nothing inside the renderer knows.
 
 ### The Solution
-Telltale is a separate process with its own security type: it reads the composed display from QNX Screen, decodes the digits and lamps, compares them with `/dev/vehicle`, and on a mismatch posts a safe layer with the true values, kills and respawns the renderer, verifies the new one, and hands the display back.
+Telltale is a separate process with its own security type: it reads the composed display from QNX Screen, decodes the digits and lamps, compares them with `/dev/vehicle`, and on a mismatch posts a safe layer with the true values. A hung, wrong or blank renderer is then killed and respawned; a starved one is left running. The display is handed back only after a verified true frame.
 
 ## 🏗️ Architecture & Tech Stack
 <p align="center"><img src="docs/assets/architecture.svg" alt="Architecture: vehfeed writes the vehicle state to vehicled; cluster and telltale both read it. The cluster posts a window to Screen; telltale reads the composed display back from Screen, and on a mismatch posts a safe layer, kills the renderer and slm respawns it." width="100%"></p>
@@ -44,7 +44,7 @@ Telltale is a separate process with its own security type: it reads the composed
 1. `vehfeed` replays real CAN speed from the comma2k19 drive dataset (MIT) into `vehicled`, the `/dev/vehicle` resource manager.
 2. `cluster` draws speed digits (a D-DIN glyph atlas), 6 lamps and a liveness tick with QNX Screen.
 3. `telltale` runs every 20 ms (the configured `period_ms`, not a measured figure): `screen_read_display` of the composed digit, lamp and tick regions, decode, compare with the vehicle state.
-4. On `VALUE_MISMATCH`, `TICK_STALL` or a blank: safe layer first, then a cause check through `/proc` (hung vs starved). The renderer is killed only if it is hung, drawing wrong or blank, or stalled for an unclassifiable cause for 5 x `tick_stall_ms`; a renderer classified as starved is not killed while its window is readable (0 of 50 STARVE runs restarted at `7592e40`, 0 of 5 at `985ab29`); with no readable window it is restarted once its no-window checks add up to `restart_timeout_ms` (4 s; reviewed, not exercised on the target). Then a verified hand-back.
+4. On `VALUE_MISMATCH`, `TICK_STALL` or a blank: safe layer first, then a cause check through `/proc` (hung vs starved). A hung, wrong or blank renderer is killed and respawned (wrong or blank: after `mismatch_n` = 3 such checks of its own window); a starved one whose window is readable is left running (0 of 50 STARVE runs restarted at `7592e40`, 0 of 5 at `985ab29`). Then a verified hand-back. The rarer paths (a stall of unclassifiable cause, no readable window) are in [`docs/ENGINEERING.md`](docs/ENGINEERING.md#known-limits-measured).
 
 The monitor does no machine learning on purpose: the check is a deterministic glyph decode, so the same frame gives the same verdict.
 
@@ -126,7 +126,7 @@ make test-target                  # on-target suite, 163 passed / 0 failed at 98
 ## 📽️ Demo Materials
 - Site: [telltale.edycu.dev](https://telltale.edycu.dev), the landing page, served from [`docs/`](docs/).
 - [Pitch deck](https://telltale.edycu.dev/pitch/)
-- [Codelab](https://telltale.edycu.dev/codelab/): your first QNX 8.0 resource manager on an Apple-Silicon Mac (every step run on the QEMU guest); sources in [`codelab/`](codelab/README.md).
+- [Codelab](https://telltale.edycu.dev/codelab/): your first QNX 8.0 resource manager on an Apple-Silicon Mac (every step run for real, on the Mac host or the QEMU guest); sources in [`codelab/`](codelab/README.md).
 
 ## 📄 License
 Apache-2.0, see [LICENSE](LICENSE).

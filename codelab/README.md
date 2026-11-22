@@ -1,6 +1,6 @@
 # Your first QNX resource manager on an Apple-Silicon Mac
 
-> Build, run and watch a /dev/counter resource manager on QNX 8.0 - read(), write(), devctl() and ionotify() pulses - cross-compiled on an M-series Mac and run on a QEMU guest. Each command block, except the long-running QEMU boot command, is followed by the output recorded when it was run on that guest.
+> Build, run and watch a /dev/counter resource manager on QNX 8.0 - read(), write(), devctl() and ionotify() pulses - cross-compiled on an M-series Mac and run on a QEMU guest. Each command block, except the long-running QEMU boot command, is followed by the output recorded when it was run, on the Mac host or on that guest.
 >
 > **Duration:** about 63 minutes (estimated per step) · **QNX:** 8.0 · **Host:** Apple-Silicon Mac · **Rendered from `codelab.md`: every code block is copied from the files that were compiled, every output block from the run recorded in `transcripts/`.**
 

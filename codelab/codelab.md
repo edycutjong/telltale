@@ -1,6 +1,6 @@
 # Your first QNX resource manager on an Apple-Silicon Mac
 
-summary: Build, run and watch a /dev/counter resource manager on QNX 8.0 - read(), write(), devctl() and ionotify() pulses - cross-compiled on an M-series Mac and run on a QEMU guest. Each command block, except the long-running QEMU boot command, is followed by the output recorded when it was run on that guest.
+summary: Build, run and watch a /dev/counter resource manager on QNX 8.0 - read(), write(), devctl() and ionotify() pulses - cross-compiled on an M-series Mac and run on a QEMU guest. Each command block, except the long-running QEMU boot command, is followed by the output recorded when it was run, on the Mac host or on that guest.
 id: qnx-first-resmgr-apple-silicon
 categories: qnx, qnx-8.0, resource-manager, macos
 status: Published
