@@ -36,6 +36,17 @@
 ### The Problem
 When a cluster freezes at 48 km/h and the car has stopped, nothing inside the renderer knows.
 
+<p align="center">
+  <a href="https://telltale.edycu.dev">
+    <picture>
+      <source media="(prefers-reduced-motion: reduce)" srcset="docs/assets/broll-poster.png">
+      <img src="docs/assets/broll.gif" width="100%" alt="Real footage at 1× speed: the same drive replayed twice on a QNX 8.0 guest under QEMU (TCG), each glass frame read back from QNX Screen. The renderer freezes at 48 km/h. Left, monitor off: the glass stays at 48 while the car brakes to 0. Right, Telltale on: the fault is caught 123.4 ms after the freeze, a safe layer shows the true speed, the renderer is restarted, and the glass follows the car down to 0.">
+    </picture>
+  </a>
+  <br>
+  <sub>Real footage, 1× speed: two recorded takes on the QNX 8.0 guest (QEMU TCG), each glass frame read back from QNX Screen (<a href="evidence/video/README.md">evidence/video</a>). The chart is drawn from the takes' own check rows and the replayed drive.</sub>
+</p>
+
 ### The Solution
 Telltale is a separate process with its own security type: it reads the composed display from QNX Screen, decodes the digits and lamps, compares them with `/dev/vehicle`, and on a mismatch posts a safe layer with the true values. A hung, wrong or blank renderer is then killed and respawned; a starved one is left running. The display is handed back only after a verified true frame.
 
