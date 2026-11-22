@@ -1,61 +1,58 @@
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" width="512" height="512" role="img" aria-label="Telltale — reads back what the cluster shows: Glass: 48 km/h, truth 0 at the stop. Without Telltale the red trace stays flat; with it, a green tick ends the lie.">
 <!-- STORYBOARD (dur 6s — must equal this file's single master dur)
-  0-8%    steady state: chart plate, the black true-speed trace and the red displayed trace at full length (the lie on
-                        the glass); this is the poster: plate + both traces fully drawn, no tick yet
-  8-22%   trigger:      a recording pen dot runs down the black trace (the truth moves) while the red stays flat   data-story="beat-2"
-  22-40%  mechanism:    Glass: 48 km/h, truth 0 at the stop. Without Telltale the red trace stays flat; with it, a green tick ends the lie.
-                        (green tick draws through the split, ripple, red tail beyond the tick erases)               data-story="beat-3"
-  40-88%  resolution:   tick + short red stub + black truth persist (the lie stays ended); glow breath on the tick data-story="beat-4"
-  88-100% breathe + seam fade: tick and glow fade out, red tail fades back in so frame 0 and the seam match
+  0-8%    steady state: chart card, the black true-speed trace, the red displayed trace at 48 and the hatched gap between
+                        them at full length (the lie on the glass). Poster: plate + both traces + gap fully drawn, no tick
+  8-19%   trigger:      a recording pen runs along the black truth: it rises, peaks and leaves the frozen red value  data-story="beat-2"
+  19-40%  mechanism:    Glass: 48 km/h, truth 0 at the stop. Without Telltale the red trace stays flat; with it, a green tick ends the lie.
+                        (19% the green tick draws through the split, a ripple rings out, then the red line and its
+                        hatched gap are swept away left to right while the pen rides the truth down to 0)          data-story="beat-3"
+  40-88%  resolution:   truth + tick persist alone (the lie stays ended); glow breath on the tick                 data-story="beat-4"
+  88-100% breathe + seam fade: tick and glow fade out, the red line and gap fade back so frame 0 and the seam match
 -->
   <title>Telltale</title>
   <style>
-    .breath { transform-box: fill-box; transform-origin: center; animation: tt-breath 6s ease-in-out infinite; }
-    @keyframes tt-breath { 0%, 40% { opacity: 0.0001; } 55% { opacity: 0.55; } 70% { opacity: 0.2; } 82% { opacity: 0.5; } 88%, 100% { opacity: 0.0001; } }
+    .breath { animation: tt-breath 6s ease-in-out infinite; }
+    @keyframes tt-breath { 0%, 38% { opacity: 0.0001; } 50% { opacity: 0.8; } 64% { opacity: 0.45; } 78% { opacity: 0.75; } 88%, 100% { opacity: 0.0001; } }
     @media (prefers-reduced-motion: reduce) { * { animation: none !important; } }
   </style>
   <defs>
-    <linearGradient id="ai-paper" x1="0" y1="0" x2="1" y2="1">
-      <stop offset="0%" stop-color="#F7F3EA"/>
-      <stop offset="100%" stop-color="#EFE9DC"/>
-    </linearGradient>
-    <filter id="ai-glow" x="-200%" y="-30%" width="500%" height="160%"><feGaussianBlur stdDeviation="14"/></filter>
+    <linearGradient id="ai-paper" x1="0" y1="0" x2="1" y2="1"><stop offset="0%" stop-color="#F7F3EA"/><stop offset="100%" stop-color="#EFE9DC"/></linearGradient>
+    <pattern id="ai-hatch" width="30" height="30" patternUnits="userSpaceOnUse" patternTransform="rotate(45)"><rect width="30" height="30" fill="#C8321E" fill-opacity="0.13"/><rect width="11" height="30" fill="#C8321E" fill-opacity="0.42"/></pattern>
+    <filter id="ai-glow" filterUnits="userSpaceOnUse" x="150" y="20" width="172" height="330"><feGaussianBlur stdDeviation="16"/></filter>
     <filter id="ai-pen" x="-100%" y="-100%" width="300%" height="300%"><feGaussianBlur stdDeviation="5"/></filter>
-    <path id="ai-truth" d="M92 176 H200 C244 176 272 290 302 352 C318 386 338 400 364 400 H420"/>
+    <path id="ai-truth" d="M84 194 C120 190 160 170 204 168 C240 168 262 214 290 270 C316 322 336 384 380 388 H428"/>
+    <clipPath id="ai-lie"><rect x="150" y="96" width="330" height="320"><animate attributeName="x" dur="6s" repeatCount="indefinite" values="150;150;470;470;150;150" keyTimes="0;0.23;0.4;0.88;0.885;1"/><animate attributeName="width" dur="6s" repeatCount="indefinite" values="330;330;0;0;330;330" keyTimes="0;0.23;0.4;0.88;0.885;1"/></rect></clipPath>
   </defs>
 
-  <!-- brand layer: plate + hairlines (always visible) -->
-  <rect x="20" y="20" width="472" height="472" rx="108" fill="url(#ai-paper)" stroke="#1C1B19" stroke-width="22"/>
-  <path d="M70 176 H442 M70 400 H442" stroke="#B9B1A0" stroke-width="4" fill="none"/>
+  <!-- brand layer: chart card + hairlines (always visible) -->
+  <rect x="23" y="23" width="466" height="466" rx="112" fill="url(#ai-paper)" stroke="#1C1B19" stroke-width="14"/>
+  <path d="M76 168 H436 M76 388 H436" stroke="#B9B1A0" stroke-width="4" fill="none"/>
+  <path d="M148 96 V436 M260 96 V436 M372 96 V436" stroke="#B9B1A0" stroke-width="3" stroke-opacity="0.5" fill="none"/>
 
-  <!-- the lie: red stub (stays) + red tail beyond the tick (erased at the catch, fades back at the seam) -->
-  <path d="M200 176 H254" stroke="#C8321E" stroke-width="52" stroke-linecap="round" fill="none"/>
-  <path d="M254 176 H420" stroke="#C8321E" stroke-width="52" stroke-linecap="round" fill="none" pathLength="100" stroke-dasharray="100 100">
-    <animate attributeName="stroke-dashoffset" dur="6s" repeatCount="indefinite" values="0;0;-100;-100;0;0" keyTimes="0;0.27;0.40;0.88;0.89;1"/>
-    <animate attributeName="opacity" dur="6s" repeatCount="indefinite" values="1;1;0;0;1;1" keyTimes="0;0.40;0.41;0.89;0.96;1"/>
-  </path>
+  <!-- the lie: hatched gap + red line, swept away at the catch, faded back at the seam -->
+  <g clip-path="url(#ai-lie)">
+    <animate attributeName="opacity" dur="6s" repeatCount="indefinite" values="1;1;0;0;1;1" keyTimes="0;0.4;0.405;0.88;0.96;1"/>
+    <path d="M214 168 H428 V388 H380 C336 384 316 322 290 270 C266 222 246 180 214 168 Z" fill="url(#ai-hatch)"/>
+    <path d="M214 168 H428" stroke="#C8321E" stroke-width="48" stroke-linecap="round" fill="none"/>
+  </g>
 
   <!-- the truth: black trace (always visible) -->
-  <use href="#ai-truth" stroke="#1C1B19" stroke-width="52" stroke-linecap="round" stroke-linejoin="round" fill="none"/>
+  <use href="#ai-truth" stroke="#1C1B19" stroke-width="48" stroke-linecap="round" stroke-linejoin="round" fill="none"/>
 
-  <!-- beat 2: the recording pen runs down the truth -->
+  <!-- beat 2: the recording pen rides the truth -->
   <g data-story="beat-2" opacity="0">
-    <animate attributeName="opacity" dur="6s" repeatCount="indefinite" values="0;0;1;1;0;0" keyTimes="0;0.08;0.10;0.42;0.46;1"/>
+    <animate attributeName="opacity" dur="6s" repeatCount="indefinite" values="0;0;1;1;0;0" keyTimes="0;0.08;0.1;0.44;0.48000000000000004;1"/>
     <circle r="22" fill="#F7F3EA" filter="url(#ai-pen)" opacity="0.9"/>
     <circle r="11" fill="#F7F3EA" stroke="#1C1B19" stroke-width="5"/>
-    <animateMotion dur="6s" repeatCount="indefinite" keyPoints="0;0;1;1" keyTimes="0;0.08;0.44;1" calcMode="linear">
-      <mpath href="#ai-truth"/>
-    </animateMotion>
+    <animateMotion dur="6s" repeatCount="indefinite" keyPoints="0;0;1;1" keyTimes="0;0.08;0.46;1" calcMode="linear"><mpath href="#ai-truth"/></animateMotion>
   </g>
 
   <!-- beat 3: the green tick strikes through the split; ripple where it lands -->
-  <circle data-story="beat-3" cx="254" cy="226" r="12" fill="none" stroke="#1F7A4D" stroke-width="6" opacity="0">
-    <animate attributeName="r" dur="6s" repeatCount="indefinite" values="12;12;96;96" keyTimes="0;0.26;0.42;1"/>
-    <animate attributeName="opacity" dur="6s" repeatCount="indefinite" values="0;0;0.7;0;0" keyTimes="0;0.26;0.28;0.42;1"/>
+  <circle data-story="beat-3" cx="236" cy="181" r="12" fill="none" stroke="#1F7A4D" stroke-width="6" opacity="0">
+    <animate attributeName="r" dur="6s" repeatCount="indefinite" values="12;12;110;110" keyTimes="0;0.21;0.37;1"/><animate attributeName="opacity" dur="6s" repeatCount="indefinite" values="0;0;0.7;0;0" keyTimes="0;0.21;0.23;0.37;1"/>
   </circle>
-  <path data-story="beat-4" class="breath" d="M254 112 V300" stroke="#1F7A4D" stroke-width="56" stroke-linecap="round" fill="none" filter="url(#ai-glow)" opacity="0"/>
-  <path data-story="beat-3" d="M254 112 V300" stroke="#1F7A4D" stroke-width="36" stroke-linecap="round" fill="none" pathLength="100" stroke-dasharray="100 100" opacity="0">
-    <animate attributeName="stroke-dashoffset" dur="6s" repeatCount="indefinite" values="100;100;0;0" keyTimes="0;0.22;0.28;1"/>
-    <animate attributeName="opacity" dur="6s" repeatCount="indefinite" values="0;0;1;1;0;0" keyTimes="0;0.22;0.23;0.88;0.96;1"/>
+  <path data-story="beat-4" class="breath" d="M236 100 V262" stroke="#1F7A4D" stroke-width="72" stroke-linecap="round" fill="none" filter="url(#ai-glow)" opacity="0"/>
+  <path data-story="beat-3" d="M236 100 V262" stroke="#1F7A4D" stroke-width="36" stroke-linecap="round" fill="none" pathLength="100" stroke-dasharray="100 100" opacity="0">
+    <animate attributeName="stroke-dashoffset" dur="6s" repeatCount="indefinite" values="100;100;0;0" keyTimes="0;0.19;0.23;1"/><animate attributeName="opacity" dur="6s" repeatCount="indefinite" values="0;0;1;1;0;0" keyTimes="0;0.19;0.2;0.88;0.96;1"/>
   </path>
 </svg>

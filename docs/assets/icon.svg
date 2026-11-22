@@ -1,19 +1,17 @@
-<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" width="512" height="512" role="img" aria-label="Telltale — a strip of tachograph chart: the black true-speed trace falls to 0, the red displayed trace stays flat at 48, a green tick ends the lie">
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" width="512" height="512" role="img" aria-label="Telltale — a strip of tachograph chart: the black true-speed trace brakes to 0, the red displayed trace stays flat at 48 over a hatched gap, a green tick ends the lie">
   <title>Telltale</title>
-  <defs>
-    <linearGradient id="tt-paper" x1="0" y1="0" x2="1" y2="1">
-      <stop offset="0%" stop-color="var(--bg-elevated-solid, #F7F3EA)"/>
-      <stop offset="100%" stop-color="var(--bg, #EFE9DC)"/>
-    </linearGradient>
-  </defs>
-  <!-- chart plate: wax-paper sheet with an ink rim (self-plated: holds on GitHub light and dark) -->
-  <rect x="20" y="20" width="472" height="472" rx="108" fill="url(#tt-paper)" stroke="var(--ink, #1C1B19)" stroke-width="22"/>
-  <!-- chart hairlines (speed grid) -->
-  <path d="M70 176 H442 M70 400 H442" stroke="var(--rule, #B9B1A0)" stroke-width="4" fill="none"/>
+  <defs><linearGradient id="tt-paper" x1="0" y1="0" x2="1" y2="1"><stop offset="0%" stop-color="var(--bg-elevated-solid, #F7F3EA)"/><stop offset="100%" stop-color="var(--bg, #EFE9DC)"/></linearGradient><pattern id="tt-hatch" width="30" height="30" patternUnits="userSpaceOnUse" patternTransform="rotate(45)"><rect width="30" height="30" fill="var(--primary, #C8321E)" fill-opacity="0.13"/><rect width="11" height="30" fill="var(--primary, #C8321E)" fill-opacity="0.42"/></pattern></defs>
+  <!-- chart plate: a wax-paper chart card with a thin ink rim (self-plated: holds on GitHub light and dark) -->
+  <rect x="23" y="23" width="466" height="466" rx="112" fill="url(#tt-paper)" stroke="var(--ink, #1C1B19)" stroke-width="14"/>
+  <!-- chart hairlines: 48 km/h, 0 km/h, and the time grid -->
+  <path d="M76 168 H436 M76 388 H436" stroke="var(--rule, #B9B1A0)" stroke-width="4" fill="none"/>
+  <path d="M148 96 V436 M260 96 V436 M372 96 V436" stroke="var(--rule, #B9B1A0)" stroke-width="3" stroke-opacity="0.5" fill="none"/>
+  <!-- the lie is the gap: red hatch between the frozen glass value and the falling truth -->
+  <path d="M214 168 H428 V388 H380 C336 384 316 322 290 270 C266 222 246 180 214 168 Z" fill="url(#tt-hatch)"/>
   <!-- the lie: displayed speed frozen at 48 -->
-  <path d="M200 176 H420" stroke="var(--primary, #C8321E)" stroke-width="52" stroke-linecap="round" fill="none"/>
-  <!-- the truth: real speed falls to 0 (shape of the hero stop) -->
-  <path d="M92 176 H200 C244 176 272 290 302 352 C318 386 338 400 364 400 H420" stroke="var(--ink, #1C1B19)" stroke-width="52" stroke-linecap="round" stroke-linejoin="round" fill="none"/>
-  <!-- the catch: green tick where the red rejoins the black -->
-  <path d="M254 112 V300" stroke="var(--accent, #1F7A4D)" stroke-width="36" stroke-linecap="round" fill="none"/>
+  <path d="M214 168 H428" stroke="var(--primary, #C8321E)" stroke-width="48" stroke-linecap="round" fill="none"/>
+  <!-- the truth: real speed rises, then brakes to 0 (shape of the hero stop) -->
+  <path d="M84 194 C120 190 160 170 204 168 C240 168 262 214 290 270 C316 322 336 384 380 388 H428" stroke="var(--ink, #1C1B19)" stroke-width="48" stroke-linecap="round" stroke-linejoin="round" fill="none"/>
+  <!-- the catch: green tick where the truth leaves the frozen value -->
+  <path d="M236 100 V262" stroke="var(--accent, #1F7A4D)" stroke-width="36" stroke-linecap="round" fill="none"/>
 </svg>
