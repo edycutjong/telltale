@@ -12,12 +12,15 @@
 
   <br/>
 
-  [![Site](https://img.shields.io/badge/🚀_Site-telltale.edycu.dev-06b6d4?style=for-the-badge)](https://telltale.edycu.dev)
-  [![Demo video](https://img.shields.io/badge/▶️_Demo_video-2:51-ff0000?style=for-the-badge&logo=youtube&logoColor=white)](https://youtu.be/ONV3rW4BZKo)
   [![Judge guide](https://img.shields.io/badge/⚖️_Judge_guide-2_minutes-22c55e?style=for-the-badge)](JUDGE.md)
+  [![Demo video](https://img.shields.io/badge/▶️_Demo_video-2:51-ff0000?style=for-the-badge&logo=youtube&logoColor=white)](https://youtu.be/ONV3rW4BZKo)
+  [![Site](https://img.shields.io/badge/🚀_Site-telltale.edycu.dev-06b6d4?style=for-the-badge)](https://telltale.edycu.dev)
   [![Pitch deck](https://img.shields.io/badge/📊_Pitch_deck-10_slides-ef4444?style=for-the-badge)](https://telltale.edycu.dev/pitch/)
   [![Codelab](https://img.shields.io/badge/🧪_Codelab-first_QNX_resource_manager-f59e0b?style=for-the-badge)](https://telltale.edycu.dev/codelab/)
-  [![Built for QNX Global Hackathon](https://img.shields.io/badge/Devpost-QNX_Global_Hackathon-8b5cf6?style=for-the-badge)](https://qnx.devpost.com/)
+
+  [![Devpost](https://img.shields.io/badge/Devpost-QNX_Global_Hackathon-003E54?style=for-the-badge&logo=devpost&logoColor=white)](https://devpost.com/software/telltale-islt6u)
+  [![dev.to](https://img.shields.io/badge/dev.to-write--up-0A0A0A?style=for-the-badge&logo=devdotto&logoColor=white)](https://dev.to/edycutjong/a-heartbeat-cant-tell-you-the-speedometer-is-lying-reading-the-glass-back-on-qnx-80-1gbd)
+  [![X](https://img.shields.io/badge/X-thread-000000?style=for-the-badge&logo=x&logoColor=white)](https://x.com/edycutjong/status/2124617765696970959)
 
   <br/>
 
