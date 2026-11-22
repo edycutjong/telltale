@@ -16,7 +16,7 @@ was added after one fault run showed the defect; it narrows STALE to the 11 wind
 # Set aside: two runs of regression r05 (2026-11-22, all 25 rows complete each time, `git_sha` f2b8002)
 
 Both runs of the 25-injection regression bench at the monitor with the final-review fixes (`f2b8002`) detected 25 of 25, 0
-missed, 0 problem rows, but on a slower guest than every earlier bench: the QEMU process had been started from a zsh `&` job,
+missed, 0 problem rows (all timings here are QEMU (TCG), not hardware), but on a slower guest than every earlier bench: the QEMU process had been started from a zsh `&` job,
 and zsh's BG_NICE option ran it at nice 5, so on a busy Mac it got less CPU than usual. Every Screen read slowed down: an
 armed NORMAL check took p50 7.0-7.3 ms (`check_us`, [`r05-qemu-nice5/probe/`](r05-qemu-nice5/probe/)) instead of the 3.5 ms
 of both on-target suite runs (`985ab29` and `f2b8002`), and the check that raises the safe layer (a full post, `safe_us` up

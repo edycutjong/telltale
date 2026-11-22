@@ -117,7 +117,7 @@ STALE needs the true speed to move, so it carries the 100 ms truth window by con
 ## Final code review fixes (`f2b8002`)
 A read-only code review at `f681625` found three monitor defects, verified against the code and the recorded runs (a failed
 raise and a late-check hand-back never happened in a recorded run; the early hand-back stamp was in every one). They were
-fixed in `f2b8002`, the build the current on-target suite and regression bench ran:
+fixed in `f2b8002`, the build the current on-target suite and regression bench ran (every timing below is QEMU (TCG), not hardware):
 - **Safe-layer raise:** each Screen call of the raise (visibility, position, z-order, post, flush) is checked, and the layer
   counts as up only when all succeed. After any failed call the next check redoes the whole raise and a full post, the
   hand-back hides the layer even though it was never confirmed up, and the failure is logged once (stdout and slog2).
