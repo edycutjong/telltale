@@ -70,7 +70,8 @@ int main(int argc, char **argv)
     if (argc - 5 > MAXR) { fprintf(stderr, "ttrec: at most %d regions (got %d)\n", MAXR, argc - 5); return 1; }
     for (int i = 5; i < argc; i++, ng++) {
         struct region *q = &g[ng]; q->every = 1;
-        if (sscanf(argv[i], "%d,%d,%d,%d@%d", &q->r[0], &q->r[1], &q->r[2], &q->r[3], &q->every) < 4 || q->every < 1 ||
+        int used = 0, got = sscanf(argv[i], "%d,%d,%d,%d%n@%d%n", &q->r[0], &q->r[1], &q->r[2], &q->r[3], &used, &q->every, &used);
+        if (got < 4 || argv[i][used] != '\0' || q->every < 1 ||   /* the whole argument must parse: no trailing junk */
             q->r[0] < 0 || q->r[1] < 0 || q->r[0] % TILE || q->r[1] % TILE || q->r[2] % TILE || q->r[3] % TILE || q->r[2] < TILE || q->r[3] < TILE ||
             q->r[2] > dsz[0] - q->r[0] || q->r[3] > dsz[1] - q->r[1]) {   /* no signed overflow: x, y >= 0 here */
             fprintf(stderr, "ttrec: bad region %s (x,y,w,h[@every], multiples of %d, inside %dx%d)\n", argv[i], TILE, dsz[0], dsz[1]);
