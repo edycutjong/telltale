@@ -8,7 +8,9 @@
 #     including the secpol cases, and scripts/check_run.py passes on each with the incident schema declared (--width). The
 #     checker is the one test_target.sh runs, at HEAD, so it may assert more than it did when the run was recorded. A checker
 #     crash, a missing incident log or a case with no assertion is a failure, never a skip;
-#  4. core.txt and secpol.txt (core_items.sh, secpol_denies.sh output) have no FAIL line and reach their own "n/n passed".
+#  4. core.txt and secpol.txt (core_items.sh, secpol_denies.sh output) hold at least one PASS, no FAIL line, reach their own
+#     "n/n passed", and are, line for line, the block test_target.sh tee'd into the cited summary.txt (whose PASS lines add
+#     up to the N README cites, step 1): a file cut down to its total line, or to fewer assertions, no longer matches.
 #   scripts/replay_target_run.sh [evidence/test-target/<stamp>]     (default: the run README.md cites)
 # Only by hand, for an older run: TT_REPLAY_WIDTH=N (its incident schema; default 19 = telltale.c EV_HEADER) and
 # TT_REPLAY_POLICY=0 (a run made with test_target.sh --no-policy). CI uses the defaults: the cited run must carry both.
@@ -80,7 +82,13 @@ for k in core secpol; do
   t=$root/$k.txt
   [ -f "$t" ] || { echo "$k: FAIL $t missing"; fail=$((fail + 1)); continue; }
   p=$(grep -c '^PASS' "$t" || true); f=$(grep -c '^FAIL' "$t" || true)
+  [ "$p" -gt 0 ] || { echo "$k: FAIL $t has no PASS line"; f=$((f + 1)); }
   grep -Eq "^$k: $p/$p passed\$" "$t" || { echo "$k: FAIL no '$k: $p/$p passed' line (the script did not finish)"; f=$((f + 1)); }
+  # reconcile with the cited summary: the same lines, in order, ending at the same total line
+  nl=$(wc -l < "$t" | tr -d ' '); end=$({ grep -nFx "$k: $p/$p passed" "$s" || true; } | head -1 | cut -d: -f1)
+  if [ -z "$end" ] || [ "$end" -lt "$nl" ] || ! sed -n "$((end - nl + 1)),${end}p" "$s" | cmp -s - "$t"; then
+    echo "$k: FAIL $t is not the $k block recorded in $s"; f=$((f + 1))
+  fi
   echo "$k: $p pass, $f fail"
   pass=$((pass + p)); fail=$((fail + f))
 done
