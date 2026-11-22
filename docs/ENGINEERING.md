@@ -119,16 +119,21 @@ regression bench re-run before the monitor can be cited again. None of the three
 - **Hand-back stamp:** an incident's `t_true_ns` (the hand-back: the restore times in [DEMO.md](../DEMO.md), the "full" column of
   `RESULTS.md`, the card's "restored") is the end of the composed capture of the check whose read of the renderer's own window
   verified the frame (`telltale.c:1001`); that window read ends later (`telltale.c:967`), so these times are early by about
-  its length: 3.2 ms in TT-FRZ-0001, p50 3.6 ms (max 18.9 ms) over the 179 hand-backs in the recorded per-check logs
-  (`win_us`). The safe-layer and exposure stamps come from the composed read itself and are not affected.
+  its length: 3.2 ms in TT-FRZ-0001, p50 3.6 ms (max 18.9 ms) over the 179 SAFE-HOLD and RESTARTING hand-backs in the
+  recorded per-check logs (`win_us`; the discarded video takes excluded). The safe-layer and exposure stamps come from the
+  composed read itself and are not affected.
 - **Hand-back after a late check:** a check that starts 266 ms or more after the previous one (16 frames: the 4-bit tick may
   have wrapped) restarts the tick-stall clock instead of reading the unchanged tick as a stall (`telltale.c:943`). In
   SAFE-HOLD that check can hand back a renderer whose own window reads true without a new tick (`telltale.c:1054`): a renderer
   frozen at a value that is still true. The safe layer then comes down, the incident is recorded as recovered without a
   restart, and the frozen tick is reported again as a new TICK_STALL `tick_stall_ms` later (a speed change is caught by the
-  value check as usual). Not seen in the recorded runs: 39 of the 286,320 checks in the recorded per-check logs started 266 ms or more late, 4 of those were
-  hand-backs and the tick had moved in all 4, and every detected FREEZE, BLANK, STALE, CRASH and MISDRAW bench row has a
-  restart. Fix: hand back only after a genuine tick move since detection.
+  value check as usual). The hand-backs after a respawn or from WAIT / NO-DISPLAY additionally need one genuine tick move
+  since the renderer registered (`telltale.c:1007, 1097`); the SAFE-HOLD hand-back needs none. Not seen in the recorded runs: in
+  the recorded per-check logs (the discarded video takes excluded) 25 of 273,069 checks started 266 ms or more after the
+  previous one and none of the 90 SAFE-HOLD hand-backs followed one; with the 7 discarded takes (recorded under host load
+  up to ~180) it is 39 of 286,335 checks and 4 of 121 SAFE-HOLD hand-backs, the tick having moved in all 4. Every detected
+  FREEZE, BLANK, STALE, CRASH and MISDRAW bench row has a restart. Fix: hand back only after a genuine tick move since
+  detection.
 - **Safe-layer raise not retried:** the raise ignores Screen's return codes and marks the layer up regardless
   (`telltale.c:454-461`); later checks repost only changed content, so a raise that failed once would not be retried in that
   incident (the kill and respawn still run). Not seen: every recorded incident (138) and every detected bench row (410) has the
