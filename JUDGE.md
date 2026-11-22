@@ -17,7 +17,7 @@ All timings below are **QEMU (TCG) on an x86_64 guest, not hardware timing.**
 
 Not every target was met. The <100 ms stretch target was met only for BLANK, and STALE missed its W+100 ms target. Both misses are published in [DEMO.md](DEMO.md).
 
-## The video, by chapter (2:51)
+## The video, by chapter (2:51): [youtu.be/ONV3rW4BZKo](https://youtu.be/ONV3rW4BZKo)
 
 | Time | What to watch |
 |---|---|

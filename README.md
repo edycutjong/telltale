@@ -13,6 +13,7 @@
   <br/>
 
   [![Site](https://img.shields.io/badge/🚀_Site-telltale.edycu.dev-06b6d4?style=for-the-badge)](https://telltale.edycu.dev)
+  [![Demo video](https://img.shields.io/badge/▶️_Demo_video-2:51-ff0000?style=for-the-badge&logo=youtube&logoColor=white)](https://youtu.be/ONV3rW4BZKo)
   [![Judge guide](https://img.shields.io/badge/⚖️_Judge_guide-2_minutes-22c55e?style=for-the-badge)](JUDGE.md)
   [![Pitch deck](https://img.shields.io/badge/📊_Pitch_deck-10_slides-ef4444?style=for-the-badge)](https://telltale.edycu.dev/pitch/)
   [![Codelab](https://img.shields.io/badge/🧪_Codelab-first_QNX_resource_manager-f59e0b?style=for-the-badge)](https://telltale.edycu.dev/codelab/)
@@ -137,6 +138,7 @@ make test-target                  # on-target suite, 190 passed / 0 failed at f2
 ```
 
 ## 📽️ Demo Materials
+- Demo video (2:51, real QNX 8.0 target footage under QEMU TCG): [youtu.be/ONV3rW4BZKo](https://youtu.be/ONV3rW4BZKo)
 - Site: [telltale.edycu.dev](https://telltale.edycu.dev), the landing page, served from [`docs/`](docs/).
 - [Pitch deck](https://telltale.edycu.dev/pitch/)
 - [Codelab](https://telltale.edycu.dev/codelab/): your first QNX 8.0 resource manager on an Apple-Silicon Mac (every step run for real, on the Mac host or the QEMU guest); sources in [`codelab/`](codelab/README.md).
