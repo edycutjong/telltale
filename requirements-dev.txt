@@ -1,3 +1,5 @@
-# Host-side dev tooling: ruff (lint) and Pillow (check_run.py reads the display frames ttshot captured).
+# Host-side dev tooling: ruff (lint), Pillow (check_run.py reads the display frames ttshot captured),
+# numpy (tools/ttv_decode.py rebuilds ttrec recordings; without it test_ttv_decode skips its decode test).
 ruff==0.15.2
 pillow==13.0.0
+numpy==2.4.6
