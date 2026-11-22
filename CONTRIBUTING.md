@@ -1,6 +1,6 @@
 # Contributing
 
-## Host checks (what CI runs)
+## Host checks (what CI runs; see .github/workflows/ci.yml)
 ```
 make lint        # ruff
 make test-host   # C unit tests (host cc) + Python tests

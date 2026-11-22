@@ -1,0 +1,129 @@
+name: CI/CD Pipeline
+
+# 6 stages, adapted to a C (QNX target) + Python (host tools) repo:
+#   1 Quality  ─┐
+#               ├─ parallel ─> 3 Build ─> 4 E2E replay ─> 5 Repro/perf gate ─> 6 Release gate
+#   2 Security ─┘
+# The QNX cross-build (qcc) cannot run here: the QNX SDP is only downloadable behind a myQNX login and licence
+# (see CONTRIBUTING.md). The target is exercised by `make test-target` on a QEMU guest; its raw logs are committed
+# under evidence/test-target/ and Stage 4 re-asserts them on every push. CodeQL runs in codeql.yml.
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+  workflow_dispatch:
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  # ── STAGE 1: Code quality (parallel with Stage 2) ─────────
+  quality:
+    name: "Stage 1 · Quality (ruff + Python tests)"
+    runs-on: ubuntu-24.04
+    strategy:
+      fail-fast: false
+      matrix:
+        # full matrix on main, one interpreter on PRs
+        python-version: ${{ github.event_name == 'push' && fromJSON('["3.11", "3.12", "3.13"]') || fromJSON('["3.12"]') }}
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-python@v7
+        with:
+          python-version: ${{ matrix.python-version }}
+          cache: pip
+          cache-dependency-path: requirements-dev.txt
+      - run: pip install -r requirements-dev.txt
+      - name: Lint (ruff)
+        run: make lint
+      - name: Python host tests
+        run: make test-host-py
+
+  # ── STAGE 2: Security gate (parallel with Stage 1) ────────
+  security:
+    name: "Stage 2 · Security (gitleaks + repo hygiene)"
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          fetch-depth: 0   # full history: the public flip is judged on the past, not just the tip
+      - name: gitleaks (full history)
+        run: |
+          curl -sSfL https://github.com/gitleaks/gitleaks/releases/download/v8.21.2/gitleaks_8.21.2_linux_x64.tar.gz | tar -xz gitleaks
+          ./gitleaks detect --source . --log-opts="--all" --redact --verbose
+      - name: Kitchen never enters the public repo
+        run: |
+          bad=$(git ls-files | grep -E '(^|/)(\.claude|AGENTS\.md|CLAUDE\.md|specs|submission)(/|$)' || true)
+          if [ -n "$bad" ]; then echo "::error::kitchen files tracked:"; echo "$bad"; exit 1; fi
+      - name: License is Apache-2.0
+        run: grep -q "Apache License" LICENSE && grep -q "Version 2.0" LICENSE
+      - name: Dependencies
+        run: |
+          # The host tools use only the Python standard library; the only third-party pin is the lint tool,
+          # whose updates Dependabot proposes. Nothing here to audit beyond that, so audit it for real.
+          pip install pip-audit && pip-audit -r requirements-dev.txt
+
+  # ── STAGE 3: Build verification ───────────────────────────
+  build:
+    name: "Stage 3 · Build (host C, ${{ matrix.cc }}, -Werror)"
+    needs: [quality]
+    runs-on: ubuntu-24.04
+    strategy:
+      fail-fast: false
+      matrix:
+        cc: [gcc, clang]
+    steps:
+      - uses: actions/checkout@v7
+      - name: Build and run the host C checks
+        run: make test-host-c CC=${{ matrix.cc }}
+
+  # ── STAGE 4: End-to-end replay of the real target run ─────
+  e2e:
+    name: "Stage 4 · E2E (re-assert the recorded QNX/QEMU run)"
+    needs: [build]
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-python@v7
+        with:
+          python-version: "3.12"
+      - name: Replay evidence/test-target through scripts/check_run.py
+        run: scripts/replay_target_run.sh
+      - name: Newest recorded run says 0 failed
+        run: |
+          s=$(ls -d evidence/test-target/*/ | sort | tail -1)summary.txt
+          tail -n 1 "$s"; tail -n 1 "$s" | grep -q ' 0 failed'
+
+  # ── STAGE 5: Reproducibility / performance gate ───────────
+  perf:
+    name: "Stage 5 · Reproducible bench tables"
+    needs: [build]
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-python@v7
+        with:
+          python-version: "3.12"
+      - name: Regenerate evidence/RESULTS.md from the committed raw rows
+        run: scripts/bench_all.sh report
+      - name: Fail if the regenerated tables differ from the committed ones
+        run: |
+          git diff --exit-code -- evidence/RESULTS.md \
+            || { echo "::error::evidence/RESULTS.md is not reproducible from evidence/*.csv"; exit 1; }
+
+  # ── STAGE 6: Release gate (main only) ─────────────────────
+  gate:
+    name: "Stage 6 · Release gate"
+    needs: [quality, security, build, e2e, perf]
+    runs-on: ubuntu-24.04
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    steps:
+      - run: |
+          echo "All gates passed: quality, security, build, e2e replay, reproducible bench."
+          echo "Versioning is automatic: release.yml tags from conventional commits. CodeQL: codeql.yml."
