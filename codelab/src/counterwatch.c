@@ -27,7 +27,7 @@ int main(int argc, char **argv)
     int fd = open(COUNTER_DEVPATH, O_RDWR);
     if (fd == -1) { perror("open " COUNTER_DEVPATH); return 1; }
 
-    int chid = ChannelCreate(0);
+    int chid = ChannelCreate(_NTO_CHF_PRIVATE);  /* private: only this process connects; a public channel is an ability */
     int coid = ConnectAttach(0, 0, chid, _NTO_SIDE_CHANNEL, 0);
     struct sigevent ev;
     SIGEV_PULSE_INIT(&ev, coid, SIGEV_PULSE_PRIO_INHERIT, PULSE_CODE, 0);

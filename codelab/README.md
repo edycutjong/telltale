@@ -219,7 +219,7 @@ static int io_read(resmgr_context_t *ctp, io_read_t *msg, iofunc_ocb_t *ocb)
 }
 ```
 
-`write()` reads the client's bytes with `resmgr_msgread()` (the offset `sizeof msg->i` skips the message header) and understands two words. Anything else is `EINVAL`, which the shell reports for you:
+`write()` reads the client's bytes with `resmgr_msgread()` (the offset `sizeof msg->i` skips the message header) and understands two words. Anything else is `EINVAL`, which the shell reports for you. A write longer than the buffer, or one with a NUL byte inside, is refused rather than cut short, so `inc` followed by junk is not quietly accepted:
 
 ```c
 // src/counter.c
@@ -230,8 +230,10 @@ static int io_write(resmgr_context_t *ctp, io_write_t *msg, iofunc_ocb_t *ocb)
     if ((msg->i.xtype & _IO_XTYPE_MASK) != _IO_XTYPE_NONE) return ENOSYS;
 
     char cmd[16] = {0};
-    size_t n = msg->i.nbytes < sizeof cmd - 1 ? msg->i.nbytes : sizeof cmd - 1;
+    if (msg->i.nbytes >= sizeof cmd) return EINVAL;  /* longer than any command: refuse it, never truncate it */
+    size_t n = msg->i.nbytes;
     if (resmgr_msgread(ctp, cmd, n, sizeof msg->i) != (int)n) return EFAULT;
+    if (memchr(cmd, '\0', n)) return EINVAL;          /* "inc\0junk" must not pass as "inc" */
     while (n && (cmd[n - 1] == '\n' || cmd[n - 1] == ' ')) cmd[--n] = 0;
 
     if (!strcmp(cmd, "inc"))        ocb->attr->value++;
@@ -249,7 +251,7 @@ static int io_write(resmgr_context_t *ctp, io_write_t *msg, iofunc_ocb_t *ocb)
 ## devctl()
 _Duration: 5:00_
 
-`devctl()` is a typed request/reply: the client sends a command plus a small struct, the server sends a struct back. Always give the standard devctls (`iofunc_devctl_default`) the first chance, then handle your own; the data lives right after the message header, at `_DEVCTL_DATA()`. The reply is a `struct _io_devctl_reply` plus any returned bytes. Note the size check on `ADD`: a client could send a struct of any size, so the server checks before it reads one.
+`devctl()` is a typed request/reply: the client sends a command plus a small struct, the server sends a struct back. Always give the standard devctls (`iofunc_devctl_default`) the first chance, then handle your own; the data lives right after the message header, at `_DEVCTL_DATA()`. The reply is a `struct _io_devctl_reply` plus any returned bytes. Note the size checks: on `ADD` a client could send a struct of any size, so the server checks before it reads one; on `GET` the client says how big its buffer is, so the server checks that the reply fits before it writes one.
 
 ```c
 // src/counter.c
@@ -262,6 +264,7 @@ static int io_devctl(resmgr_context_t *ctp, io_devctl_t *msg, iofunc_ocb_t *ocb)
     int nbytes = 0;
     switch (msg->i.dcmd) {
     case DCMD_COUNTER_GET:
+        if (msg->i.nbytes < sizeof(uint64_t)) return EINVAL;  /* the reply must fit the client's buffer */
         *(uint64_t *)_DEVCTL_DATA(msg->o) = a->value;
         nbytes = sizeof(uint64_t);
         break;
@@ -364,9 +367,9 @@ Output (recorded):
 
 ```text
 total 72
--rwxr-xr-x  1 qnxuser qnxuser 14528 2026-11-16 01:14 counter
--rwxr-xr-x  1 qnxuser qnxuser  9536 2026-11-16 01:14 counterctl
--rwxr-xr-x  1 qnxuser qnxuser 13800 2026-11-16 01:14 counterwatch
+-rwxr-xr-x  1 qnxuser qnxuser 14560 2026-11-22 06:24 counter
+-rwxr-xr-x  1 qnxuser qnxuser  9536 2026-11-22 06:24 counterctl
+-rwxr-xr-x  1 qnxuser qnxuser 13800 2026-11-22 06:24 counterwatch
 ```
 
 ## Run it
@@ -400,7 +403,7 @@ Output (recorded):
 
 ```text
 counter: serving /dev/counter
-crw-rw-rw-  1 root root 0,   1 2026-11-16 01:14 /dev/counter
+crw-rw-rw-  1 root root 0,   1 2026-11-22 06:24 /dev/counter
 ```
 
 `/dev/counter` is now a file in the guest. Use it like one, with no special client library. A freshly started server's counter is 0:
@@ -507,7 +510,7 @@ tgt 'cat /dev/counter'
 Output (recorded):
 
 ```text
-10453021 ./counter
+15044636 ./counter
 cat: /dev/counter: No such file or directory
 ```
 
@@ -531,7 +534,7 @@ _Duration: 12:00_
 
 A client that wants to know when the counter changes has two bad options: poll in a loop (wastes CPU, adds latency) or block in `read()` (cannot do anything else). QNX's answer is **`ionotify()`**: the client says "send me this event when `/dev/counter` has input", and goes to sleep until it arrives.
 
-Some vocabulary first. A **channel** is a mailbox a process creates to receive on (`ChannelCreate`); a **connection** is a handle for sending to one (`ConnectAttach`; here the client connects to its own channel). A **pulse** is the smallest QNX message: a fixed-size, non-blocking packet with a small code and a value. A **`sigevent`** describes what to deliver; `SIGEV_PULSE_INIT` builds one that says "send this pulse to this connection". The server delivers it on the client's behalf when the condition becomes true, and the client picks it up with `MsgReceivePulse()` (or `MsgReceive()`, if the same thread must also serve messages from other clients).
+Some vocabulary first. A **channel** is a mailbox a process creates to receive on (`ChannelCreate`; `_NTO_CHF_PRIVATE` keeps it private to that process, which is all a pulse-only client needs, while creating a public channel takes the `public_channel` ability in QNX 8.0's security model); a **connection** is a handle for sending to one (`ConnectAttach`; here the client connects to its own channel). A **pulse** is the smallest QNX message: a fixed-size, non-blocking packet with a small code and a value. A **`sigevent`** describes what to deliver; `SIGEV_PULSE_INIT` builds one that says "send this pulse to this connection". The server delivers it on the client's behalf when the condition becomes true, and the client picks it up with `MsgReceivePulse()` (or `MsgReceive()`, if the same thread must also serve messages from other clients).
 
 The server side has two parts. `io_notify()` tells the library which conditions are true *right now*; for a `POLLARM` request, which is what the client below sends, the library arms the client's event only if none of the conditions the client asked about is true (see the `iofunc_notify()` reference page). `counter_changed()` fires the armed events whenever a `write()` or `devctl()` modifies the counter, even when the value ends up the same (for example `reset` at 0). Arming is one-shot: after an event fires, the client must arm again, which is why the client below loops. The `unread` flag is per device, not per open file: whoever reads the value clears it for every watcher.
 
@@ -566,7 +569,7 @@ int main(int argc, char **argv)
     int fd = open(COUNTER_DEVPATH, O_RDWR);
     if (fd == -1) { perror("open " COUNTER_DEVPATH); return 1; }
 
-    int chid = ChannelCreate(0);
+    int chid = ChannelCreate(_NTO_CHF_PRIVATE);  /* private: only this process connects; a public channel is an ability */
     int coid = ConnectAttach(0, 0, chid, _NTO_SIDE_CHANNEL, 0);
     struct sigevent ev;
     SIGEV_PULSE_INIT(&ev, coid, SIGEV_PULSE_PRIO_INHERIT, PULSE_CODE, 0);
@@ -612,7 +615,7 @@ Output (recorded):
 counterwatch: armed, waiting for 1 change(s)
 wake-ups seen: 0
      pid tid name                         prio STATE          Blocked
-11747356   1 ./counterwatch-noreg          10r RECEIVE        1
+15675418   1 ./counterwatch-noreg          10r RECEIVE        1
 ```
 
 The client printed that it armed, the counter changed, and the output shows zero wake-ups after four seconds: no pulse arrived (the watcher is in `RECEIVE` state either way; the proof is the empty wake-up count, which the working run below contrasts). Now the real one, with the registration. While it sleeps we check what it is doing, then change the counter three times: a `write`, a `devctl`, another `write`:
@@ -630,7 +633,7 @@ Output (recorded):
 ```text
 counterwatch: armed, waiting for 3 change(s)
      pid tid name                         prio STATE          Blocked
-11227163   1 qnxuser/codelab/counterwatch  10r RECEIVE        1
+15896601   1 qnxuser/codelab/counterwatch  10r RECEIVE        1
 counterwatch: value is now 2
 counterwatch: value is now 7
 counterwatch: value is now 8

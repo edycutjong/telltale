@@ -117,7 +117,7 @@ Every handler gets the message (`msg`), the per-open state (`ocb`) and a context
 
 {{fn src/counter.c io_read}}
 
-`write()` reads the client's bytes with `resmgr_msgread()` (the offset `sizeof msg->i` skips the message header) and understands two words. Anything else is `EINVAL`, which the shell reports for you:
+`write()` reads the client's bytes with `resmgr_msgread()` (the offset `sizeof msg->i` skips the message header) and understands two words. Anything else is `EINVAL`, which the shell reports for you. A write longer than the buffer, or one with a NUL byte inside, is refused rather than cut short, so `inc` followed by junk is not quietly accepted:
 
 {{fn src/counter.c io_write}}
 
@@ -126,7 +126,7 @@ Every handler gets the message (`msg`), the per-open state (`ocb`) and a context
 ## devctl()
 Duration: 5:00
 
-`devctl()` is a typed request/reply: the client sends a command plus a small struct, the server sends a struct back. Always give the standard devctls (`iofunc_devctl_default`) the first chance, then handle your own; the data lives right after the message header, at `_DEVCTL_DATA()`. The reply is a `struct _io_devctl_reply` plus any returned bytes. Note the size check on `ADD`: a client could send a struct of any size, so the server checks before it reads one.
+`devctl()` is a typed request/reply: the client sends a command plus a small struct, the server sends a struct back. Always give the standard devctls (`iofunc_devctl_default`) the first chance, then handle your own; the data lives right after the message header, at `_DEVCTL_DATA()`. The reply is a `struct _io_devctl_reply` plus any returned bytes. Note the size checks: on `ADD` a client could send a struct of any size, so the server checks before it reads one; on `GET` the client says how big its buffer is, so the server checks that the reply fits before it writes one.
 
 {{fn src/counter.c io_devctl}}
 
@@ -238,7 +238,7 @@ Duration: 12:00
 
 A client that wants to know when the counter changes has two bad options: poll in a loop (wastes CPU, adds latency) or block in `read()` (cannot do anything else). QNX's answer is **`ionotify()`**: the client says "send me this event when `/dev/counter` has input", and goes to sleep until it arrives.
 
-Some vocabulary first. A **channel** is a mailbox a process creates to receive on (`ChannelCreate`); a **connection** is a handle for sending to one (`ConnectAttach`; here the client connects to its own channel). A **pulse** is the smallest QNX message: a fixed-size, non-blocking packet with a small code and a value. A **`sigevent`** describes what to deliver; `SIGEV_PULSE_INIT` builds one that says "send this pulse to this connection". The server delivers it on the client's behalf when the condition becomes true, and the client picks it up with `MsgReceivePulse()` (or `MsgReceive()`, if the same thread must also serve messages from other clients).
+Some vocabulary first. A **channel** is a mailbox a process creates to receive on (`ChannelCreate`; `_NTO_CHF_PRIVATE` keeps it private to that process, which is all a pulse-only client needs, while creating a public channel takes the `public_channel` ability in QNX 8.0's security model); a **connection** is a handle for sending to one (`ConnectAttach`; here the client connects to its own channel). A **pulse** is the smallest QNX message: a fixed-size, non-blocking packet with a small code and a value. A **`sigevent`** describes what to deliver; `SIGEV_PULSE_INIT` builds one that says "send this pulse to this connection". The server delivers it on the client's behalf when the condition becomes true, and the client picks it up with `MsgReceivePulse()` (or `MsgReceive()`, if the same thread must also serve messages from other clients).
 
 The server side has two parts. `io_notify()` tells the library which conditions are true *right now*; for a `POLLARM` request, which is what the client below sends, the library arms the client's event only if none of the conditions the client asked about is true (see the `iofunc_notify()` reference page). `counter_changed()` fires the armed events whenever a `write()` or `devctl()` modifies the counter, even when the value ends up the same (for example `reset` at 0). Arming is one-shot: after an event fires, the client must arm again, which is why the client below loops. The `unread` flag is per device, not per open file: whoever reads the value clears it for every watcher.
 

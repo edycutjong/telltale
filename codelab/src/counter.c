@@ -1,9 +1,9 @@
 /* counter.c - a tiny QNX 8.0 resource manager: /dev/counter
  *
  *   read()     -> the current value as text ("7\n"); a second read on the same fd returns 0 bytes (EOF)
- *   write()    -> "inc" adds 1, "reset" sets 0 (anything else: EINVAL)
+ *   write()    -> "inc" adds 1, "reset" sets 0 (anything else, also an over-long or NUL-carrying write: EINVAL)
  *   devctl()   -> DCMD_COUNTER_GET / _ADD / _RESET (see counter.h)
- *   ionotify() -> a client can ask for a pulse whenever the value changed since it was last read
+ *   ionotify() -> a client can ask for a pulse whenever the value changed since it was last read (by any client)
  *
  * Build: qcc -Vgcc_ntox86_64 -Wall -Wextra -Werror -o counter counter.c   Run as root (it registers a name).
  */
@@ -68,8 +68,10 @@ static int io_write(resmgr_context_t *ctp, io_write_t *msg, iofunc_ocb_t *ocb)
     if ((msg->i.xtype & _IO_XTYPE_MASK) != _IO_XTYPE_NONE) return ENOSYS;
 
     char cmd[16] = {0};
-    size_t n = msg->i.nbytes < sizeof cmd - 1 ? msg->i.nbytes : sizeof cmd - 1;
+    if (msg->i.nbytes >= sizeof cmd) return EINVAL;  /* longer than any command: refuse it, never truncate it */
+    size_t n = msg->i.nbytes;
     if (resmgr_msgread(ctp, cmd, n, sizeof msg->i) != (int)n) return EFAULT;
+    if (memchr(cmd, '\0', n)) return EINVAL;          /* "inc\0junk" must not pass as "inc" */
     while (n && (cmd[n - 1] == '\n' || cmd[n - 1] == ' ')) cmd[--n] = 0;
 
     if (!strcmp(cmd, "inc"))        ocb->attr->value++;
@@ -90,6 +92,7 @@ static int io_devctl(resmgr_context_t *ctp, io_devctl_t *msg, iofunc_ocb_t *ocb)
     int nbytes = 0;
     switch (msg->i.dcmd) {
     case DCMD_COUNTER_GET:
+        if (msg->i.nbytes < sizeof(uint64_t)) return EINVAL;  /* the reply must fit the client's buffer */
         *(uint64_t *)_DEVCTL_DATA(msg->o) = a->value;
         nbytes = sizeof(uint64_t);
         break;

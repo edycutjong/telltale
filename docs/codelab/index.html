@@ -214,7 +214,7 @@ static int io_read(resmgr_context_t *ctp, io_read_t *msg, iofunc_ocb_t *ocb)
     return _RESMGR_NPARTS(0);
 }
 </code></pre>
-<p><code>write()</code> reads the client's bytes with <code>resmgr_msgread()</code> (the offset <code>sizeof msg-&gt;i</code> skips the message header) and understands two words. Anything else is <code>EINVAL</code>, which the shell reports for you:</p>
+<p><code>write()</code> reads the client's bytes with <code>resmgr_msgread()</code> (the offset <code>sizeof msg-&gt;i</code> skips the message header) and understands two words. Anything else is <code>EINVAL</code>, which the shell reports for you. A write longer than the buffer, or one with a NUL byte inside, is refused rather than cut short, so <code>inc</code> followed by junk is not quietly accepted:</p>
 <pre><code class="language-c">// src/counter.c
 static int io_write(resmgr_context_t *ctp, io_write_t *msg, iofunc_ocb_t *ocb)
 {
@@ -223,8 +223,10 @@ static int io_write(resmgr_context_t *ctp, io_write_t *msg, iofunc_ocb_t *ocb)
     if ((msg-&gt;i.xtype &amp; _IO_XTYPE_MASK) != _IO_XTYPE_NONE) return ENOSYS;
 
     char cmd[16] = {0};
-    size_t n = msg-&gt;i.nbytes &lt; sizeof cmd - 1 ? msg-&gt;i.nbytes : sizeof cmd - 1;
+    if (msg-&gt;i.nbytes &gt;= sizeof cmd) return EINVAL;  /* longer than any command: refuse it, never truncate it */
+    size_t n = msg-&gt;i.nbytes;
     if (resmgr_msgread(ctp, cmd, n, sizeof msg-&gt;i) != (int)n) return EFAULT;
+    if (memchr(cmd, '\0', n)) return EINVAL;          /* &quot;inc\0junk&quot; must not pass as &quot;inc&quot; */
     while (n &amp;&amp; (cmd[n - 1] == '\n' || cmd[n - 1] == ' ')) cmd[--n] = 0;
 
     if (!strcmp(cmd, &quot;inc&quot;))        ocb-&gt;attr-&gt;value++;
@@ -239,7 +241,7 @@ static int io_write(resmgr_context_t *ctp, io_write_t *msg, iofunc_ocb_t *ocb)
 <p><code>counter_changed()</code>, near the top of the file, sets <code>unread</code> and calls <code>iofunc_notify_trigger()</code>; ignore it until the <code>ionotify()</code> step.</p>
 </section><section class="step" id="devctl"><h2>devctl()</h2><span class="dur">5:00 min</span>
 
-<p><code>devctl()</code> is a typed request/reply: the client sends a command plus a small struct, the server sends a struct back. Always give the standard devctls (<code>iofunc_devctl_default</code>) the first chance, then handle your own; the data lives right after the message header, at <code>_DEVCTL_DATA()</code>. The reply is a <code>struct _io_devctl_reply</code> plus any returned bytes. Note the size check on <code>ADD</code>: a client could send a struct of any size, so the server checks before it reads one.</p>
+<p><code>devctl()</code> is a typed request/reply: the client sends a command plus a small struct, the server sends a struct back. Always give the standard devctls (<code>iofunc_devctl_default</code>) the first chance, then handle your own; the data lives right after the message header, at <code>_DEVCTL_DATA()</code>. The reply is a <code>struct _io_devctl_reply</code> plus any returned bytes. Note the size checks: on <code>ADD</code> a client could send a struct of any size, so the server checks before it reads one; on <code>GET</code> the client says how big its buffer is, so the server checks that the reply fits before it writes one.</p>
 <pre><code class="language-c">// src/counter.c
 static int io_devctl(resmgr_context_t *ctp, io_devctl_t *msg, iofunc_ocb_t *ocb)
 {
@@ -250,6 +252,7 @@ static int io_devctl(resmgr_context_t *ctp, io_devctl_t *msg, iofunc_ocb_t *ocb)
     int nbytes = 0;
     switch (msg-&gt;i.dcmd) {
     case DCMD_COUNTER_GET:
+        if (msg-&gt;i.nbytes &lt; sizeof(uint64_t)) return EINVAL;  /* the reply must fit the client's buffer */
         *(uint64_t *)_DEVCTL_DATA(msg-&gt;o) = a-&gt;value;
         nbytes = sizeof(uint64_t);
         break;
@@ -334,9 +337,9 @@ tgt 'ls -l ~/codelab'
 </code></pre>
 <div class="lbl">Output (recorded)</div>
 <pre class="out"><code>total 72
--rwxr-xr-x  1 qnxuser qnxuser 14528 2026-11-16 01:14 counter
--rwxr-xr-x  1 qnxuser qnxuser  9536 2026-11-16 01:14 counterctl
--rwxr-xr-x  1 qnxuser qnxuser 13800 2026-11-16 01:14 counterwatch
+-rwxr-xr-x  1 qnxuser qnxuser 14560 2026-11-22 06:24 counter
+-rwxr-xr-x  1 qnxuser qnxuser  9536 2026-11-22 06:24 counterctl
+-rwxr-xr-x  1 qnxuser qnxuser 13800 2026-11-22 06:24 counterwatch
 </code></pre>
 </section><section class="step" id="run-it"><h2>Run it</h2><span class="dur">5:00 min</span>
 
@@ -357,7 +360,7 @@ tgt 'ls -l /dev/counter'
 </code></pre>
 <div class="lbl">Output (recorded)</div>
 <pre class="out"><code>counter: serving /dev/counter
-crw-rw-rw-  1 root root 0,   1 2026-11-16 01:14 /dev/counter
+crw-rw-rw-  1 root root 0,   1 2026-11-22 06:24 /dev/counter
 </code></pre>
 <p><code>/dev/counter</code> is now a file in the guest. Use it like one, with no special client library. A freshly started server's counter is 0:</p>
 <pre><code class="language-bash">source env.sh
@@ -431,7 +434,7 @@ tgtroot 'slay counter'
 tgt 'cat /dev/counter'
 </code></pre>
 <div class="lbl">Output (recorded)</div>
-<pre class="out"><code>10453021 ./counter
+<pre class="out"><code>15044636 ./counter
 cat: /dev/counter: No such file or directory
 </code></pre>
 <pre><code class="language-bash">source env.sh
@@ -447,7 +450,7 @@ tgt 'cat /dev/counter'
 </section><section class="step" id="ionotify-wait-without-polling"><h2>ionotify(): wait without polling</h2><span class="dur">12:00 min</span>
 
 <p>A client that wants to know when the counter changes has two bad options: poll in a loop (wastes CPU, adds latency) or block in <code>read()</code> (cannot do anything else). QNX's answer is <strong><code>ionotify()</code></strong>: the client says "send me this event when <code>/dev/counter</code> has input", and goes to sleep until it arrives.</p>
-<p>Some vocabulary first. A <strong>channel</strong> is a mailbox a process creates to receive on (<code>ChannelCreate</code>); a <strong>connection</strong> is a handle for sending to one (<code>ConnectAttach</code>; here the client connects to its own channel). A <strong>pulse</strong> is the smallest QNX message: a fixed-size, non-blocking packet with a small code and a value. A <strong><code>sigevent</code></strong> describes what to deliver; <code>SIGEV_PULSE_INIT</code> builds one that says "send this pulse to this connection". The server delivers it on the client's behalf when the condition becomes true, and the client picks it up with <code>MsgReceivePulse()</code> (or <code>MsgReceive()</code>, if the same thread must also serve messages from other clients).</p>
+<p>Some vocabulary first. A <strong>channel</strong> is a mailbox a process creates to receive on (<code>ChannelCreate</code>; <code>_NTO_CHF_PRIVATE</code> keeps it private to that process, which is all a pulse-only client needs, while creating a public channel takes the <code>public_channel</code> ability in QNX 8.0's security model); a <strong>connection</strong> is a handle for sending to one (<code>ConnectAttach</code>; here the client connects to its own channel). A <strong>pulse</strong> is the smallest QNX message: a fixed-size, non-blocking packet with a small code and a value. A <strong><code>sigevent</code></strong> describes what to deliver; <code>SIGEV_PULSE_INIT</code> builds one that says "send this pulse to this connection". The server delivers it on the client's behalf when the condition becomes true, and the client picks it up with <code>MsgReceivePulse()</code> (or <code>MsgReceive()</code>, if the same thread must also serve messages from other clients).</p>
 <p>The server side has two parts. <code>io_notify()</code> tells the library which conditions are true <em>right now</em>; for a <code>POLLARM</code> request, which is what the client below sends, the library arms the client's event only if none of the conditions the client asked about is true (see the <code>iofunc_notify()</code> reference page). <code>counter_changed()</code> fires the armed events whenever a <code>write()</code> or <code>devctl()</code> modifies the counter, even when the value ends up the same (for example <code>reset</code> at 0). Arming is one-shot: after an event fires, the client must arm again, which is why the client below loops. The <code>unread</code> flag is per device, not per open file: whoever reads the value clears it for every watcher.</p>
 <pre><code class="language-c">// src/counter.c
 static int io_notify(resmgr_context_t *ctp, io_notify_t *msg, iofunc_ocb_t *ocb)
@@ -474,7 +477,7 @@ int main(int argc, char **argv)
     int fd = open(COUNTER_DEVPATH, O_RDWR);
     if (fd == -1) { perror(&quot;open &quot; COUNTER_DEVPATH); return 1; }
 
-    int chid = ChannelCreate(0);
+    int chid = ChannelCreate(_NTO_CHF_PRIVATE);  /* private: only this process connects; a public channel is an ability */
     int coid = ConnectAttach(0, 0, chid, _NTO_SIDE_CHANNEL, 0);
     struct sigevent ev;
     SIGEV_PULSE_INIT(&amp;ev, coid, SIGEV_PULSE_PRIO_INHERIT, PULSE_CODE, 0);
@@ -514,7 +517,7 @@ tgt 'slay counterwatch-noreg' || true     # stop it
 <pre class="out"><code>counterwatch: armed, waiting for 1 change(s)
 wake-ups seen: 0
      pid tid name                         prio STATE          Blocked
-11747356   1 ./counterwatch-noreg          10r RECEIVE        1
+15675418   1 ./counterwatch-noreg          10r RECEIVE        1
 </code></pre>
 <p>The client printed that it armed, the counter changed, and the output shows zero wake-ups after four seconds: no pulse arrived (the watcher is in <code>RECEIVE</code> state either way; the proof is the empty wake-up count, which the working run below contrasts). Now the real one, with the registration. While it sleeps we check what it is doing, then change the counter three times: a <code>write</code>, a <code>devctl</code>, another <code>write</code>:</p>
 <pre><code class="language-bash">source env.sh
@@ -526,7 +529,7 @@ wait
 <div class="lbl">Output (recorded)</div>
 <pre class="out"><code>counterwatch: armed, waiting for 3 change(s)
      pid tid name                         prio STATE          Blocked
-11227163   1 qnxuser/codelab/counterwatch  10r RECEIVE        1
+15896601   1 qnxuser/codelab/counterwatch  10r RECEIVE        1
 counterwatch: value is now 2
 counterwatch: value is now 7
 counterwatch: value is now 8
