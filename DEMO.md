@@ -18,7 +18,7 @@ The input is a real stop from the comma2k19 dataset: 49.01 km/h to 0 in 4.848 s 
 - Both targets were written before any run in the project's private specs on 2026-11-13, so this public history first contains them after the run (the calibration, `tick_stall_ms` = 151, was committed in `3a911ee` before the first fault row); the bound is `tick_stall_ms` 151 + period 20 + read-back p95 6.3 + 20 ms. Detection time is dominated by the configured `tick_stall_ms` (calibrated on a clean run, [`evidence/calibration/`](evidence/calibration/)), not by monitor speed.
 - STALE needs the true speed to move, so it carries the 100 ms truth window by construction; its p95 overshoots the target by about 70 ms, which was not decomposed or tuned afterwards. All 50 STALE rows were caught by the value check; a tick-only watchdog would not have caught them.
 - 50 renderer crashes: detect p50 14 ms, 0 missed. 10 MISDRAW (the renderer intends the right value and draws another): 10/10 caught; a self-report check on the renderer's own intent log would have passed all 50 BLANK and 10 MISDRAW runs.
-- Safe layer read back on glass p50 22.5-30.1 ms after detection; renderer restarted and verified p50 281-338 ms after detection (BLANK, FREEZE, STALE). STARVE is not restarted (the renderer is starved, not hung; `t_restart_ns` is empty): the verified true frame returns p50 2.88 s after detection, when the 3 s hog ends.
+- Safe layer read back on glass p50 22.5-30.1 ms after detection (B1: BLANK, FREEZE, STALE, STARVE); renderer restarted and verified p50 281-338 ms after detection (BLANK, FREEZE, STALE). In the crash bench (`5edab0a`) the safe layer was read back only after the respawn (p50 217.1 ms): that monitor stamped the safe layer on glass only once a renderer window was back (fixed in `645e563`); at the current monitor (`985ab29`) 5 crashes read it back 19.8-23.0 ms after detection ([`evidence/bench-regress-r04-crash.csv`](evidence/bench-regress-r04-crash.csv)). STARVE is not restarted (the renderer is starved, not hung; `t_restart_ns` is empty): the verified true frame returns p50 2.88 s after detection, when the 3 s hog ends.
 
 ### Monitor-off ablation
 40 runs (10 per class), 30 s window, `ttctl disarm` (the monitor still reads but never acts): the glass was wrong or missing a speed for a **median 29.9 s of 30 s** (minimum 29.09 s; target median >= 25 s, 0 runs below), and still wrong at the end of all 40. A disarmed monitor cannot recover, so this is a control, not a detection result.
@@ -35,12 +35,25 @@ The first 1800 s of the same drive (1820.8 s measured) with no fault: **0 false 
 
 ## Reproduce
 ```sh
-# needs the QNX SDP 8.0 toolchain and a booted guest, see README "Build and run"
+# needs the QNX SDP 8.0 toolchain and a booted guest, see README "Getting Started"
 scripts/bench_all.sh run      # B1 faults, crash, MISDRAW, ablation, clean replay, period sweep -> evidence/*.csv
 scripts/bench_all.sh report   # -> evidence/RESULTS.md and evidence/report.html (byte-identical on re-run)
 make test-host                # analysis tests, no QNX needed
 ```
 Or re-derive the tables from the committed rows with `scripts/bench.py` (no guest needed).
+
+## Which build ran each bench
+Every row file names the commit of the code that ran (`git_sha` column). The detection and recovery code changed after the main benches (code review rounds, cause expiry, the crash-path glass read), so the current monitor was re-checked with a smaller regression run instead of re-running all 200.
+
+| bench | rows | built at |
+|---|---|---|
+| B1: 200 injected faults | [`evidence/bench-faults.csv`](evidence/bench-faults.csv) | `7592e40` |
+| B6: 50 renderer crashes | [`evidence/bench-crash.csv`](evidence/bench-crash.csv) | `5edab0a` |
+| B7e: 10 MISDRAW, period sweep 10 / 50 ms | [`evidence/bench-misdraw.csv`](evidence/bench-misdraw.csv), [`evidence/bench-period.csv`](evidence/bench-period.csv) | `f15744a` |
+| B2: 40-run monitor-off ablation | [`evidence/bench-ablation.csv`](evidence/bench-ablation.csv) | `d3d5892` |
+| B3: 30-minute clean replay | [`evidence/bench-clean.csv`](evidence/bench-clean.csv) | committed in `5edab0a` (the per-check CSV has no `git_sha` column) |
+| Regression, 5 per class incl. CRASH, 25/25 detected | [`evidence/bench-regress-r04.csv`](evidence/bench-regress-r04.csv), [`-crash.csv`](evidence/bench-regress-r04-crash.csv) | code `985ab29` (rows say `7a4367f`, an evidence-only commit on top) |
+| On-target suite, 163 passed / 0 failed | [`evidence/test-target/20261115T232225Z/`](evidence/test-target/20261115T232225Z/summary.txt) | `985ab29`, re-checked on every push by CI Stage 4 |
 
 ## Conditions and limits
 - The bench driver runs on the Mac and the stamps are written on the target; host load1 during the runs was 1.8-35.9 and is logged per row. The `runmask` column reads `0xf` for every row although STARVE pins the renderer and hog to one CPU.

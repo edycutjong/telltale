@@ -12,7 +12,7 @@ the digits and lamps, and checks them against `/dev/vehicle`. On a lie it puts a
 top, decides hung vs starved from the renderer's thread states, kills and respawns a hung or wrong renderer, verifies
 the new one, and hands the display back. 20 ms is the configured check period (`period_ms`), not a measured figure.
 Recorded runs per fault class: [`evidence/runs/`](../evidence/runs/). Tests: `make test-host` = C checks (test_disp 12, test_decode 91,
-test_text 17, test_rcap 28) + 97 Python tests (8 need Pillow). `make test-target`: 163 passed, 0 failed on the QEMU (TCG) guest at
+test_text 17, test_rcap 28) + 109 Python tests (8 need Pillow, 2 need numpy: `pip install -r requirements-dev.txt`). `make test-target`: 163 passed, 0 failed on the QEMU (TCG) guest at
 commit 985ab29 ([`evidence/test-target/20261115T232225Z/summary.txt`](../evidence/test-target/20261115T232225Z/summary.txt), host
 load logged at start and end), including `tests/target/core_items.sh` 44/44 (`/dev/vehicle`, `ttctl`, `/dev/telltale`,
 TRUTH_LOST + recovery, DISARM mid-incident, a vehicled restart that leaves a stale renderer to be killed, NO_DISPLAY with the
@@ -91,13 +91,21 @@ STALE needs the true speed to move, so it carries the 100 ms truth window by con
   blank on every start is killed 3 times, then TT-GIVEUP, then rearm -> NORMAL), the kill after an UNKNOWN-cause stall
   (counted from when the cause became UNKNOWN, so one mixed state sample in a long STARVE cannot kill), the restart when a
   live renderer's window stays unreadable during SAFE-HOLD, a renderer that is starved first and then hangs or draws wrong
-  (a stall's cause expires when the tick moves again), dashes on the safe layer after a restarted `vehicled` empties the
+  (a stall's cause expires after `mismatch_n` genuine tick moves since the last stalled check), dashes on the safe layer after a restarted `vehicled` empties the
   truth window, a failed `kill()` (TT-GIVEUP, cause `kill-failed`), and the no-window glass read on its own (on this
   guest the regular composed check verifies the safe layer before the crashed window is found gone; the no-window read is
   the fallback when the post is not composed yet). Incident ids restart at 0001 when the monitor
   restarts, so `incidents.csv` can repeat an id across monitor runs (`t_detect_ns` tells them apart). `DCMD_VEH_GET_SINCE`
   (the monitor's truth path) and the ionotify pulses (the renderer's data path) run in every recorded run but have no
   separate assertion.
+- **No-window restart timing:** a starved or Screen-blocked renderer with no readable window is restarted once its
+  no-window checks times the current `period_ms` reach `restart_timeout_ms` (4 s). Late checks make the wait longer, and a
+  `ttctl period` change during that wait rescales the checks already counted (a longer period shortens it). Reviewed, not
+  exercised on the target; a wall-clock version would change the monitor, so it waits for the next on-target re-run.
+- **Crash-race label:** if the renderer dies on its own between the monitor's window read and its kill, `kill()` returns
+  ESRCH and the respawn path runs without counting a kill, but the incident's cause keeps the kill reason already written
+  (`live-wrong`, `BLANK`, `hung` or `no-window`; `src/telltale/telltale.c` sets it before the kill), not `crash`.
+  `restarts` unchanged and `t_kill_ns` 0 mark that case.
 - **The monitor is not supervised:** nothing restarts `telltale` if it dies (the display is then no longer checked);
   a restarted monitor relearns the renderer and arms again (asserted by `core_items.sh`). The monitor holds the
   `xprocess_debug` ability (`secpol/telltale.pol`) to read the renderer's thread states through `/proc` for the

@@ -8,7 +8,7 @@
   </picture>
 
   <p><strong>QNX primitives on the critical path:</strong> resource managers (<code>/dev/vehicle</code>, <code>/dev/telltale</code>) · message passing (devctl, pulses, <code>ionotify</code>) · QNX Screen read-back (<code>screen_read_display</code>) · <code>SCHED_FIFO</code> 60 · <code>secpol</code> types · <code>slog2</code> incident records.</p>
-  <p><strong>Result, on QEMU (TCG), not hardware timing:</strong> 200 injected faults in 4 classes, <strong>0 missed</strong>; 0 false positives in 91,029 checks of a 30-minute real drive; median 29.9 s wrong glass with the monitor off.</p>
+  <p><strong>Result, on QEMU (TCG), not hardware timing:</strong> 200 injected faults in 4 classes, <strong>0 missed</strong> (bench built at <code>7592e40</code>; re-checked 25/25 at the current monitor <code>985ab29</code>); 0 false positives in 91,029 checks of a 30-minute real drive; median 29.9 s wrong glass with the monitor off.</p>
 
   <br/>
 
@@ -44,7 +44,7 @@ Telltale is a separate process with its own security type: it reads the composed
 1. `vehfeed` replays real CAN speed from the comma2k19 drive dataset (MIT) into `vehicled`, the `/dev/vehicle` resource manager.
 2. `cluster` draws speed digits (a D-DIN glyph atlas), 6 lamps and a liveness tick with QNX Screen.
 3. `telltale` runs every 20 ms (the configured `period_ms`, not a measured figure): `screen_read_display` of the composed digit, lamp and tick regions, decode, compare with the vehicle state.
-4. On `VALUE_MISMATCH`, `TICK_STALL` or a blank: safe layer first, then a cause check through `/proc` (hung vs starved). The renderer is killed only if it is hung, drawing wrong or blank, or stalled for an unclassifiable cause for 5 x `tick_stall_ms`; a renderer classified as starved is not killed while its window is readable (0 of 50 STARVE runs restarted); with no readable window it is restarted after `restart_timeout_ms` (4 s). Then a verified hand-back.
+4. On `VALUE_MISMATCH`, `TICK_STALL` or a blank: safe layer first, then a cause check through `/proc` (hung vs starved). The renderer is killed only if it is hung, drawing wrong or blank, or stalled for an unclassifiable cause for 5 x `tick_stall_ms`; a renderer classified as starved is not killed while its window is readable (0 of 50 STARVE runs restarted at `7592e40`, 0 of 5 at `985ab29`); with no readable window it is restarted once its no-window checks add up to `restart_timeout_ms` (4 s; reviewed, not exercised on the target). Then a verified hand-back.
 
 The monitor does no machine learning on purpose: the check is a deterministic glyph decode, so the same frame gives the same verdict.
 
@@ -54,7 +54,7 @@ The monitor does no machine learning on purpose: the check is a deterministic gl
 | Build | SDP Linux host tools in a `linux/amd64` Docker container on macOS ([`docker/`](docker/), [`scripts/qcc.sh`](scripts/qcc.sh)) |
 | Target | QNX Everywhere Quick Start image, x86_64 guest under QEMU with TCG on an Apple-Silicon Mac (`scripts/run_qemu.sh`), Screen on the image's software virtual display. No Raspberry Pi or other hardware was used |
 | Languages | C (monitor, cluster, resource managers), Python 3.11+ (host tests, bench reports) |
-| Host tests | any POSIX `cc` and Python 3.11+ |
+| Host tests | any POSIX `cc`, Python 3.11+ and `pip install -r requirements-dev.txt` (ruff, Pillow, numpy; without the last two, 9 Python tests skip) |
 
 ## 🏆 QNX Integration
 - **Resource managers:** `/dev/vehicle`, `/dev/telltale`, `/dev/telltale-events`.
@@ -75,8 +75,9 @@ All timings are QEMU (TCG), not hardware. Not every target was met: see [DEMO.md
 | False positives | 0 in 91,029 checks (first 30 minutes of a real 31-minute drive) |
 | Wrong glass, monitor off | median 29.9 s of a 30 s window |
 | On-target suite | 163 passed / 0 failed at `985ab29` |
+| Built at | B1 faults `7592e40` · crash `5edab0a` · MISDRAW `f15744a` · ablation `d3d5892` · regression 25/25 and on-target suite `985ab29`, the current monitor (see [DEMO.md](DEMO.md#which-build-ran-each-bench)) |
 
-**CI/CD Pipeline, 6 stages:** Quality, Security, Build, E2E replay, Reproducibility gate, Release gate. CodeQL runs in its own workflow.
+**CI/CD Pipeline, 6 stages:** Quality (ruff, Python tests on 3.11-3.13), Security (gitleaks over the full history), Build (host C under gcc and clang; the QNX sources need the SDP, so CI cannot cross-build them), E2E replay (the cited on-target run: its summary matches this README, the code under test is unchanged since `985ab29`, and every recorded assertion is re-checked), Reproducibility (`evidence/RESULTS.md` and `report.html` regenerate byte-identical), Release (a semver tag only after every other stage passes). CodeQL runs in its own workflow over the Python and the host-buildable C (decode, truth, disp, text, rcap); the QNX-only sources are not in its database.
 
 ### Evidence
 | What | Where |
@@ -118,6 +119,7 @@ Reproduce every bench number: `scripts/bench_all.sh run` then `scripts/bench_all
 ## 🧪 Testing & CI
 ```sh
 make test-host                    # C + Python, no QNX needed
+scripts/replay_target_run.sh      # re-checks the committed on-target run, no QNX needed (CI Stage 4)
 make test-target                  # on-target suite, 163 passed / 0 failed at 985ab29
 ```
 
