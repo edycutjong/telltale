@@ -44,6 +44,13 @@ class TtvTest(unittest.TestCase):
         items = list(ttv_decode.read_frames(data[:-5]))
         self.assertEqual(len(items), 2)  # header + the one complete frame
 
+    @unittest.skipUnless(HAVE_NP, "numpy not installed")
+    def test_header_only_recording_is_a_failure(self):
+        with tempfile.TemporaryDirectory() as d:
+            p = Path(d) / "empty.ttv"
+            p.write_bytes(encode(32, 32, []))
+            self.assertEqual(ttv_decode.main(["ttv_decode.py", str(p), str(Path(d) / "out")]), 1)
+
     def test_bad_magic(self):
         with self.assertRaises(ValueError):
             next(ttv_decode.read_frames(b"NOPE" + bytes(12)))

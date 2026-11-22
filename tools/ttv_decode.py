@@ -24,7 +24,8 @@ def read_frames(data):
         t_ns, n = struct.unpack_from("<QI", data, off)
         off += 12
         if off + n * (4 + tsz) > len(data):
-            break  # truncated last frame (recorder killed mid-write): drop it
+            print(f"ttv_decode: dropped a truncated last frame at byte {off - 12}", file=sys.stderr)
+            break  # truncated last frame (recorder killed mid-write): drop it, say so
         tiles = []
         for _ in range(n):
             tx, ty = struct.unpack_from("<HH", data, off)
@@ -59,9 +60,11 @@ def main(argv):
         print(__doc__.strip().splitlines()[2].strip(), file=sys.stderr)
         return 1
     w, h, tile, index, _ = decode(argv[1], argv[2])
-    if index:
-        span = (index[-1][0] - index[0][0]) / 1e9
-        print(f"ttv_decode: {len(index)} frames {w}x{h} over {span:.2f} s -> {argv[2]}")
+    if not index:
+        print(f"ttv_decode: {argv[1]} holds no complete frame", file=sys.stderr)
+        return 1
+    span = (index[-1][0] - index[0][0]) / 1e9
+    print(f"ttv_decode: {len(index)} frames {w}x{h} over {span:.2f} s -> {argv[2]}")
     return 0
 
 

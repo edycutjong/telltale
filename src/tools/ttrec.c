@@ -3,13 +3,15 @@
  *   ttrec <out.ttv> <period_ms> <seconds> [full_every x,y,w,h[@every] ...]       (start it low: on -p 9)
  * With no regions every frame reads the whole display. With regions (display coordinates, multiples of 32) frame 0
  * reads the whole display, then each region is read every <every> frames (default 1) and the whole display every
- * <full_every> frames: reading only where the cluster can change keeps the extra Screen work small, so recording
- * does not perturb the monitor it films (a whole-display read costs ~40 ms of Screen time under QEMU TCG).
+ * <full_every> frames: reading only where the cluster can change keeps the extra Screen work small (a whole-display
+ * read costs ~40 ms of Screen time under QEMU TCG); its effect on the run being filmed was not measured.
+ * At most 16 regions; a region must lie inside the display (x, y >= 0), or ttrec refuses to start.
  * File format (little-endian): "TTV1", u32 w, u32 h, u32 tile; then per frame: u64 t_ns (CLOCK_MONOTONIC,
  * the clock the Telltale logs use), u32 n, then n x { u16 tx, u16 ty, tile*tile*4 bytes BGRA }.
  * Frame 0 stores every tile; later frames only the tiles that changed. tools/ttv_decode.py turns it into PNGs.
  * A tile outside every region can lag by up to <full_every> frames (it is only refreshed by the whole-display read).
- * Stops after <seconds>, or on SIGTERM/SIGINT (the file is always complete up to the last frame).
+ * Stops after <seconds>, or on SIGTERM/SIGINT (slay's default signal; the file is complete up to the last frame).
+ * Exit status: 0 = recording complete, 1 = bad arguments, 2 = setup failed, 3 = a read, write or the final close failed.
  * SPDX-License-Identifier: Apache-2.0 */
 #include <errno.h>
 #include <signal.h>
@@ -56,16 +58,18 @@ int main(int argc, char **argv)
     int n = 0; screen_get_context_property_iv(ctx, SCREEN_PROPERTY_DISPLAY_COUNT, &n);
     if (n < 1) { fprintf(stderr, "ttrec: no display\n"); return 2; }
     screen_display_t *d = calloc((size_t)n, sizeof *d);
+    if (!d) { fprintf(stderr, "ttrec: out of memory\n"); return 2; }
     screen_get_context_property_pv(ctx, SCREEN_PROPERTY_DISPLAYS, (void **)d);
     int dsz[2]; screen_get_display_property_iv(d[0], SCREEN_PROPERTY_SIZE, dsz);
     if (dsz[0] % TILE || dsz[1] % TILE) { fprintf(stderr, "ttrec: display %dx%d is not a multiple of %d\n", dsz[0], dsz[1], TILE); return 2; }
 
     struct region g[MAXR + 1] = {{{0, 0, dsz[0], dsz[1]}, full_every, 0, 0, 0}};   /* g[0] = the whole display */
     int ng = 1;
-    for (int i = 5; i < argc && ng <= MAXR; i++, ng++) {
+    if (argc - 5 > MAXR) { fprintf(stderr, "ttrec: at most %d regions (got %d)\n", MAXR, argc - 5); return 1; }
+    for (int i = 5; i < argc; i++, ng++) {
         struct region *q = &g[ng]; q->every = 1;
         if (sscanf(argv[i], "%d,%d,%d,%d@%d", &q->r[0], &q->r[1], &q->r[2], &q->r[3], &q->every) < 4 || q->every < 1 ||
-            q->r[0] % TILE || q->r[1] % TILE || q->r[2] % TILE || q->r[3] % TILE || q->r[2] < TILE || q->r[3] < TILE ||
+            q->r[0] < 0 || q->r[1] < 0 || q->r[0] % TILE || q->r[1] % TILE || q->r[2] % TILE || q->r[3] % TILE || q->r[2] < TILE || q->r[3] < TILE ||
             q->r[0] + q->r[2] > dsz[0] || q->r[1] + q->r[3] > dsz[1]) {
             fprintf(stderr, "ttrec: bad region %s (x,y,w,h[@every], multiples of %d, inside %dx%d)\n", argv[i], TILE, dsz[0], dsz[1]);
             return 1;
@@ -123,7 +127,7 @@ int main(int argc, char **argv)
                 }
         }
         if (err) break;
-        if (fwrite(&t, 8, 1, f) != 1 || put_u32(f, cnt) || (o && fwrite(out, 1, o, f) != o)) { perror("ttrec: write"); break; }
+        if (fwrite(&t, 8, 1, f) != 1 || put_u32(f, cnt) || (o && fwrite(out, 1, o, f) != o)) { perror("ttrec: write"); err = 1; break; }
         frames++; tiles += cnt;
         next.tv_nsec += (long)period_ms * 1000000L;
         while (next.tv_nsec >= 1000000000L) { next.tv_nsec -= 1000000000L; next.tv_sec++; }
@@ -131,7 +135,7 @@ int main(int argc, char **argv)
         if (now.tv_sec > next.tv_sec || (now.tv_sec == next.tv_sec && now.tv_nsec >= next.tv_nsec)) { late++; next = now; }
         else clock_nanosleep(CLOCK_MONOTONIC, TIMER_ABSTIME, &next, NULL);
     }
-    fclose(f);
+    if (fclose(f) != 0) { perror("ttrec: close"); err = 1; }   /* the buffered tail is written here: a full RAM disk shows up now */
     printf("ttrec: %s display %dx%d, %d region(s) + whole display every %d, %lu frames, %lu reads, %lu tiles, %lu late (period %d ms)\n",
            argv[1], W, dsz[1], ng - 1, g[0].every, frames, reads, tiles, late, period_ms);
     return err ? 3 : 0;

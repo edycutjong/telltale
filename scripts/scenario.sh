@@ -43,9 +43,13 @@ elif [ "${TT_DEBUG:-0}" = 1 ]; then
     ( (n=0; while ! grep -q 'CARD shown' log/telltale.log && [ \$n -lt 900 ]; do sleep 0.05; n=\$((n+1)); done; sleep 0.5; ./ttshot log/card.ppm) > log/shot-card.txt 2>&1 < /dev/null & )
     ( (n=0; while ! grep -q 'CARD hidden' log/telltale.log && [ \$n -lt 1200 ]; do sleep 0.05; n=\$((n+1)); done; sleep 0.3; ./ttshot log/card-hidden.ppm) > log/shot-card-hidden.txt 2>&1 < /dev/null & )" > "$EV/debug.txt" 2>&1
 fi
-# where the cluster can change (digits + safe-layer marker, tick, lamps, incident card, engineering banner): read only these,
-# the whole display every 150 frames -- keeps the recorder from perturbing the run it films (src/tools/ttrec.c)
-REC_REGIONS="150 544,192,352,288 544,480,224,96 64,64,1152,64@2 864,128,416,224@3 0,608,1280,96@3"
+# where the cluster can change, in display coordinates (window at 0,24 + src/common/layout.h): the tens and units digit cells
+# and the safe-layer marker, the gear strip, the lamp row, the incident card, the engineering banner and the liveness tick
+# (1264,728). Only these are read every frame or two, the whole display every 150 frames (~5 s), to keep the recorder's extra
+# Screen work small (src/tools/ttrec.c). Not in a region, so refreshed only by that whole-display read: the hundreds digit cell
+# (x 415-543; the hero drive stays below 100 km/h). The tick tile was added after the demo-video takes of 2026-11-21: in
+# those takes the tick refreshed only with the whole-display read.
+REC_REGIONS="150 544,192,352,288 544,480,224,96 64,64,1152,64@2 864,128,416,224@3 0,608,1280,96@3 1248,704,32,32"
 if [ -n "${TT_REC:-}" ]; then
   $G sudo "cd /tmp/tt; rm -f /dev/shmem/tt-rec.ttv log/rec.txt; (on -p 9 ./ttrec /dev/shmem/tt-rec.ttv ${TT_REC_MS:-33} $TT_REC ${TT_REC_ARGS:-$REC_REGIONS} > log/rec.txt 2>&1 < /dev/null &)" > /dev/null 2>&1
 fi
