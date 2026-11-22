@@ -1,5 +1,5 @@
 <div align="center">
-  <img src="docs/assets/icon.svg" alt="Telltale Icon" width="144">
+  <img src="docs/assets/icon-animated.svg" alt="Telltale Icon" width="144">
   <h1>Telltale 🪞</h1>
   <p><em>An isolated QNX 8.0 monitor that reads back the pixels an instrument cluster actually shows, checks them against the vehicle state, and puts the truth back on screen when the cluster lies.</em></p>
   <picture>
@@ -13,6 +13,7 @@
   <br/>
 
   [![Site](https://img.shields.io/badge/🚀_Site-telltale.edycu.dev-06b6d4?style=for-the-badge)](https://telltale.edycu.dev)
+  [![Pitch deck](https://img.shields.io/badge/📊_Pitch_deck-10_slides-ef4444?style=for-the-badge)](https://telltale.edycu.dev/pitch/)
   [![Codelab](https://img.shields.io/badge/🧪_Codelab-first_QNX_resource_manager-f59e0b?style=for-the-badge)](https://telltale.edycu.dev/codelab/)
   [![Built for QNX Global Hackathon](https://img.shields.io/badge/Devpost-QNX_Global_Hackathon-8b5cf6?style=for-the-badge)](https://qnx.devpost.com/)
 
