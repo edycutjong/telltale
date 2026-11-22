@@ -32,6 +32,9 @@ def read_frames(data):
             tiles.append((tx, ty, data[off + 4:off + 4 + tsz]))
             off += 4 + tsz
         yield (t_ns, tiles)
+    else:   # the loop ran out without the break above: 1-11 bytes left are a cut frame header
+        if off < len(data):
+            print(f"ttv_decode: dropped {len(data) - off} trailing bytes (a partial frame header) at byte {off}", file=sys.stderr)
 
 
 def decode(path, out_dir, write_png=True):

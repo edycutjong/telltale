@@ -21,7 +21,7 @@ pass=0; fail=0
 run_case() {   # run_case <name> <class> <at> <settle> [env...]
   local name=$1 cls=$2 at=$3 settle=$4; shift 4
   env "$@" TT_RUN_ID="$name" scripts/scenario.sh "$cls" "$at" "$settle" > /dev/null 2>&1
-  local out rc=0 p f; out=$(python3 scripts/check_run.py "$TT_EVROOT/$name-$cls" "$cls" 2>&1) || rc=$?
+  local out rc=0 p f; out=$(python3 scripts/check_run.py "$TT_EVROOT/$name-$cls" "$cls" --width 19 2>&1) || rc=$?   # 19 = EV_HEADER
   echo "$out" | tee -a "$SUM"
   p=$(grep -c '^PASS' <<<"$out" || true); f=$(grep -c '^FAIL' <<<"$out" || true)
   if [ "$f" -eq 0 ] && { [ "$p" -eq 0 ] || [ "$rc" -ne 0 ]; }; then   # a checker crash is a failure, never a pass

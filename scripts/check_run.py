@@ -1,7 +1,9 @@
 #!/usr/bin/env python3
 """Assert what one recorded Telltale run on the QNX target must show (used by scripts/test_target.sh).
 
-  python3 scripts/check_run.py <run-dir> <class>
+  python3 scripts/check_run.py <run-dir> <class> [--width N]
+  --width N: every incident row must have exactly N columns (the live suite and the CI replay pass 19, the current schema,
+  so a current row cut short cannot pass as an older schema and skip the truth-on-glass checks)
   class: freeze blank stale misdraw crash lampdrop starve accept debug none
   debug = the accept sequence in engineering mode: the banner text and the incident card must be logged with this
   incident's values AND be present in the frames ttshot read back from the composed display (banner.png, card.png).
@@ -11,6 +13,7 @@ Prints one PASS/FAIL line per assertion; exit 0 iff all pass.
 """
 from __future__ import annotations
 
+import csv
 import re
 import sys
 from pathlib import Path
@@ -117,7 +120,7 @@ MISS_NS = 2_000_000_000     # spec: missed = no detection within 2 s
 SETTLE_NS = 2_000_000_000   # a post-hand-back settle stall must start within 2 s of the hand-back
 
 
-def read_incidents(run: Path) -> list[dict[str, str]]:
+def read_incidents(run: Path, width: int | None = None) -> list[dict[str, str]]:
     path = run / "incidents.csv"
     if not path.exists():
         return []
@@ -126,6 +129,8 @@ def read_incidents(run: Path) -> list[dict[str, str]]:
         if not line.strip() or line.startswith("id,"):
             continue
         f = line.split(",")
+        if width is not None and len(f) != width:
+            raise ValueError(f"{path}: {len(f)} fields, the declared schema has {width}")
         if len(f) not in SCHEMA_WIDTHS:
             raise ValueError(f"{path}: {len(f)} fields, want one of {SCHEMA_WIDTHS} (incident CSV schema drift)")
         rows.append(dict(zip(COLS, f)))
@@ -142,13 +147,19 @@ def fault_time_ns(run: Path) -> int | None:
     return None
 
 
-def check(run: Path, cls: str) -> list[tuple[bool, str]]:
+def check(run: Path, cls: str, width: int | None = None) -> list[tuple[bool, str]]:
     out: list[tuple[bool, str]] = []
     if not (run / "incidents.csv").is_file():   # a run that left no incident log proves nothing, not even "clean"
         return [(False, f"{run / 'incidents.csv'} exists (the monitor's incident log was collected)")]
-    inc = read_incidents(run)
+    inc = read_incidents(run, width)
     if cls == "none":
         out.append((len(inc) == 0, f"clean drive: {len(inc)} incidents (want 0)"))
+        # zero incidents only counts if the drive was checked: the monitor's per-check log must hold armed NORMAL checks
+        # that passed (>= 1000 = 20 s at period_ms 20; the 56 s hero drive gives ~3,000)
+        cp = run / "checks.csv"
+        rows = list(csv.DictReader(cp.open())) if cp.is_file() else []
+        ok_n = sum(1 for x in rows if x.get("armed") == "1" and x.get("state") == "NORMAL" and x.get("verdict") == "PASS")
+        out.append((ok_n >= 1000, f"clean drive was checked: {ok_n} armed NORMAL checks passed in checks.csv (want >= 1000)"))
         return out
     verdicts, causes, kill = EXPECT[cls]
     if not inc:
@@ -207,11 +218,14 @@ def check(run: Path, cls: str) -> list[tuple[bool, str]]:
 
 
 def main(argv: list[str]) -> int:
+    width = None
+    if len(argv) == 5 and argv[3] == "--width" and argv[4].isdigit():
+        width, argv = int(argv[4]), argv[:3]
     if len(argv) != 3 or argv[2] not in [*EXPECT, "none"]:
         print(__doc__)
         return 2
     run, cls = Path(argv[1]), argv[2]
-    res = check(run, cls)
+    res = check(run, cls, width)
     for ok, msg in res:
         print(f"{'PASS' if ok else 'FAIL'} {cls}: {msg}")
     for w in WARNINGS:

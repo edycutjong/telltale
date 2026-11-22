@@ -1,4 +1,6 @@
 """Round trip for the ttrec tile-delta format (src/tools/ttrec.c) and its host decoder (tools/ttv_decode.py)."""
+import contextlib
+import io
 import struct
 import sys
 import tempfile
@@ -13,6 +15,12 @@ try:
     HAVE_NP = True
 except ImportError:
     HAVE_NP = False
+try:
+    import PIL  # noqa: F401
+    HAVE_PIL = True
+except ImportError:
+    HAVE_PIL = False
+DECODE_DEPS = HAVE_NP and HAVE_PIL   # decode() imports both
 
 TILE = 32
 
@@ -44,18 +52,26 @@ class TtvTest(unittest.TestCase):
         items = list(ttv_decode.read_frames(data[:-5]))
         self.assertEqual(len(items), 2)  # header + the one complete frame
 
-    @unittest.skipUnless(HAVE_NP, "numpy not installed")
+    @unittest.skipUnless(DECODE_DEPS, "numpy and Pillow needed (decode() imports both)")
     def test_header_only_recording_is_a_failure(self):
         with tempfile.TemporaryDirectory() as d:
             p = Path(d) / "empty.ttv"
             p.write_bytes(encode(32, 32, []))
             self.assertEqual(ttv_decode.main(["ttv_decode.py", str(p), str(Path(d) / "out")]), 1)
 
+    def test_partial_header_tail_is_reported(self):
+        data = encode(32, 32, [(1, [])]) + bytes(5)   # one complete empty frame, then 5 bytes of a cut frame header
+        err = io.StringIO()
+        with contextlib.redirect_stderr(err):
+            items = list(ttv_decode.read_frames(data))
+        self.assertEqual(len(items), 2)   # header + the one complete frame
+        self.assertIn("5 trailing bytes", err.getvalue())
+
     def test_bad_magic(self):
         with self.assertRaises(ValueError):
             next(ttv_decode.read_frames(b"NOPE" + bytes(12)))
 
-    @unittest.skipUnless(HAVE_NP, "numpy not installed")
+    @unittest.skipUnless(DECODE_DEPS, "numpy and Pillow needed (decode() imports both)")
     def test_decode_applies_tiles_bgra(self):
         data = encode(64, 32, [(5, [(0, 0, (0, 0, 0)), (1, 0, (0, 0, 0))]), (9, [(1, 0, (10, 20, 30))])])
         with tempfile.TemporaryDirectory() as d:
