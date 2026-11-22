@@ -337,7 +337,8 @@ footer nav a:hover { text-decoration-color: var(--ink); }
   .stage { margin-top: 18px; padding-top: 10px; }
   .pair { gap: 10px; }
   .pair .tt-glass { height: 100px; font-size: 60px; }
-  .pair .cnt b { font-size: 20px; }
+  .pair .cnt b { font-size: 20px; display: block; margin: 3px 0 0; } /* number on its own line: no reflow when "…" becomes "53.2 ms" */
+  .pair .lab { white-space: nowrap; font-size: 11px; letter-spacing: .08em; }
   .pair .tt-glass .st { font-size: 10.5px; right: 9px; bottom: 7px; letter-spacing: .08em; }
   .tt-glass .bn { font-size: 9px; }
   .ctrl { position: static; padding: 6px 20px 0; justify-content: space-between; }
