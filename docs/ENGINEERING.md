@@ -12,7 +12,7 @@ the digits and lamps, and checks them against `/dev/vehicle`. On a lie it puts a
 top, decides hung vs starved from the renderer's thread states, kills and respawns a hung or wrong renderer, verifies
 the new one, and hands the display back. 20 ms is the configured check period (`period_ms`), not a measured figure.
 Recorded runs per fault class: [`evidence/runs/`](../evidence/runs/). Tests: `make test-host` = C checks (test_disp 12, test_decode 91,
-test_text 17, test_rcap 28) + 109 Python tests (8 need Pillow, 2 need numpy: `pip install -r requirements-dev.txt`). `make test-target`: 163 passed, 0 failed on the QEMU (TCG) guest at
+test_text 17, test_rcap 28) + 110 Python tests (10 need Pillow, 2 of those numpy too: `pip install -r requirements-dev.txt`). `make test-target`: 163 passed, 0 failed on the QEMU (TCG) guest at
 commit 985ab29 ([`evidence/test-target/20261115T232225Z/summary.txt`](../evidence/test-target/20261115T232225Z/summary.txt), host
 load logged at start and end), including `tests/target/core_items.sh` 44/44 (`/dev/vehicle`, `ttctl`, `/dev/telltale`,
 TRUTH_LOST + recovery, DISARM mid-incident, a vehicled restart that leaves a stale renderer to be killed, NO_DISPLAY with the
@@ -105,7 +105,7 @@ STALE needs the true speed to move, so it carries the 100 ms truth window by con
 - **Crash-race label:** if the renderer dies on its own between the monitor's window read and its kill, `kill()` returns
   ESRCH and the respawn path runs without counting a kill, but the incident's cause keeps the kill reason already written
   (`live-wrong`, `BLANK`, `hung` or `no-window`; `src/telltale/telltale.c` sets it before the kill), not `crash`.
-  `restarts` unchanged and `t_kill_ns` 0 mark that case.
+  That kill adds nothing to `restarts` and leaves `t_kill_ns` as it was (0 only if it was the incident's first kill).
 - **The monitor is not supervised:** nothing restarts `telltale` if it dies (the display is then no longer checked);
   a restarted monitor relearns the renderer and arms again (asserted by `core_items.sh`). The monitor holds the
   `xprocess_debug` ability (`secpol/telltale.pol`) to read the renderer's thread states through `/proc` for the

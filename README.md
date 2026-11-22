@@ -54,7 +54,7 @@ The monitor does no machine learning on purpose: the check is a deterministic gl
 | Build | SDP Linux host tools in a `linux/amd64` Docker container on macOS ([`docker/`](docker/), [`scripts/qcc.sh`](scripts/qcc.sh)) |
 | Target | QNX Everywhere Quick Start image, x86_64 guest under QEMU with TCG on an Apple-Silicon Mac (`scripts/run_qemu.sh`), Screen on the image's software virtual display. No Raspberry Pi or other hardware was used |
 | Languages | C (monitor, cluster, resource managers), Python 3.11+ (host tests, bench reports) |
-| Host tests | any POSIX `cc`, Python 3.11+ and `pip install -r requirements-dev.txt` (ruff, Pillow, numpy; without the last two, 9 Python tests skip) |
+| Host tests | any POSIX `cc`, Python 3.11+ and `pip install -r requirements-dev.txt` (ruff, Pillow, numpy; without Pillow and numpy, 10 of the 110 Python tests skip: 8 need Pillow, 2 need both) |
 
 ## 🏆 QNX Integration
 - **Resource managers:** `/dev/vehicle`, `/dev/telltale`, `/dev/telltale-events`.
@@ -77,7 +77,7 @@ All timings are QEMU (TCG), not hardware. Not every target was met: see [DEMO.md
 | On-target suite | 163 passed / 0 failed at `985ab29` |
 | Built at | B1 faults `7592e40` · crash `5edab0a` · MISDRAW `f15744a` · ablation `d3d5892` · regression 25/25 and on-target suite `985ab29`, the current monitor (see [DEMO.md](DEMO.md#which-build-ran-each-bench)) |
 
-**CI/CD Pipeline, 6 stages:** Quality (ruff, Python tests on 3.11-3.13), Security (gitleaks over the full history), Build (host C under gcc and clang; the QNX sources need the SDP, so CI cannot cross-build them), E2E replay (the cited on-target run: its summary matches this README, the code under test is unchanged since `985ab29`, and every recorded assertion is re-checked), Reproducibility (`evidence/RESULTS.md` and `report.html` regenerate byte-identical), Release (a semver tag only after every other stage passes). CodeQL runs in its own workflow over the Python and the host-buildable C (decode, truth, disp, text, rcap); the QNX-only sources are not in its database.
+**CI/CD Pipeline, 6 stages:** Quality (ruff; Python tests on 3.11-3.13 for pushes to main, 3.12 on pull requests), Security (gitleaks over the full history), Build (host C under gcc and clang; the QNX sources need the SDP, so CI cannot cross-build them), E2E replay (the cited on-target run: its summary matches this README, the code under test is unchanged since `985ab29`, and every recorded assertion is re-checked), Reproducibility (`evidence/RESULTS.md` and `report.html` regenerate byte-identical), Release (a semver tag only after every other stage passes). CodeQL runs in its own workflow over the Python and the host-buildable C (decode, truth, disp, text, rcap); the QNX-only sources are not in its database.
 
 ### Evidence
 | What | Where |
