@@ -31,7 +31,8 @@ n=$(sed -n 's/^test-target: \([0-9]*\) passed, 0 failed.*/\1/p' <<<"$last")
 rec=$(grep -c '^PASS' "$s" || true)
 [ "$rec" = "$n" ] || die "$s: $rec PASS lines recorded, the summary says $n"
 if [ -z "${1:-}" ]; then
-  grep -Eq "$n passed / 0 failed at \`?$sha" README.md || die "README.md does not state '$n passed / 0 failed at $sha'"
+  grep -Eq "^\| On-target suite \| $n passed / 0 failed at \`$sha\` \|\$" README.md \
+    || die "README.md's 'On-target suite' row does not state '$n passed / 0 failed at \`$sha\`'"
 fi
 echo "claim: $n passed, 0 failed at $sha ($root)"
 
