@@ -11,6 +11,9 @@ Rules this script enforces (so a table cannot hide a bad row):
   * a fault row with no t_inject is FAILED, never estimated;
   * a fault row is a MISS when t_detect is empty or later than 2 s after t_inject,
     and must agree with the row's own `missed` column (else it is INCONSISTENT);
+  * a detected row counts only if its `reason` (the incident's verdict) is a display-fault verdict
+    for the injected class (FAULT_VERDICTS, the same sets as scripts/check_run.py EXPECT): a TRUTH_LOST
+    or blank reason claims a detection the monitor did not make, and the row is INCONSISTENT;
   * all rows of one report must share one configuration
     (accel, tier, smp, runmask, period_ms) unless --allow-mixed is given;
   * a detected row must be time-ordered (t_detect >= t_inject, recovery stamps >= t_detect);
@@ -49,6 +52,21 @@ CHECK_COLUMNS = (
 ).split(",")
 
 CONFIG_KEYS = ("accel", "tier", "smp", "runmask", "period_ms")
+# verdicts that count as detecting each injected class (= scripts/check_run.py EXPECT); any other class: any display verdict
+DISPLAY_VERDICTS = frozenset({"TICK_STALL", "VALUE_MISMATCH", "BLANK", "UNREADABLE"})
+FAULT_VERDICTS = {
+    "FREEZE": frozenset({"TICK_STALL", "VALUE_MISMATCH"}),            # mismatch first if the speed moves
+    "STARVE": frozenset({"TICK_STALL", "VALUE_MISMATCH"}),
+    "BLANK": frozenset({"BLANK", "UNREADABLE", "VALUE_MISMATCH"}),    # a read can straddle the cleared frame
+    "STALE": frozenset({"VALUE_MISMATCH"}),
+    "MISDRAW": frozenset({"VALUE_MISMATCH"}),
+    "CRASH": DISPLAY_VERDICTS,
+}
+
+
+def detects(cls: str, verdict: str) -> bool:
+    """True if an incident with this verdict is a detection of an injected fault of class cls."""
+    return (verdict or "").strip() in FAULT_VERDICTS.get(cls, DISPLAY_VERDICTS)
 QEMU_ACCELS = {"tcg", "hvf"}
 MISS_NS = 2_000_000_000  # "missed" = no detection within 2 s
 SYNTHETIC_MARK = "SYNTHETIC"
@@ -198,6 +216,9 @@ def analyze_faults(rows: list[dict], allow_mixed: bool = False, detect_only: tup
             continue
         if missed:
             s.misses += 1
+            continue
+        if not detects(cls, r.get("reason") or ""):
+            s.inconsistent += 1  # the incident it names is not a display fault of this class (e.g. TRUTH_LOST)
             continue
         t_safe = _ns(r, "t_safe_visible_ns")
         t_true = _ns(r, "t_true_ns")

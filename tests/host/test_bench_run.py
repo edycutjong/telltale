@@ -56,12 +56,46 @@ class Rows(unittest.TestCase):
 
     def test_incident_before_injection_is_not_the_detection(self):
         with tempfile.TemporaryDirectory() as tmp:
-            pre = INC.format(last=0, det=500_000_000, safe=0, kill=0, reg=0, true=0)
-            post = INC.format(last=0, det=1_090_000_000, safe=1_100_000_000, kill=0, reg=0, true=0)
+            val = INC.replace("TT-FRZ-0001,TICK_STALL,hung", "TT-VAL-0001,VALUE_MISMATCH,live-wrong")   # STALE is value-detected
+            pre = val.format(last=0, det=500_000_000, safe=0, kill=0, reg=0, true=0)
+            post = val.format(last=0, det=1_090_000_000, safe=1_100_000_000, kill=0, reg=0, true=0)
             d = run_dir(tmp, "STALE", 1_000_000_000, pre + post)
             row = br.make_row(d, "b1-004", "STALE", dict(META))
             self.assertEqual(row["pre_inject_incidents"], 1)
             self.assertEqual(row["t_detect_ns"], "1090000000")
+
+    def test_truth_lost_is_not_taken_for_the_detection(self):
+        lost = "TT-LOST-0001,TRUTH_LOST,-,45,45,0,1050000000,0.0,0,0,0,1200000000,0,0.0,8749089,0,0,0\n"
+        frz = INC.format(last=0, det=1_300_000_000, safe=1_320_000_000, kill=1_400_000_000, reg=1_600_000_000, true=1_700_000_000)
+        with tempfile.TemporaryDirectory() as tmp:   # only a TRUTH_LOST after the fault: a miss, not a detection
+            d = run_dir(tmp, "FREEZE", 1_000_000_000, lost)
+            row = br.make_row(d, "b1-010", "FREEZE", dict(META))
+            self.assertEqual((row["missed"], row["t_detect_ns"], row["incidents"]), ("1", "", 1))
+        with tempfile.TemporaryDirectory() as tmp:   # TRUTH_LOST, then the freeze caught: the freeze is the detection
+            d = run_dir(tmp, "FREEZE", 1_000_000_000, lost + frz)
+            row = br.make_row(d, "b1-011", "FREEZE", dict(META))
+            self.assertEqual((row["missed"], row["t_detect_ns"], row["reason"]), ("0", "1300000000", "TICK_STALL"))
+
+    def test_smp_is_read_from_the_running_qemu_never_assumed(self):
+        import os
+        import subprocess
+        from unittest import mock
+        with tempfile.TemporaryDirectory() as tmp:
+            with mock.patch.dict(os.environ, {"TT_RUN": tmp}, clear=False):
+                os.environ.pop("TT_SMP", None)
+                self.assertEqual(br.guest_smp(), "")                       # no QEMU, no TT_SMP: unknown, not "4"
+                with mock.patch.dict(os.environ, {"TT_SMP": "8"}):
+                    self.assertEqual(br.guest_smp(), "8")                  # the boot setting when no QEMU pid is found
+                p = subprocess.Popen([sys.executable, "-c", "import time; time.sleep(30)", "-smp", "6", "-m", "3G"])   # args stay in ps
+                try:
+                    (Path(tmp) / "qemu.pid").write_text(f"{p.pid}\n")
+                    with mock.patch.dict(os.environ, {"TT_SMP": "8"}):
+                        self.assertEqual(br.guest_smp(), "6")              # the running QEMU's -smp wins
+                finally:
+                    p.kill()
+                    p.wait()
+            row = br.make_row(run_dir(tmp, "BLANK", 5_000_000_000, ""), "b1-012", "BLANK", dict(META, smp="2"))
+            self.assertEqual(row["smp"], "2")
 
     def test_starve_uses_the_hog_stamp_and_has_no_restart(self):
         with tempfile.TemporaryDirectory() as tmp:

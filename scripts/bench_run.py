@@ -30,6 +30,9 @@ import sys
 import time
 from pathlib import Path
 
+sys.path.insert(0, str(Path(__file__).resolve().parent))
+from bench import detects  # noqa: E402  (bench.FAULT_VERDICTS: which incident verdicts detect each class)
+
 ROOT = Path(__file__).resolve().parent.parent
 TRACE = ROOT / "data" / "trace-bench.csv"
 STOPS = ROOT / "data" / "trace-bench-stops.csv"
@@ -151,6 +154,23 @@ def mps_to_disp(mps: float) -> int:
     return disp_kmh(struct.unpack("f", struct.pack("f", f * struct.unpack("f", struct.pack("f", 3.6))[0]))[0])
 
 
+def guest_smp() -> str:
+    """The guest's CPU count as booted: the -smp argument of the QEMU process scripts/run_qemu.sh started (its pidfile in
+    $TT_RUN, default /tmp/tt-qemu), else $TT_SMP as given to run_qemu.sh, else "" (unknown: never assumed)."""
+    try:
+        pid = (Path(os.environ.get("TT_RUN", "/tmp/tt-qemu")) / "qemu.pid").read_text().split()[0]
+        args = subprocess.run(["ps", "-o", "args=", "-p", pid], capture_output=True, text=True, check=False).stdout.split()
+        if "-smp" in args[:-1]:
+            first = args[args.index("-smp") + 1].split(",")[0]          # "-smp 4" or "-smp cpus=4,..."
+            n = first.split("=", 1)[1] if first.startswith("cpus=") else first
+            if n.isdigit():
+                return n
+    except (OSError, IndexError):
+        pass
+    n = os.environ.get("TT_SMP", "")
+    return n if n.isdigit() else ""
+
+
 def load1() -> str:
     try:
         return os.popen("sysctl -n vm.loadavg").read().split()[1]
@@ -206,7 +226,7 @@ def blank_zero(v: str | None) -> str:
 def make_row(run: Path, run_id: str, cls: str, meta: dict) -> dict:
     """One fault row from one run directory (incidents.csv, cluster-bench.csv, inject.txt | hog.log)."""
     row = {c: "" for c in FAULT_COLUMNS}
-    row.update(run_id=run_id, git_sha=meta["sha"], accel="tcg", tier="G1-FULL", smp="4", runmask="0xf",
+    row.update(run_id=run_id, git_sha=meta["sha"], accel="tcg", tier="G1-FULL", smp=meta.get("smp", ""), runmask="0xf",
                period_ms=meta["period_ms"], seed=meta["seed"], **{"class": cls}, tick_stall_ms=meta["tick_stall_ms"],
                hog_prio=meta.get("hog_prio", ""), window_onset_s=meta.get("onset", ""), host_load1=meta.get("load1", ""))
     t_cmd = first_int(run / "inject.txt", "t_command_ns") or first_int(run / "hog.log", "t_hog_start_ns")
@@ -230,7 +250,9 @@ def make_row(run: Path, run_id: str, cls: str, meta: dict) -> dict:
     row["pre_inject_incidents"] = len(pre)
     if t_inj is None:
         return row   # no effective-time stamp: bench.py counts it FAILED, never estimated
-    inc = post[0] if post else None
+    # the detection = the first incident after the fault whose verdict is a display fault of this class; anything else
+    # (e.g. a TRUTH_LOST from a feeder outage during an otherwise undetected injection) is counted, never taken for it
+    inc = next((i for i in post if detects(cls, i["verdict"])), None)
     if inc is None or int(inc["t_detect_ns"]) - t_inj > 2_000_000_000:
         row["missed"] = "1"
     else:
@@ -315,11 +337,14 @@ def cmd_faults(a) -> None:
     out = Path(a.out)
     evroot = Path(a.evroot)
     meta0 = {"sha": sha, "seed": a.seed, "period_ms": conf_value("period_ms", a.conf_extra) or "20",
-             "tick_stall_ms": conf_value("tick_stall_ms", a.conf_extra), "trace": trace, "hog_prio": ""}
+             "tick_stall_ms": conf_value("tick_stall_ms", a.conf_extra), "trace": trace, "hog_prio": "", "smp": guest_smp()}
     have = done_ids(out)
     seen: dict[str, int] = {}
     stale_pool = [o for o in onsets if stale_observable(trace, o)]
-    print(f"windows: {len(onsets)} (STALE-observable: {len(stale_pool)})", flush=True)
+    print(f"windows: {len(onsets)} (STALE-observable: {len(stale_pool)}); guest smp: {meta0['smp'] or 'unknown'}", flush=True)
+    resumed = sum(1 for i in range(len(sched)) if f"{a.tag}-{i + 1:03d}" in have)
+    if resumed:   # the --out file is the state: say so, so a re-run can never pass old rows off as new ones
+        print(f"resuming {out}: {resumed} of {len(sched)} run ids already there are skipped, not re-run", flush=True)
     for i, cls in enumerate(sched):
         tag = f"{a.tag}-{i + 1:03d}"
         pool = stale_pool if cls == "STALE" else onsets
@@ -381,6 +406,9 @@ def cmd_ablation(a) -> None:
     out = Path(a.out)
     evroot = Path(a.evroot)
     have = done_ids(out)
+    resumed = sum(1 for i in range(len(sched)) if f"{a.tag}-{i + 1:03d}" in have)
+    if resumed:
+        print(f"resuming {out}: {resumed} of {len(sched)} run ids already there are skipped, not re-run", flush=True)
     for i, cls in enumerate(sched):
         tag = f"{a.tag}-{i + 1:03d}"
         before = round(rng.uniform(1.0, 3.0), 2)     # drawn for every i so a resumed run keeps the same schedule

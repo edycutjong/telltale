@@ -78,7 +78,7 @@ class Faults(unittest.TestCase):
 
 def _row(**kw):
     base = dict.fromkeys(bench.FAULT_COLUMNS, "")
-    base.update(accel="tcg", tier="G1-FULL", smp="8", runmask="0x1", period_ms="20", **{"class": "FREEZE"})
+    base.update(accel="tcg", tier="G1-FULL", smp="8", runmask="0x1", period_ms="20", reason="TICK_STALL", **{"class": "FREEZE"})
     base.update(kw)
     return base
 
@@ -122,6 +122,22 @@ class FaultRules(unittest.TestCase):
         r = _row(**{"class": "B7d"}, t_inject_ns="0", t_detect_ns="1000000", missed="0")
         self.assertEqual(bench.analyze_faults([r])["problem_rows"], 2)
         self.assertEqual(bench.analyze_faults([r], detect_only=("B7d",))["problem_rows"], 0)
+
+    def test_detection_needs_a_display_verdict_of_the_injected_class(self):
+        # a feeder outage during an otherwise undetected FREEZE: TRUTH_LOST is not a detection of the freeze
+        for cls, reason in (("FREEZE", "TRUTH_LOST"), ("STALE", "TICK_STALL"), ("FREEZE", ""), ("MISDRAW", "BLANK")):
+            with self.subTest(cls=cls, reason=reason):
+                r = _row(**{"class": cls}, reason=reason, t_inject_ns="0", t_detect_ns="50000000", t_safe_visible_ns="60000000",
+                         t_true_ns="300000000", missed="0")
+                res = bench.analyze_faults([r])
+                c = res["classes"][cls]
+                self.assertEqual((c["inconsistent"], c["detect_ms"]["n"]), (1, 0))
+                self.assertEqual(res["problem_rows"], 1)
+        for cls, reason in (("FREEZE", "VALUE_MISMATCH"), ("BLANK", "UNREADABLE"), ("CRASH", "BLANK"), ("STALE", "VALUE_MISMATCH")):
+            with self.subTest(cls=cls, reason=reason):
+                r = _row(**{"class": cls}, reason=reason, t_inject_ns="0", t_detect_ns="50000000", t_safe_visible_ns="60000000",
+                         t_true_ns="300000000", missed="0")
+                self.assertEqual(bench.analyze_faults([r])["classes"][cls]["detect_ms"]["n"], 1)
 
     def test_restart_before_detect_is_inconsistent(self):
         r = _row(t_inject_ns="0", t_detect_ns="100", t_restart_ns="50", missed="0")
