@@ -44,7 +44,7 @@ make test-host                # analysis tests, no QNX needed
 An interrupted re-run resumes with `TT_BENCH_OUT=evidence/rerun-<UTC> scripts/bench_all.sh run` (each row file is its own resume state: run ids already in it are skipped, and the driver says how many). Or re-derive the tables from the committed rows with `scripts/bench.py` (no guest needed).
 
 ## Which build ran each bench
-Every row file names the commit of the code that ran (`git_sha` column). The detection and recovery code changed after the main benches (code review rounds, cause expiry, the crash-path glass read), so the current monitor was re-checked with a smaller regression run instead of re-running all 200.
+Every row file names the commit of the code that ran (`git_sha` column). The detection and recovery code changed after the main benches (code review rounds, cause expiry, the crash-path glass read, the final-review fixes in `f2b8002`), so the current monitor was re-checked with a smaller regression run instead of re-running all 200.
 
 | bench | rows | built at |
 |---|---|---|
