@@ -12,7 +12,7 @@ the digits and lamps, and checks them against `/dev/vehicle`. On a lie it puts a
 top, decides hung vs starved from the renderer's thread states, kills and respawns a hung or wrong renderer, verifies
 the new one, and hands the display back. 20 ms is the configured check period (`period_ms`), not a measured figure.
 Recorded runs per fault class: [`evidence/runs/`](../evidence/runs/). Tests: `make test-host` = C checks (test_disp 12, test_decode 91,
-test_text 17, test_rcap 28) + 112 Python tests (10 need Pillow, 2 of those numpy too: `pip install -r requirements-dev.txt`). `make test-target`: 163 passed, 0 failed on the QEMU (TCG) guest at
+test_text 17, test_rcap 28) + 123 Python tests (13 need Pillow, 2 of those numpy too: `pip install -r requirements-dev.txt`). `make test-target`: 163 passed, 0 failed on the QEMU (TCG) guest at
 commit 985ab29 ([`evidence/test-target/20261115T232225Z/summary.txt`](../evidence/test-target/20261115T232225Z/summary.txt), host
 load logged at start and end), including `tests/target/core_items.sh` 44/44 (`/dev/vehicle`, `ttctl`, `/dev/telltale`,
 TRUTH_LOST + recovery, DISARM mid-incident, a vehicled restart that leaves a stale renderer to be killed, NO_DISPLAY with the
@@ -39,7 +39,7 @@ re-run: `scripts/bench_all.sh run` (into a fresh `evidence/rerun-<UTC>/`); re-de
 | STALE | 0 | 168.2 / 271.2 | n/a: W + 100 = 200 ms target **missed** | n/a (value-detected) |
 
 The formula bound and the < 100 ms stretch target were written down in the project's private specs on 2026-11-13, before any run (this public history first contains them after the B1 run); the bound is `tick_stall_ms` 151 + period 20 + read-back p95 6.3 + 20 ms. Detection time is dominated by the configured `tick_stall_ms`, not by monitor speed: the period sweep (FREEZE x 50 per period; the 20 ms point is the B1 FREEZE set) gives detect p50 / p95 of 100 / 122 ms at 10 ms and 107 / 157 ms at 50 ms, while the safe layer appears p50 26 ms (20 ms period) to 49 ms (50 ms period) after detection.
-STALE needs the true speed to move, so it carries the 100 ms truth window by construction; its p95 overshoots the 200 ms target by about 70 ms, which this bench does not decompose, and the target was not tuned afterwards. All 50 STALE rows were first caught by the value check (`VALUE_MISMATCH`), none by a tick stall: a tick-only watchdog would not have caught STALE, by construction (STALE keeps the tick alive), shown as a control rather than a detection result. Safe layer on screen p50 22.5-30.1 ms after detection; renderer restarted and verified true p50 281-338 ms after detection (BLANK, FREEZE, STALE). STARVE is not restarted (the renderer is starved, not hung; `t_restart_ns` is empty): the verified true frame returns p50 2.88 s after detection, when the 3 s hog ends.
+STALE needs the true speed to move, so it carries the 100 ms truth window by construction; its p95 overshoots the 200 ms target by about 70 ms, which this bench does not decompose, and the target was not tuned afterwards. All 50 STALE rows were first caught by the value check (`VALUE_MISMATCH`), none by a tick stall: a tick-only watchdog would not have caught STALE, by construction (STALE keeps the tick alive), shown as a control rather than a detection result. Safe layer on screen p50 22.5-30.1 ms after detection; renderer restarted and verified true p50 281-338 ms after detection (BLANK, FREEZE, STALE; the hand-back stamp runs a few ms early, see Known limits). STARVE is not restarted (the renderer is starved, not hung; `t_restart_ns` is empty): the verified true frame returns p50 2.88 s after detection, when the 3 s hog ends.
 
 - **Declared fault population, not general coverage.** The 200 injections are placed in the 21 speed-changing windows of one real 31-minute comma2k19 drive, always 0.2 s into the window and one fresh stack per injection (so they are not 200 independent samples). STALE is injected only in the 11 windows where the true speed moves at least 2 km/h within a second; the first attempt put a STALE at 0 km/h (unobservable by construction), was stopped, and the rule was added afterwards (it supplements the census rule, which still gives 21 windows; see [`evidence/bench-discarded/`](../evidence/bench-discarded/README.md)).
 - **Monitor-off ablation** (40 runs, 10 per class, 30 s window, `ttctl disarm`: the monitor still reads but never acts): median 29.9 s of the window wrong (minimum 29.09 s; target: median >= 25 s, 0 runs below), still wrong at the end of all 40. A disarmed monitor cannot recover, so this is a control showing what the glass does without it, not a detection result.
@@ -113,6 +113,27 @@ STALE needs the true speed to move, so it carries the 100 ms truth window by con
 - The fault banner shows the monitor's verdict (`VALUE_MISMATCH`, `TICK_STALL`, ...), not the injected fault class: the
   monitor cannot know what was injected.
 
+Found in a final read-only code review at `f681625`, verified against the code and the recorded runs, and disclosed rather
+than fixed: each fix changes `src/telltale/telltale.c`, so it needs `make test-target` and the
+regression bench re-run before the monitor can be cited again. None of the three changes a committed number.
+- **Hand-back stamp:** an incident's `t_true_ns` (the hand-back: the restore times in [DEMO.md](../DEMO.md), the "full" column of
+  `RESULTS.md`, the card's "restored") is the end of the composed capture of the check whose read of the renderer's own window
+  verified the frame (`telltale.c:1001`); that window read ends later (`telltale.c:967`), so these times are early by about
+  its length: 3.2 ms in TT-FRZ-0001, p50 3.6 ms (max 18.9 ms) over the 179 hand-backs in the recorded per-check logs
+  (`win_us`). The safe-layer and exposure stamps come from the composed read itself and are not affected.
+- **Hand-back after a late check:** a check that starts 266 ms or more after the previous one (16 frames: the 4-bit tick may
+  have wrapped) restarts the tick-stall clock instead of reading the unchanged tick as a stall (`telltale.c:943`). In
+  SAFE-HOLD that check can hand back a renderer whose own window reads true without a new tick (`telltale.c:1054`): a renderer
+  frozen at a value that is still true. The safe layer then comes down, the incident is recorded as recovered without a
+  restart, and the frozen tick is reported again as a new TICK_STALL `tick_stall_ms` later (a speed change is caught by the
+  value check as usual). Not seen in the recorded runs: 39 of the 286,320 checks in the recorded per-check logs started 266 ms or more late, 4 of those were
+  hand-backs and the tick had moved in all 4, and every detected FREEZE, BLANK, STALE, CRASH and MISDRAW bench row has a
+  restart. Fix: hand back only after a genuine tick move since detection.
+- **Safe-layer raise not retried:** the raise ignores Screen's return codes and marks the layer up regardless
+  (`telltale.c:454-461`); later checks repost only changed content, so a raise that failed once would not be retried in that
+  incident (the kill and respawn still run). Not seen: every recorded incident (138) and every detected bench row (410) has the
+  safe layer read back on glass (`t_safe_visible_ns`). Fix: set the flag only when the property calls and the post succeed.
+
 ## Run the host tests
 ```sh
 make test-host   # C tests with any POSIX cc, Python tests with Python 3.11+
@@ -121,6 +142,7 @@ make lint        # ruff
 
 ## Build and run on the QNX target
 ```sh
+# also needs the QNX Everywhere Quick Start Target Image for QEMU, unpacked (README "Getting Started")
 docker build --platform linux/amd64 -t telltale-qnx-host:local docker
 make target        # qcc -> out/x86_64/ (needs QNX SDP 8.0 installed on the host, default ~/qnx800)
 make spike         # with the target booted by scripts/run_qemu.sh; see evidence/spike/README.md

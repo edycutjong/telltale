@@ -51,12 +51,12 @@ When a cluster freezes at 48 km/h and the car has stopped, nothing inside the re
 Telltale is a separate process with its own security type: it reads the composed display from QNX Screen, decodes the digits and lamps, compares them with `/dev/vehicle`, and on a mismatch posts a safe layer with the true values. A hung, wrong or blank renderer is then killed and respawned; a starved one is left running. The display is handed back only after a verified true frame.
 
 ## 🏗️ Architecture & Tech Stack
-<p align="center"><img src="docs/assets/architecture.png" alt="Telltale architecture on QNX 8.0. vehfeed replays real comma2k19 CAN speed into vehicled, the /dev/vehicle resource manager (devctl SET). The cluster renderer reads it (ionotify pulse + devctl GET) and posts its window to QNX Screen (screen_post_window). telltale, a separate process at SCHED_FIFO 60 woken by a timer pulse every 20 ms (configured), reads the digit, lamp and tick regions of the composed display back (screen_read_display), decodes them and compares them with /dev/vehicle (devctl GET_SINCE). On a fault: 1 a safe layer with the true speed and lamps, 2 SIGKILL of a hung, wrong or blank renderer (a starved renderer whose window is readable is not killed), 3 after a kill, respawn by slm or a shell loop, 4 hand-back once its own window reads true with the tick moving (screen_read_window), 5 an incident in slog2 and /dev/telltale-events. Example from an on-target run: incident TT-VAL-0001, the glass showed 48 while /dev/vehicle said 47." width="100%"></p>
+<p align="center"><img src="docs/assets/architecture.png" alt="Telltale architecture on QNX 8.0. vehfeed replays real comma2k19 CAN speed into vehicled, the /dev/vehicle resource manager (devctl SET). The cluster renderer reads it (ionotify pulse + devctl GET) and posts its window to QNX Screen (screen_post_window). telltale, a separate process at SCHED_FIFO 60 woken by a timer pulse every 20 ms (configured), reads the digit, lamp and tick regions of the composed display back (screen_read_display), decodes them and compares them with /dev/vehicle (devctl GET_SINCE). On a fault: 1 a safe layer with the true speed and lamps, 2 SIGKILL of a hung, wrong or blank renderer (a starved renderer whose window is readable is not killed), 3 after a kill, respawn by slm or a shell loop, 4 hand-back once its own window reads true and no tick stall is seen (screen_read_window; a check that runs 266 ms or more late restarts the stall clock, a known limit in docs/ENGINEERING.md), 5 an incident in slog2 and /dev/telltale-events. Example from an on-target run: incident TT-VAL-0001, the glass showed 48 while /dev/vehicle said 47." width="100%"></p>
 
 1. `vehfeed` replays real CAN speed from the comma2k19 drive dataset (MIT) into `vehicled`, the `/dev/vehicle` resource manager.
 2. `cluster` draws speed digits (a D-DIN glyph atlas), 6 lamps and a liveness tick with QNX Screen.
 3. `telltale` runs every 20 ms (the configured `period_ms`, not a measured figure): `screen_read_display` of the composed digit, lamp and tick regions, decode, compare with the vehicle state.
-4. On `VALUE_MISMATCH`, `TICK_STALL` or a blank: safe layer first, then a cause check through `/proc` (hung vs starved). A hung, wrong or blank renderer is killed and respawned (wrong or blank: after `mismatch_n` = 3 such checks of its own window); a starved one whose window is readable is left running (0 of 50 STARVE runs restarted at `7592e40`, 0 of 5 at `985ab29`). Then a verified hand-back. The rarer paths (a stall of unclassifiable cause, no readable window) are in [`docs/ENGINEERING.md`](docs/ENGINEERING.md#known-limits-measured).
+4. On `VALUE_MISMATCH`, `TICK_STALL` or a blank: safe layer first, then a cause check through `/proc` (hung vs starved). A hung, wrong or blank renderer is killed and respawned (wrong or blank: after `mismatch_n` = 3 such checks of its own window); a starved one whose window is readable is left running (0 of 50 STARVE runs restarted at `7592e40`, 0 of 5 at `985ab29`). Then a verified hand-back: the renderer's own window reads true and no tick stall is seen (a check that runs 266 ms or more late restarts that stall clock, so it can hand back without a new tick: a known limit, not seen in the recorded runs). The rarer paths (a stall of unclassifiable cause, no readable window) are in [`docs/ENGINEERING.md`](docs/ENGINEERING.md#known-limits-measured).
 
 The monitor does no machine learning on purpose: the check is a deterministic glyph decode, so the same frame gives the same verdict.
 
@@ -66,7 +66,7 @@ The monitor does no machine learning on purpose: the check is a deterministic gl
 | Build | SDP Linux host tools in a `linux/amd64` Docker container on macOS ([`docker/`](docker/), [`scripts/qcc.sh`](scripts/qcc.sh)) |
 | Target | QNX Everywhere Quick Start image, x86_64 guest under QEMU with TCG on an Apple-Silicon Mac (`scripts/run_qemu.sh`), Screen on the image's software virtual display. No Raspberry Pi or other hardware was used |
 | Languages | C (monitor, cluster, resource managers), Python 3.11+ (host tests, bench reports) |
-| Host tests | any POSIX `cc`, Python 3.11+ and `pip install -r requirements-dev.txt` (ruff, Pillow, numpy; without Pillow and numpy, 10 of the 112 Python tests skip: 8 need Pillow, 2 need both) |
+| Host tests | any POSIX `cc`, Python 3.11+ and `pip install -r requirements-dev.txt` (ruff, Pillow, numpy; without Pillow and numpy, 13 of the 123 Python tests skip: 11 need Pillow, 2 need both) |
 
 ## 🏆 QNX Integration
 - **Resource managers:** `/dev/vehicle`, `/dev/telltale`, `/dev/telltale-events`.
@@ -111,14 +111,14 @@ All timings are QEMU (TCG), not hardware. Not every target was met: see [DEMO.md
 6. The 200 injections are a declared population in one real 31-minute drive, not general coverage. Full list: [`docs/ENGINEERING.md`](docs/ENGINEERING.md#known-limits-measured).
 
 ## 🚀 Getting Started
-Needs QNX SDP 8.0 at `~/qnx800` (or set `QNX_SDP_HOST`), Docker, and QEMU.
+Needs QNX SDP 8.0 at `~/qnx800` (or set `QNX_SDP_HOST`), Docker, QEMU (`qemu-system-x86_64`, `brew install qemu`), and the **QNX Everywhere Quick Start Target Image** for QEMU ([getting started](https://www.qnx.com/developers/docs/qnxeverywhere/com.qnx.doc.target_images/topic/qsti_qemu/getting_started.html)): install the `com.qnx.qnx800.quickstart.qemu` package with QNX Software Center and run its `unpack_qemu_image.sh`. `scripts/run_qemu.sh` boots the unpacked image from `~/qnx800/images/qemu/qemu` (or set `QSTI_DIR`) and converts its raw disk to qcow2 on the first boot.
 
 ```sh
 # 1. toolchain image and binaries
 docker build --platform linux/amd64 -t telltale-qnx-host:local docker
 make target                       # qcc -> out/x86_64/
 
-# 2. boot the QNX guest (foreground; use a second terminal)
+# 2. boot the QNX guest from the unpacked Quick Start image (foreground; use a second terminal)
 scripts/run_qemu.sh
 
 # 3. start Screen, deploy, run one recorded fault
