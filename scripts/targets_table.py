@@ -9,6 +9,7 @@ Targets (specs, pre-registered 2026-11-13, neither restated): (a) stretch: FREEZ
 from __future__ import annotations
 
 import csv
+import os
 import sys
 from pathlib import Path
 
@@ -18,7 +19,7 @@ import bench  # noqa: E402
 
 
 def main() -> int:
-    ev = ROOT / "evidence"
+    ev = ROOT / os.environ.get("TT_EVIDENCE", "evidence")   # bench_all.sh report sets it (default: the committed rows)
     rows = [r for r in csv.DictReader(ln for ln in (ev / "bench-faults.csv").read_text().splitlines() if not ln.startswith("#"))]
     clean = bench.load([str(ev / "bench-clean.csv")], bench.CHECK_COLUMNS)
     rb = bench.analyze_clean(clean.rows, "tcg")["readback_check_us"]["p95"] / 1000.0

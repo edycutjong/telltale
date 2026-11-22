@@ -118,6 +118,18 @@ class Rows(unittest.TestCase):
             self.assertEqual(row["t_diverge_ns"], 1_000_000_000 + 200_000_000)
 
 
+class BenchAll(unittest.TestCase):
+    def test_a_rerun_never_targets_the_committed_rows(self):
+        import os
+        import subprocess
+        for out in ("evidence", "./evidence/"):
+            with self.subTest(out=out):
+                r = subprocess.run([str(ROOT / "scripts/bench_all.sh"), "run"], cwd=ROOT, capture_output=True, text=True,
+                                   env=dict(os.environ, TT_BENCH_OUT=out), timeout=60)
+                self.assertEqual(r.returncode, 1)
+                self.assertIn("would append to the committed rows", r.stderr)
+
+
 class Windows(unittest.TestCase):
     def test_merge_and_threshold(self):
         # 0..5 s steady, braking 5..6 s (10 m/s per s = 3.6 km/h per 100 ms), steady, again at 9 s

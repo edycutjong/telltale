@@ -36,11 +36,12 @@ The first 1800 s of the same drive (1820.8 s measured) with no fault: **0 false 
 ## Reproduce
 ```sh
 # needs the QNX SDP 8.0 toolchain and a booted guest, see README "Getting Started"
-scripts/bench_all.sh run      # B1 faults, crash, MISDRAW, ablation, clean replay, period sweep -> evidence/*.csv
-scripts/bench_all.sh report   # -> evidence/RESULTS.md and evidence/report.html (byte-identical on re-run)
+scripts/bench_all.sh run      # B1 faults, ablation, clean replay, crash, MISDRAW, period sweep -> a fresh evidence/rerun-<UTC>/
+                              # (same file names, its own RESULTS.md + report.html); the committed rows are never appended to
+scripts/bench_all.sh report   # the committed rows -> evidence/RESULTS.md and evidence/report.html (byte-identical on re-run)
 make test-host                # analysis tests, no QNX needed
 ```
-Or re-derive the tables from the committed rows with `scripts/bench.py` (no guest needed).
+An interrupted re-run resumes with `TT_BENCH_OUT=evidence/rerun-<UTC> scripts/bench_all.sh run` (each row file is its own resume state: run ids already in it are skipped, and the driver says how many). Or re-derive the tables from the committed rows with `scripts/bench.py` (no guest needed).
 
 ## Which build ran each bench
 Every row file names the commit of the code that ran (`git_sha` column). The detection and recovery code changed after the main benches (code review rounds, cause expiry, the crash-path glass read), so the current monitor was re-checked with a smaller regression run instead of re-running all 200.

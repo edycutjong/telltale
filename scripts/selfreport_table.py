@@ -11,6 +11,7 @@ self-report claim is made for them (complexity.md expects a self-report to catch
 """
 from __future__ import annotations
 
+import os
 import sys
 from pathlib import Path
 
@@ -37,7 +38,8 @@ def cases(root: Path) -> list[dict]:
 
 
 def main() -> int:
-    rows = cases(ROOT / "evidence/bench-runs/b1") + cases(ROOT / "evidence/bench-runs/b7e")
+    ev = ROOT / os.environ.get("TT_EVIDENCE", "evidence")   # bench_all.sh report sets it (default: the committed rows)
+    rows = cases(ev / "bench-runs/b1") + cases(ev / "bench-runs/b7e")
     if not rows:
         print("no BLANK / MISDRAW runs found", file=sys.stderr)
         return 1

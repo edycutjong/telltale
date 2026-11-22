@@ -126,7 +126,7 @@ scripts/guest_screen.sh
 scripts/deploy.sh
 scripts/scenario.sh freeze        # -> evidence/runs/<id>-freeze/
 ```
-Reproduce every bench number: `scripts/bench_all.sh run` then `scripts/bench_all.sh report` (see [DEMO.md](DEMO.md)).
+Re-run every bench: `scripts/bench_all.sh run` (into a fresh `evidence/rerun-<UTC>/` with its own `RESULTS.md`); re-derive the committed tables: `scripts/bench_all.sh report` (see [DEMO.md](DEMO.md#reproduce)).
 
 ## 🧪 Testing & CI
 ```sh
